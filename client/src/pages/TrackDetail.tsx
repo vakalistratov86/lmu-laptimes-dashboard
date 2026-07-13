@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, MapPin, Ruler, RotateCw, Timer, Users } from "lucide-react";
+import { TrackMap, hasTrackMap } from "@/components/TrackMap";
 import { useMemo } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
@@ -69,15 +70,29 @@ export default function TrackDetail() {
         <ChevronLeft size={16} /> Все трассы
       </Link>
 
-      <div>
-        <h1 className="font-display text-xl font-bold tracking-tight">{track.name}</h1>
-        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1"><MapPin size={14} /> {track.country}</span>
-          <span className="flex items-center gap-1"><Ruler size={14} /> {track.lengthKm} км</span>
-          <span className="flex items-center gap-1"><RotateCw size={14} /> {track.turns} поворотов</span>
-          <Badge variant="outline">{track.layout}</Badge>
+      <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+        <div>
+          <h1 className="font-display text-xl font-bold tracking-tight">{track.name}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1"><MapPin size={14} /> {track.country}</span>
+            <span className="flex items-center gap-1"><Ruler size={14} /> {track.lengthKm} км</span>
+            <span className="flex items-center gap-1"><RotateCw size={14} /> {track.turns} поворотов</span>
+            <Badge variant="outline">{track.layout}</Badge>
+          </div>
         </div>
       </div>
+
+      {hasTrackMap(track.name) && (
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border bg-secondary/40 px-4 py-3">
+            <h2 className="font-semibold">Схема трассы</h2>
+            <span className="text-xs text-muted-foreground">{track.lengthKm} км · {track.turns} поворотов</span>
+          </div>
+          <div className="flex items-center justify-center bg-gradient-to-b from-card to-secondary/20 p-6">
+            <TrackMap name={track.name} className="h-56 w-full max-w-xl text-primary" />
+          </div>
+        </Card>
+      )}
 
       {stats ? (
         <>

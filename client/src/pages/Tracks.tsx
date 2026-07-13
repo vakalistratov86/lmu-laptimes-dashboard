@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { Flag, MapPin, RotateCw, Ruler, ArrowRight } from "lucide-react";
+import { TrackMap, hasTrackMap } from "@/components/TrackMap";
 import { useMemo } from "react";
 
 export default function Tracks() {
@@ -41,7 +42,11 @@ export default function Tracks() {
                     <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
                       <Flag size={18} />
                     </div>
-                    <ArrowRight size={16} className="text-muted-foreground transition-transform group-hover:translate-x-1" />
+                    {hasTrackMap(t.name) ? (
+                      <TrackMap name={t.name} className="h-12 w-20 text-primary/70 transition-colors group-hover:text-primary" />
+                    ) : (
+                      <ArrowRight size={16} className="text-muted-foreground transition-transform group-hover:translate-x-1" />
+                    )}
                   </div>
                   <h2 className="font-display text-base font-bold tracking-tight">{t.name}</h2>
                   <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
