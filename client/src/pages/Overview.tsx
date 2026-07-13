@@ -70,7 +70,7 @@ export default function Overview() {
           icon={Gauge}
           label="Лучший круг"
           value={formatLap(bestLap.lapMs)}
-          sub={`${bestLap.driverName} · ${bestLap.trackName}`}
+          sub={`${bestLap.driverName} · ${bestLap.trackName} · ${bestLap.car}`}
         />
       </div>
 

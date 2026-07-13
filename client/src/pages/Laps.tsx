@@ -120,6 +120,7 @@ export default function Laps() {
               <tr>
                 <Th onClick={() => toggleSort("trackName")}>Трасса</Th>
                 <Th onClick={() => toggleSort("driverName")}>Пилот</Th>
+                <th className="hidden px-4 py-3 text-left font-medium md:table-cell">Машина</th>
                 <th className="px-4 py-3 text-left font-medium">Класс</th>
                 <Th onClick={() => toggleSort("lapMs")} className="text-right">Круг</Th>
                 <th className="px-4 py-3 text-right font-medium">Дельта</th>
@@ -132,11 +133,11 @@ export default function Laps() {
               {isLoading &&
                 [...Array(8)].map((_, i) => (
                   <tr key={i} className="border-t border-border">
-                    <td colSpan={8} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td>
+                    <td colSpan={9} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td>
                   </tr>
                 ))}
               {!isLoading && sorted.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                <tr><td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                   Нет заездов под выбранные фильтры
                 </td></tr>
               )}
@@ -148,6 +149,7 @@ export default function Laps() {
                 >
                   <td className="px-4 py-2.5 font-medium">{l.trackName}</td>
                   <td className="px-4 py-2.5">{l.driverName}</td>
+                  <td className="hidden px-4 py-2.5 text-muted-foreground md:table-cell" data-testid={`text-car-${l.id}`}>{l.car}</td>
                   <td className="px-4 py-2.5">
                     <Badge variant="outline" className={CLASS_BADGE[l.carClass]}>{l.carClass}</Badge>
                   </td>

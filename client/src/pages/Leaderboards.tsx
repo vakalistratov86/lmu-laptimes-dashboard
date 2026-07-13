@@ -104,6 +104,7 @@ export default function Leaderboards() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">{l.driverName}</div>
                       <div className="truncate text-xs text-muted-foreground">{l.team}</div>
+                      <div className="truncate text-xs text-muted-foreground/80" data-testid={`text-car-${l.id}`}>{l.car}</div>
                     </div>
                     <Badge variant="outline" className={`${CLASS_BADGE[l.carClass]} hidden sm:inline-flex`}>
                       {l.carClass}
