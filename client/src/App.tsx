@@ -12,6 +12,9 @@ import Leaderboards from "@/pages/Leaderboards";
 import Reports from "@/pages/Reports";
 import Tracks from "@/pages/Tracks";
 import TrackDetail from "@/pages/TrackDetail";
+import Sessions from "@/pages/Sessions";
+import SessionDetail from "@/pages/SessionDetail";
+import Import from "@/pages/Import";
 
 function AppRouter() {
   return (
@@ -22,6 +25,9 @@ function AppRouter() {
       <Route path="/reports" component={Reports} />
       <Route path="/tracks" component={Tracks} />
       <Route path="/tracks/:id" component={TrackDetail} />
+      <Route path="/sessions" component={Sessions} />
+      <Route path="/sessions/:id" component={SessionDetail} />
+      <Route path="/import" component={Import} />
       <Route component={NotFound} />
     </Switch>
   );

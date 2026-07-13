@@ -12,6 +12,7 @@ export function formatLap(ms: number): string {
 
 // Форматирование сектора в SS.mmm
 export function formatSector(ms: number): string {
+  if (!ms || ms <= 0) return "—";
   const seconds = Math.floor(ms / 1000);
   const millis = ms % 1000;
   return `${seconds}.${String(millis).padStart(3, "0")}`;

@@ -1,13 +1,15 @@
-import { tracks, drivers, lapTimes } from '@shared/schema';
+import { tracks, drivers, lapTimes, sessions, sessionResults } from '@shared/schema';
 import type {
   Track, InsertTrack,
   Driver, InsertDriver,
   LapTime, InsertLapTime,
   LapTimeEnriched,
+  Session, SessionResult, SessionEnriched,
 } from '@shared/schema';
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
+import { parseRaceResults, type ParsedSession } from "./logParser";
 
 const sqlite = new Database("data.db");
 sqlite.pragma("journal_mode = WAL");
@@ -19,6 +21,19 @@ export interface LapFilter {
   driverId?: number;
   carClass?: string;
   conditions?: string;
+  source?: string; // demo | import
+  sessionId?: number;
+}
+
+export interface ImportResult {
+  fileName: string;
+  ok: boolean;
+  message: string;
+  sessionId?: number;
+  event?: string;
+  venue?: string;
+  laps?: number;
+  drivers?: number;
 }
 
 export interface IStorage {
@@ -27,6 +42,9 @@ export interface IStorage {
   getDrivers(): Promise<Driver[]>;
   getDriver(id: number): Promise<Driver | undefined>;
   getLaps(filter?: LapFilter): Promise<LapTimeEnriched[]>;
+  getSessions(): Promise<SessionEnriched[]>;
+  getSession(id: number): Promise<SessionEnriched | undefined>;
+  importLog(fileName: string, xml: string): Promise<ImportResult>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -48,15 +66,15 @@ export class DatabaseStorage implements IStorage {
     if (filter.driverId) conditions.push(eq(lapTimes.driverId, filter.driverId));
     if (filter.carClass) conditions.push(eq(lapTimes.carClass, filter.carClass));
     if (filter.conditions) conditions.push(eq(lapTimes.conditions, filter.conditions));
+    if (filter.source) conditions.push(eq(lapTimes.source, filter.source));
+    if (filter.sessionId) conditions.push(eq(lapTimes.sessionId, filter.sessionId));
 
     const rows = conditions.length
       ? db.select().from(lapTimes).where(and(...conditions)).all()
       : db.select().from(lapTimes).all();
 
-    const allTracks = db.select().from(tracks).all();
-    const allDrivers = db.select().from(drivers).all();
-    const trackMap = new Map(allTracks.map((t) => [t.id, t]));
-    const driverMap = new Map(allDrivers.map((d) => [d.id, d]));
+    const trackMap = new Map(db.select().from(tracks).all().map((t) => [t.id, t]));
+    const driverMap = new Map(db.select().from(drivers).all().map((d) => [d.id, d]));
 
     return rows.map((r) => ({
       ...r,
@@ -65,9 +83,185 @@ export class DatabaseStorage implements IStorage {
       team: driverMap.get(r.driverId)?.team ?? "—",
     }));
   }
+
+  async getSessions(): Promise<SessionEnriched[]> {
+    const rows = db.select().from(sessions).orderBy(desc(sessions.dateTime)).all();
+    return rows.map((s) => this.enrichSession(s));
+  }
+
+  async getSession(id: number): Promise<SessionEnriched | undefined> {
+    const s = db.select().from(sessions).where(eq(sessions.id, id)).get();
+    if (!s) return undefined;
+    return this.enrichSession(s);
+  }
+
+  private enrichSession(s: Session): SessionEnriched {
+    const track = db.select().from(tracks).where(eq(tracks.id, s.trackId)).get();
+    const results = db.select().from(sessionResults).where(eq(sessionResults.sessionId, s.id)).all();
+    const driverMap = new Map(db.select().from(drivers).all().map((d) => [d.id, d]));
+    return {
+      ...s,
+      trackName: track?.name ?? s.venue,
+      results: results
+        .map((r) => ({ ...r, driverName: driverMap.get(r.driverId)?.name ?? "—" }))
+        .sort((a, b) => a.position - b.position),
+    };
+  }
+
+  async importLog(fileName: string, xml: string): Promise<ImportResult> {
+    let parsed: ParsedSession | null;
+    try {
+      parsed = parseRaceResults(xml);
+    } catch (e) {
+      return { fileName, ok: false, message: `Ошибка разбора: ${(e as Error).message}` };
+    }
+    if (!parsed) {
+      return { fileName, ok: false, message: "Не похоже на лог результатов LMU/rFactor (нет RaceResults)" };
+    }
+
+    // Дубликат по имени файла — пропускаем
+    const dup = db.select().from(sessions).where(eq(sessions.fileName, fileName)).get();
+    if (dup) {
+      return { fileName, ok: false, message: "Уже импортировано (тот же файл)", sessionId: dup.id };
+    }
+
+    const track = this.findOrCreateTrack(parsed);
+    const dateOnly = parsed.dateTimeIso.slice(0, 10);
+
+    let totalLaps = 0;
+    // Сначала создаём запись сессии (обновим счётчики в конце)
+    const session = db.insert(sessions).values({
+      trackId: track.id,
+      event: parsed.event,
+      sessionType: parsed.sessionType,
+      venue: parsed.venue,
+      gameVersion: parsed.gameVersion ?? null,
+      dateTime: parsed.dateTimeIso,
+      fileName,
+      driverCount: parsed.drivers.length,
+      lapCount: 0,
+    }).returning().get();
+
+    for (const d of parsed.drivers) {
+      const driver = this.findOrCreateDriver(d.name, d.teamName);
+      const cls = normalizeClass(d.carClass);
+
+      db.insert(sessionResults).values({
+        sessionId: session.id,
+        driverId: driver.id,
+        isPlayer: d.isPlayer ? 1 : 0,
+        position: d.position,
+        classPosition: d.classPosition,
+        carClass: cls,
+        car: d.carType,
+        team: d.teamName,
+        carNumber: d.carNumber ?? null,
+        laps: d.laps,
+        pitstops: d.pitstops,
+        bestLapMs: d.bestLapMs ?? null,
+        finishStatus: d.finishStatus ?? null,
+      }).run();
+
+      // Заносим засчитанные круги (с валидным временем) в общую таблицу времён
+      for (const lap of d.lapList) {
+        if (lap.lapMs == null || lap.isPit) continue;
+        const s1 = lap.s1Ms ?? 0;
+        const s2 = lap.s2Ms ?? 0;
+        // если s3 отсутствует, вычисляем как остаток
+        const s3 = lap.s3Ms ?? Math.max(0, lap.lapMs - s1 - s2);
+        db.insert(lapTimes).values({
+          trackId: track.id,
+          driverId: driver.id,
+          carClass: cls,
+          car: d.carType,
+          lapMs: lap.lapMs,
+          sector1Ms: s1,
+          sector2Ms: s2,
+          sector3Ms: s3,
+          conditions: "Сухо",
+          tyre: "Medium",
+          date: dateOnly,
+          source: "import",
+          sessionId: session.id,
+        }).run();
+        totalLaps++;
+      }
+    }
+
+    // Обновляем счётчик кругов сессии
+    db.update(sessions).set({ lapCount: totalLaps }).where(eq(sessions.id, session.id)).run();
+
+    return {
+      fileName,
+      ok: true,
+      message: "Импортировано",
+      sessionId: session.id,
+      event: parsed.event,
+      venue: parsed.venue,
+      laps: totalLaps,
+      drivers: parsed.drivers.length,
+    };
+  }
+
+  private findOrCreateTrack(parsed: ParsedSession): Track {
+    const canonical = canonicalTrackName(parsed.venue);
+    const all = db.select().from(tracks).all();
+    const found = all.find(
+      (t) => t.name.toLowerCase() === canonical.name.toLowerCase() ||
+             t.name.toLowerCase() === parsed.venue.toLowerCase()
+    );
+    if (found) return found;
+    const lengthKm = parsed.trackLengthM ? +(parsed.trackLengthM / 1000).toFixed(3) : 0;
+    return db.insert(tracks).values({
+      name: canonical.name,
+      country: canonical.country,
+      lengthKm,
+      turns: canonical.turns,
+      layout: "Импорт",
+    }).returning().get();
+  }
+
+  private findOrCreateDriver(name: string, team: string): Driver {
+    const all = db.select().from(drivers).all();
+    const found = all.find((d) => d.name.toLowerCase() === name.toLowerCase());
+    if (found) return found;
+    return db.insert(drivers).values({
+      name,
+      team: team || "—",
+      country: guessCountry(name),
+    }).returning().get();
+  }
 }
 
 export const storage = new DatabaseStorage();
+
+// Нормализация класса машины из лога (GT3 -> GT3; прочее сохраняем)
+function normalizeClass(raw: string): string {
+  const r = (raw || "").trim();
+  if (!r || r === "—") return "GT3";
+  return r;
+}
+
+// Приведение TrackVenue к каноничному названию + метаданные
+function canonicalTrackName(venue: string): { name: string; country: string; turns: number } {
+  const v = venue.toLowerCase();
+  if (v.includes("carlos pace") || v.includes("interlagos")) return { name: "Interlagos", country: "Бразилия", turns: 15 };
+  if (v.includes("le mans")) return { name: "Le Mans", country: "Франция", turns: 38 };
+  if (v.includes("spa")) return { name: "Spa-Francorchamps", country: "Бельгия", turns: 20 };
+  if (v.includes("monza")) return { name: "Monza", country: "Италия", turns: 11 };
+  if (v.includes("fuji")) return { name: "Fuji Speedway", country: "Япония", turns: 16 };
+  if (v.includes("sebring")) return { name: "Sebring", country: "США", turns: 17 };
+  if (v.includes("bahrain") || v.includes("sakhir")) return { name: "Bahrain", country: "Бахрейн", turns: 15 };
+  if (v.includes("imola")) return { name: "Imola", country: "Италия", turns: 19 };
+  if (v.includes("portim") || v.includes("algarve")) return { name: "Portimão", country: "Португалия", turns: 15 };
+  if (v.includes("cota") || v.includes("americas")) return { name: "COTA", country: "США", turns: 20 };
+  if (v.includes("qatar") || v.includes("losail")) return { name: "Losail", country: "Катар", turns: 16 };
+  return { name: venue, country: "—", turns: 0 };
+}
+
+function guessCountry(_name: string): string {
+  return "—";
+}
 
 // ---- Seeding ----
 export function seedIfEmpty() {
@@ -107,7 +301,6 @@ export function seedIfEmpty() {
   const conditionsList = ["Сухо", "Дождь", "Смешанно"];
   const tyres = ["Soft", "Medium", "Hard", "Wet"];
 
-  // Базовые эталонные времена (мс) по трассам для Hypercar
   const baseLapByTrack: Record<string, number> = {
     "Le Mans": 3 * 60000 + 24000,
     "Spa-Francorchamps": 2 * 60000 + 3000,
@@ -129,7 +322,6 @@ export function seedIfEmpty() {
   for (const track of insertedTracks) {
     const base = baseLapByTrack[track.name] ?? 90000;
     for (const driver of insertedDrivers) {
-      // 2-4 заезда на пилота на трассе
       const runs = 2 + Math.floor(rand() * 3);
       for (let i = 0; i < runs; i++) {
         const carClass = classes[Math.floor(rand() * classes.length)];
@@ -157,6 +349,8 @@ export function seedIfEmpty() {
           conditions: cond,
           tyre,
           date: `2026-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+          source: "demo",
+          sessionId: null,
         });
       }
     }

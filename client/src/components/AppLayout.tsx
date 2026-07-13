@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Table2, Trophy, BarChart3, Flag, Moon, Sun, Menu, X } from "lucide-react";
+import { LayoutDashboard, Table2, Trophy, BarChart3, Flag, ListChecks, Upload, Moon, Sun, Menu, X } from "lucide-react";
 import { Logo } from "./Logo";
 import { useState, useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,8 @@ const NAV = [
   { href: "/leaderboards", label: "Лидерборды", icon: Trophy, testId: "link-leaderboards" },
   { href: "/reports", label: "Конструктор отчётов", icon: BarChart3, testId: "link-reports" },
   { href: "/tracks", label: "Трассы", icon: Flag, testId: "link-tracks" },
+  { href: "/sessions", label: "Сессии", icon: ListChecks, testId: "link-sessions" },
+  { href: "/import", label: "Импорт логов", icon: Upload, testId: "link-import" },
 ];
 
 function useTheme() {
