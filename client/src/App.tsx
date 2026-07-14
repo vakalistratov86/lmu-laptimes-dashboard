@@ -16,6 +16,7 @@ import TrackDetail from "@/pages/TrackDetail";
 import Sessions from "@/pages/Sessions";
 import SessionDetail from "@/pages/SessionDetail";
 import Import from "@/pages/Import";
+import Events from "@/pages/Events";
 
 function AppRouter() {
   return (
@@ -28,6 +29,7 @@ function AppRouter() {
       <Route path="/tracks/:id" component={TrackDetail} />
       <Route path="/sessions" component={Sessions} />
       <Route path="/sessions/:id" component={SessionDetail} />
+      <Route path="/events" component={Events} />
       <Route path="/import" component={Import} />
       <Route component={NotFound} />
     </Switch>
