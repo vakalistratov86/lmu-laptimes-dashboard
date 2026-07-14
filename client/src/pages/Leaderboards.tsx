@@ -30,7 +30,7 @@ const CLASS_ACCENT: Record<string, string> = {
   GT4:      "border-chart-6",
 };
 
-type LapRow = { id: number; driverId: number; driverName: string; team: string; car: string; carClass: string; lapMs: number; trackId: number; trackName: string };
+type LapRow = { id: number; driverId: number; driverName: string; team: string; car: string; carClass: string; lapMs: number; trackId: number; trackName: string; date?: string };
 
 interface ClassBoard {
   carClass: string;
@@ -40,6 +40,23 @@ interface ClassBoard {
 interface TrackBoard {
   trackName: string;
   classes: ClassBoard[];
+}
+
+function formatRecordDate(dateStr?: string): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return dateStr;
+  }
 }
 
 function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
@@ -197,6 +214,7 @@ export default function Leaderboards() {
                 <ol>
                   {cls.rows.map((l, i) => {
                     const best = cls.rows[0].lapMs;
+                    const recordDate = formatRecordDate(l.date);
                     return (
                       <li
                         key={l.id}
@@ -218,6 +236,11 @@ export default function Leaderboards() {
                           {i > 0 && (
                             <div className="font-data text-[11px] tabular-nums text-muted-foreground">
                               {formatDelta(l.lapMs, best)}
+                            </div>
+                          )}
+                          {recordDate && (
+                            <div className="font-data text-[10px] tabular-nums text-muted-foreground/60 mt-0.5">
+                              {recordDate}
                             </div>
                           )}
                         </div>
