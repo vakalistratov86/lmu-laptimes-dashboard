@@ -1,13 +1,15 @@
 import type { Express } from "express";
 import type { Server } from 'node:http';
-import { storage, seedIfEmpty, type LapFilter } from "./storage";
+import { storage, type LapFilter, db } from "./storage";
+import { tracks, drivers, lapTimes, sessions, sessionResults } from '@shared/schema';
+import { eq, notInArray, inArray } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  seedIfEmpty();
+  // seedIfEmpty() удалён — демо-данные больше не создаются автоматически
 
   app.get("/api/tracks", async (_req, res) => {
     res.json(await storage.getTracks());
@@ -72,6 +74,36 @@ export async function registerRoutes(
     const imported = results.filter((r) => r.ok).length;
     const totalLaps = results.reduce((s, r) => s + (r.laps ?? 0), 0);
     res.json({ imported, skipped: results.length - imported, totalLaps, results });
+  });
+
+  // ── Demo Data ────────────────────────────────────────────────────
+  // DELETE /api/demo — удаляет все записи с source='demo', а также
+  // трассы и пилотов, у которых не осталось ни одного реального круга.
+  app.delete("/api/demo", (_req, res) => {
+    // 1. Удаляем демо-круги
+    db.delete(lapTimes).where(eq(lapTimes.source, "demo")).run();
+
+    // 2. Трассы без оставшихся кругов и без сессий
+    const usedTrackIds = db.select({ id: lapTimes.trackId }).from(lapTimes).all().map((r) => r.id);
+    const sessionTrackIds = db.select({ id: sessions.trackId }).from(sessions).all().map((r) => r.id);
+    const keepTrackIds = [...new Set([...usedTrackIds, ...sessionTrackIds])];
+    if (keepTrackIds.length > 0) {
+      db.delete(tracks).where(notInArray(tracks.id, keepTrackIds)).run();
+    } else {
+      db.delete(tracks).run();
+    }
+
+    // 3. Пилоты без оставшихся кругов и без результатов сессий
+    const usedDriverIds = db.select({ id: lapTimes.driverId }).from(lapTimes).all().map((r) => r.id);
+    const sessionDriverIds = db.select({ id: sessionResults.driverId }).from(sessionResults).all().map((r) => r.id);
+    const keepDriverIds = [...new Set([...usedDriverIds, ...sessionDriverIds])];
+    if (keepDriverIds.length > 0) {
+      db.delete(drivers).where(notInArray(drivers.id, keepDriverIds)).run();
+    } else {
+      db.delete(drivers).run();
+    }
+
+    res.json({ ok: true, message: "Демо-данные удалены" });
   });
 
   // ── Special Events ──────────────────────────────────────────────
