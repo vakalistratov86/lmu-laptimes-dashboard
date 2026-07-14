@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { Server } from 'node:http';
 import { storage, seedIfEmpty, type LapFilter } from "./storage";
+import { getSpecialEvents, invalidateCache } from "./eventsParser";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -39,7 +40,6 @@ export async function registerRoutes(
     res.json(await storage.getLaps(filter));
   });
 
-  // Список импортированных сессий
   app.get("/api/sessions", async (_req, res) => {
     res.json(await storage.getSessions());
   });
@@ -50,8 +50,6 @@ export async function registerRoutes(
     res.json(session);
   });
 
-  // Импорт логов игры (папка / несколько .xml файлов)
-  // Тело: { files: [{ fileName: string, content: string }] }
   app.post("/api/import", async (req, res) => {
     const files = req.body?.files;
     if (!Array.isArray(files) || files.length === 0) {
@@ -74,6 +72,28 @@ export async function registerRoutes(
     const imported = results.filter((r) => r.ok).length;
     const totalLaps = results.reduce((s, r) => s + (r.laps ?? 0), 0);
     res.json({ imported, skipped: results.length - imported, totalLaps, results });
+  });
+
+  // ── Special Events ──────────────────────────────────────────────
+  // GET /api/special-events — список событий (кэш 6ч, fallback на статику)
+  app.get("/api/special-events", async (_req, res) => {
+    try {
+      const data = await getSpecialEvents();
+      res.json(data);
+    } catch (e) {
+      res.status(500).json({ message: (e as Error).message });
+    }
+  });
+
+  // POST /api/special-events/refresh — принудительный сброс кэша
+  app.post("/api/special-events/refresh", async (_req, res) => {
+    invalidateCache();
+    try {
+      const data = await getSpecialEvents();
+      res.json({ ok: true, fetchedAt: data.fetchedAt, count: data.events.length });
+    } catch (e) {
+      res.status(500).json({ ok: false, message: (e as Error).message });
+    }
   });
 
   return httpServer;

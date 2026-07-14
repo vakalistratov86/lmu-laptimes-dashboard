@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Table2, Trophy, BarChart3, Flag, ListChecks, Upload, Moon, Sun, Menu, X } from "lucide-react";
+import { LayoutDashboard, Table2, Trophy, BarChart3, Flag, ListChecks, Upload, Moon, Sun, Menu, X, CalendarDays } from "lucide-react";
 import { Logo } from "./Logo";
 import { DriverFilterBar } from "./DriverFilterBar";
 import { useState, useEffect, type ReactNode } from "react";
@@ -12,6 +12,7 @@ const NAV = [
   { href: "/reports", label: "Конструктор отчётов", icon: BarChart3, testId: "link-reports" },
   { href: "/tracks", label: "Трассы", icon: Flag, testId: "link-tracks" },
   { href: "/sessions", label: "Сессии", icon: ListChecks, testId: "link-sessions" },
+  { href: "/events", label: "Special Events", icon: CalendarDays, testId: "link-events" },
   { href: "/import", label: "Импорт логов", icon: Upload, testId: "link-import" },
 ];
 
