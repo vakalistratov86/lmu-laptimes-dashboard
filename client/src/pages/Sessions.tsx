@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarClock, Users, Flag, ChevronRight, Upload } from "lucide-react";
+import { CalendarClock, Users, Flag, ChevronRight, Upload, ChevronDown, ChevronUp } from "lucide-react";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -15,8 +16,25 @@ function formatDate(iso: string): string {
   });
 }
 
+/** Группирует сессии по trackName, сохраняя порядок первого появления */
+function groupByTrack<T extends { trackName: string }>(items: T[]): [string, T[]][] {
+  const map = new Map<string, T[]>();
+  for (const item of items) {
+    const key = item.trackName || "Неизвестная трасса";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item);
+  }
+  return Array.from(map.entries());
+}
+
 export default function Sessions() {
   const { data: sessions, isLoading } = useSessions();
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  const toggleTrack = (track: string) =>
+    setCollapsed((prev) => ({ ...prev, [track]: !prev[track] }));
+
+  const grouped = sessions ? groupByTrack(sessions) : [];
 
   return (
     <div className="space-y-5">
@@ -57,51 +75,75 @@ export default function Sessions() {
       )}
 
       {!isLoading && sessions && sessions.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {sessions.map((s) => {
-            const player = s.results.find((r) => r.isPlayer === 1);
-            const winner = s.results[0];
+        <div className="space-y-8">
+          {grouped.map(([track, trackSessions]) => {
+            const isCollapsed = collapsed[track] ?? false;
             return (
-              <Link key={s.id} href={`/sessions/${s.id}`} data-testid={`card-session-${s.id}`}>
-                <Card className="group h-full cursor-pointer p-4 transition-colors hover-elevate">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Flag size={15} className="shrink-0 text-primary" />
-                        <h2 className="truncate font-semibold">{s.trackName}</h2>
-                      </div>
-                      <p className="mt-0.5 truncate text-sm text-muted-foreground">{s.event}</p>
-                    </div>
-                    <ChevronRight size={18} className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                  </div>
+              <section key={track}>
+                {/* Заголовок трассы */}
+                <button
+                  type="button"
+                  onClick={() => toggleTrack(track)}
+                  className="mb-3 flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-secondary/40 transition-colors"
+                >
+                  <Flag size={16} className="shrink-0 text-primary" />
+                  <h2 className="flex-1 font-display font-bold tracking-tight">{track}</h2>
+                  <Badge variant="secondary" className="font-mono text-xs">
+                    {trackSessions.length} {trackSessions.length === 1 ? "сессия" : trackSessions.length < 5 ? "сессии" : "сессий"}
+                  </Badge>
+                  {isCollapsed
+                    ? <ChevronDown size={16} className="text-muted-foreground" />
+                    : <ChevronUp size={16} className="text-muted-foreground" />}
+                </button>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="bg-secondary/40">{s.sessionType}</Badge>
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <CalendarClock size={13} /> {formatDate(s.dateTime)}
-                    </span>
-                  </div>
+                {/* Карточки сессий */}
+                {!isCollapsed && (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {trackSessions.map((s) => {
+                      const player = s.results.find((r) => r.isPlayer === 1);
+                      const winner = s.results[0];
+                      return (
+                        <Link key={s.id} href={`/sessions/${s.id}`} data-testid={`card-session-${s.id}`}>
+                          <Card className="group h-full cursor-pointer p-4 transition-colors hover-elevate">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="mt-0.5 truncate text-sm text-muted-foreground">{s.event}</p>
+                              </div>
+                              <ChevronRight size={18} className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                            </div>
 
-                  <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-3 text-center">
-                    <Stat icon={<Users size={13} />} label="Пилотов" value={String(s.driverCount)} />
-                    <Stat label="Кругов" value={String(s.lapCount)} />
-                    <Stat
-                      label="Лучший круг"
-                      value={winner?.bestLapMs ? formatLap(winner.bestLapMs) : "—"}
-                      mono
-                    />
-                  </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className="bg-secondary/40">{s.sessionType}</Badge>
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <CalendarClock size={13} /> {formatDate(s.dateTime)}
+                              </span>
+                            </div>
 
-                  {player && (
-                    <div className="mt-3 flex items-center justify-between rounded-md bg-primary/10 px-3 py-2 text-sm">
-                      <span className="text-primary">Ваш результат</span>
-                      <span className="font-data font-semibold tabular-nums text-primary">
-                        P{player.position} · {player.bestLapMs ? formatLap(player.bestLapMs) : "—"}
-                      </span>
-                    </div>
-                  )}
-                </Card>
-              </Link>
+                            <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-3 text-center">
+                              <Stat icon={<Users size={13} />} label="Пилотов" value={String(s.driverCount)} />
+                              <Stat label="Кругов" value={String(s.lapCount)} />
+                              <Stat
+                                label="Лучший круг"
+                                value={winner?.bestLapMs ? formatLap(winner.bestLapMs) : "—"}
+                                mono
+                              />
+                            </div>
+
+                            {player && (
+                              <div className="mt-3 flex items-center justify-between rounded-md bg-primary/10 px-3 py-2 text-sm">
+                                <span className="text-primary">Ваш результат</span>
+                                <span className="font-data font-semibold tabular-nums text-primary">
+                                  P{player.position} · {player.bestLapMs ? formatLap(player.bestLapMs) : "—"}
+                                </span>
+                              </div>
+                            )}
+                          </Card>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
             );
           })}
         </div>
