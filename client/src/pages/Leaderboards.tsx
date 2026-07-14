@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useLaps, useTracks } from "@/lib/api";
+import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap, formatDelta } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,6 @@ import {
 } from "@/components/ui/select";
 import { Trophy, Medal } from "lucide-react";
 
-// Порядок отображения классов (известные — в начале, остальные — после)
 const CLASS_ORDER = ["Hypercar", "LMP2", "LMP3", "GTE", "GT3", "GT4"];
 
 const CLASS_BADGE: Record<string, string> = {
@@ -21,7 +21,6 @@ const CLASS_BADGE: Record<string, string> = {
   GT4:      "bg-chart-6/15 text-chart-6 border-chart-6/30",
 };
 
-// Цвет полоски слева для заголовка класса
 const CLASS_ACCENT: Record<string, string> = {
   Hypercar: "border-chart-1",
   LMP2:     "border-chart-4",
@@ -43,7 +42,6 @@ interface TrackBoard {
   classes: ClassBoard[];
 }
 
-/** Группирует плоский массив кругов в структуру TrackBoard[] */
 function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
   const byTrack = new Map<string, LapRow[]>();
   for (const l of laps) {
@@ -53,7 +51,6 @@ function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
 
   return Array.from(byTrack.entries())
     .map(([trackName, ls]) => {
-      // Внутри трека — группируем по классу
       const byClass = new Map<string, Map<number, LapRow>>();
       for (const l of ls) {
         if (!byClass.has(l.carClass)) byClass.set(l.carClass, new Map());
@@ -62,7 +59,6 @@ function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
         if (!cur || l.lapMs < cur.lapMs) classMap.set(l.driverId, l);
       }
 
-      // Сортируем классы согласно CLASS_ORDER
       const sortedClasses = Array.from(byClass.keys()).sort((a, b) => {
         const ai = CLASS_ORDER.indexOf(a);
         const bi = CLASS_ORDER.indexOf(b);
@@ -89,8 +85,8 @@ export default function Leaderboards() {
   const [classFilter, setClassFilter] = useState<string>("all");
   const { data: tracks } = useTracks();
   const { data: laps, isLoading } = useLaps();
+  const { selectedDriverIds, isFiltered: globalFiltered } = useDriverFilter();
 
-  // Список уникальных классов для фильтра
   const availableClasses = useMemo(() => {
     if (!laps) return [];
     const set = new Set<string>(laps.map((l: LapRow) => l.carClass).filter(Boolean));
@@ -115,16 +111,17 @@ export default function Leaderboards() {
       filtered = filtered.filter((l: LapRow) => l.carClass === classFilter);
     }
 
-    const maxPerClass = trackId === "all" ? 3 : 50; // глобально топ-3 на класс, по трассе — все
-    const all = buildBoards(filtered, maxPerClass);
+    // Apply global driver filter
+    if (globalFiltered) {
+      filtered = filtered.filter((l: LapRow) => selectedDriverIds.has(l.driverId));
+    }
 
-    // В режиме конкретной трассы оставляем один борд (он же и есть)
-    return all;
-  }, [laps, trackId, classFilter]);
+    const maxPerClass = trackId === "all" ? 3 : 50;
+    return buildBoards(filtered, maxPerClass);
+  }, [laps, trackId, classFilter, globalFiltered, selectedDriverIds]);
 
   return (
     <div className="space-y-5">
-      {/* Заголовок + фильтры */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-xl font-bold tracking-tight">Лидерборды</h1>
@@ -170,11 +167,9 @@ export default function Leaderboards() {
         </div>
       )}
 
-      {/* Сетка трасс */}
       <div className={trackId === "all" ? "grid gap-4 md:grid-cols-2" : "space-y-4"}>
         {boards.map((board) => (
           <Card key={board.trackName} className="overflow-hidden">
-            {/* Заголовок трассы */}
             <div className="flex items-center gap-2 border-b border-border bg-secondary/40 px-4 py-3">
               <Trophy size={16} className="text-primary" />
               <h2 className="font-semibold">{board.trackName}</h2>
@@ -183,10 +178,8 @@ export default function Leaderboards() {
               </span>
             </div>
 
-            {/* Секции по классам */}
             {board.classes.map((cls) => (
               <div key={cls.carClass}>
-                {/* Заголовок класса */}
                 <div
                   className={`flex items-center gap-2 border-l-4 bg-muted/30 px-4 py-1.5 ${CLASS_ACCENT[cls.carClass] ?? "border-border"}`}
                 >
@@ -201,7 +194,6 @@ export default function Leaderboards() {
                   </span>
                 </div>
 
-                {/* Строки пилотов */}
                 <ol>
                   {cls.rows.map((l, i) => {
                     const best = cls.rows[0].lapMs;

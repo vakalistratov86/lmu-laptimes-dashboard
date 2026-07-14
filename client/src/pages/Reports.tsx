@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useLaps, useTracks, useDrivers } from "@/lib/api";
+import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,12 +34,15 @@ export default function Reports() {
 
   const { data: tracks } = useTracks();
   const { data: laps, isLoading } = useLaps();
+  const { selectedDriverIds, isFiltered: globalFiltered } = useDriverFilter();
 
   const data = useMemo(() => {
     if (!laps) return [];
     let filtered = laps;
     if (trackFilter !== "all") filtered = filtered.filter((l) => l.trackId === Number(trackFilter));
     if (classFilter !== "all") filtered = filtered.filter((l) => l.carClass === classFilter);
+    // Apply global driver filter
+    if (globalFiltered) filtered = filtered.filter((l) => selectedDriverIds.has(l.driverId));
 
     const groups = new Map<string, number[]>();
     for (const l of filtered) {
@@ -63,9 +67,8 @@ export default function Reports() {
         label: metric === "count" ? String(value) : formatLap(Math.round(value)),
       };
     });
-    // Для времени: меньше = лучше, сортируем по возрастанию; для count — по убыванию
     return rows.sort((a, b) => (metric === "count" ? b.value - a.value : a.value - b.value));
-  }, [laps, dimension, metric, trackFilter, classFilter]);
+  }, [laps, dimension, metric, trackFilter, classFilter, globalFiltered, selectedDriverIds]);
 
   const unit = metric === "count" ? "заездов" : "сек";
 

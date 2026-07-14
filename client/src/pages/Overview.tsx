@@ -1,4 +1,5 @@
 import { useLaps, useTracks, useDrivers } from "@/lib/api";
+import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,6 +8,7 @@ import { Timer, Flag, Users, Gauge, ArrowRight } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
 } from "recharts";
+import { useMemo } from "react";
 
 function KpiCard({
   icon: Icon, label, value, sub,
@@ -33,6 +35,13 @@ export default function Overview() {
   const { data: laps, isLoading } = useLaps();
   const { data: tracks } = useTracks();
   const { data: drivers } = useDrivers();
+  const { selectedDriverIds, isFiltered } = useDriverFilter();
+
+  const filteredLaps = useMemo(() => {
+    if (!laps) return [];
+    if (!isFiltered) return laps;
+    return laps.filter((l) => selectedDriverIds.has(l.driverId));
+  }, [laps, selectedDriverIds, isFiltered]);
 
   if (isLoading || !laps) {
     return (
@@ -46,11 +55,21 @@ export default function Overview() {
     );
   }
 
-  const bestLap = laps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a), laps[0]);
+  if (filteredLaps.length === 0) {
+    return (
+      <div className="space-y-6">
+        <PageTitle />
+        <p className="py-16 text-center text-sm text-muted-foreground">
+          Нет данных для выбранных пилотов
+        </p>
+      </div>
+    );
+  }
 
-  // Лучшее время по каждой трассе
+  const bestLap = filteredLaps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a), filteredLaps[0]);
+
   const bestByTrack = new Map<string, number>();
-  for (const l of laps) {
+  for (const l of filteredLaps) {
     const cur = bestByTrack.get(l.trackName);
     if (cur == null || l.lapMs < cur) bestByTrack.set(l.trackName, l.lapMs);
   }
@@ -58,14 +77,18 @@ export default function Overview() {
     .map(([name, ms]) => ({ name, seconds: +(ms / 1000).toFixed(1), label: formatLap(ms) }))
     .sort((a, b) => a.seconds - b.seconds);
 
+  const filteredDriverCount = isFiltered
+    ? selectedDriverIds.size
+    : (drivers?.length ?? 0);
+
   return (
     <div className="space-y-6">
       <PageTitle />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard icon={Timer} label="Заездов" value={String(laps.length)} sub="в базе данных" />
+        <KpiCard icon={Timer} label="Заездов" value={String(filteredLaps.length)} sub="в базе данных" />
         <KpiCard icon={Flag} label="Трасс" value={String(tracks?.length ?? 0)} sub="активных" />
-        <KpiCard icon={Users} label="Пилотов" value={String(drivers?.length ?? 0)} sub="в чемпионате" />
+        <KpiCard icon={Users} label="Пилотов" value={String(filteredDriverCount)} sub={isFiltered ? "выбрано" : "в чемпионате"} />
         <KpiCard
           icon={Gauge}
           label="Лучший круг"

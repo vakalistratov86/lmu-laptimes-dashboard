@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useLaps, useTracks, useDrivers } from "@/lib/api";
+import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap, formatSector, formatDelta, countryFlag } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,8 @@ export default function Laps() {
   const [sortKey, setSortKey] = useState<SortKey>("lapMs");
   const [sortAsc, setSortAsc] = useState(true);
 
+  const { selectedDriverIds, isFiltered: globalFiltered } = useDriverFilter();
+
   const { data: tracks } = useTracks();
   const { data: drivers } = useDrivers();
   const { data: laps, isLoading } = useLaps({
@@ -35,9 +38,15 @@ export default function Laps() {
     conditions: conditions !== "all" ? conditions : undefined,
   });
 
-  const sorted = useMemo(() => {
+  // Apply global driver filter on top of server-side results
+  const globalFiltered2 = useMemo(() => {
     if (!laps) return [];
-    const arr = [...laps];
+    if (!globalFiltered) return laps;
+    return laps.filter((l) => selectedDriverIds.has(l.driverId));
+  }, [laps, selectedDriverIds, globalFiltered]);
+
+  const sorted = useMemo(() => {
+    const arr = [...globalFiltered2];
     arr.sort((a, b) => {
       let cmp = 0;
       if (sortKey === "lapMs") cmp = a.lapMs - b.lapMs;
@@ -47,11 +56,11 @@ export default function Laps() {
       return sortAsc ? cmp : -cmp;
     });
     return arr;
-  }, [laps, sortKey, sortAsc]);
+  }, [globalFiltered2, sortKey, sortAsc]);
 
   const bestMs = useMemo(
-    () => (laps && laps.length ? Math.min(...laps.map((l) => l.lapMs)) : 0),
-    [laps]
+    () => (globalFiltered2.length ? Math.min(...globalFiltered2.map((l) => l.lapMs)) : 0),
+    [globalFiltered2]
   );
 
   const toggleSort = (key: SortKey) => {
@@ -79,6 +88,13 @@ export default function Laps() {
     URL.revokeObjectURL(url);
   };
 
+  // Driver selector in local filter respects global filter: only show globally selected (if active)
+  const driverOptions = useMemo(() => {
+    const all = drivers ?? [];
+    const list = globalFiltered ? all.filter((d) => selectedDriverIds.has(d.id)) : all;
+    return list;
+  }, [drivers, globalFiltered, selectedDriverIds]);
+
   return (
     <div className="space-y-5">
       <div className="flex items-end justify-between gap-4">
@@ -99,7 +115,7 @@ export default function Laps() {
           <FilterSelect label="Трасса" value={trackId} onChange={setTrackId}
             options={[{ v: "all", l: "Все трассы" }, ...(tracks ?? []).map((t) => ({ v: String(t.id), l: t.name }))]} />
           <FilterSelect label="Пилот" value={driverId} onChange={setDriverId}
-            options={[{ v: "all", l: "Все пилоты" }, ...(drivers ?? []).map((d) => ({ v: String(d.id), l: d.name }))]} />
+            options={[{ v: "all", l: "Все пилоты" }, ...driverOptions.map((d) => ({ v: String(d.id), l: d.name }))]} />
           <FilterSelect label="Класс" value={carClass} onChange={setCarClass}
             options={[{ v: "all", l: "Все классы" }, { v: "Hypercar", l: "Hypercar" }, { v: "LMP2", l: "LMP2" }, { v: "GTE", l: "GTE" }]} />
           <FilterSelect label="Условия" value={conditions} onChange={setConditions}

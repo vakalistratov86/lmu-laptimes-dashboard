@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
+import { DriverFilterProvider } from "@/lib/driverFilter";
 import NotFound from "@/pages/not-found";
 import Overview from "@/pages/Overview";
 import Laps from "@/pages/Laps";
@@ -38,11 +39,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router hook={useHashLocation}>
-          <AppLayout>
-            <AppRouter />
-          </AppLayout>
-        </Router>
+        <DriverFilterProvider>
+          <Router hook={useHashLocation}>
+            <AppLayout>
+              <AppRouter />
+            </AppLayout>
+          </Router>
+        </DriverFilterProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
