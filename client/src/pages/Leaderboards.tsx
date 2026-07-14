@@ -9,71 +9,158 @@ import {
 } from "@/components/ui/select";
 import { Trophy, Medal } from "lucide-react";
 
+// Порядок отображения классов (известные — в начале, остальные — после)
+const CLASS_ORDER = ["Hypercar", "LMP2", "LMP3", "GTE", "GT3", "GT4"];
+
 const CLASS_BADGE: Record<string, string> = {
   Hypercar: "bg-chart-1/15 text-chart-1 border-chart-1/30",
-  LMP2: "bg-chart-4/15 text-chart-4 border-chart-4/30",
-  GTE: "bg-chart-3/15 text-chart-3 border-chart-3/30",
+  LMP2:     "bg-chart-4/15 text-chart-4 border-chart-4/30",
+  LMP3:     "bg-chart-5/15 text-chart-5 border-chart-5/30",
+  GTE:      "bg-chart-3/15 text-chart-3 border-chart-3/30",
+  GT3:      "bg-chart-2/15 text-chart-2 border-chart-2/30",
+  GT4:      "bg-chart-6/15 text-chart-6 border-chart-6/30",
 };
+
+// Цвет полоски слева для заголовка класса
+const CLASS_ACCENT: Record<string, string> = {
+  Hypercar: "border-chart-1",
+  LMP2:     "border-chart-4",
+  LMP3:     "border-chart-5",
+  GTE:      "border-chart-3",
+  GT3:      "border-chart-2",
+  GT4:      "border-chart-6",
+};
+
+type LapRow = { id: number; driverId: number; driverName: string; team: string; car: string; carClass: string; lapMs: number; trackId: number; trackName: string };
+
+interface ClassBoard {
+  carClass: string;
+  rows: LapRow[];
+}
+
+interface TrackBoard {
+  trackName: string;
+  classes: ClassBoard[];
+}
+
+/** Группирует плоский массив кругов в структуру TrackBoard[] */
+function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
+  const byTrack = new Map<string, LapRow[]>();
+  for (const l of laps) {
+    if (!byTrack.has(l.trackName)) byTrack.set(l.trackName, []);
+    byTrack.get(l.trackName)!.push(l);
+  }
+
+  return Array.from(byTrack.entries())
+    .map(([trackName, ls]) => {
+      // Внутри трека — группируем по классу
+      const byClass = new Map<string, Map<number, LapRow>>();
+      for (const l of ls) {
+        if (!byClass.has(l.carClass)) byClass.set(l.carClass, new Map());
+        const classMap = byClass.get(l.carClass)!;
+        const cur = classMap.get(l.driverId);
+        if (!cur || l.lapMs < cur.lapMs) classMap.set(l.driverId, l);
+      }
+
+      // Сортируем классы согласно CLASS_ORDER
+      const sortedClasses = Array.from(byClass.keys()).sort((a, b) => {
+        const ai = CLASS_ORDER.indexOf(a);
+        const bi = CLASS_ORDER.indexOf(b);
+        if (ai === -1 && bi === -1) return a.localeCompare(b);
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      });
+
+      const classes: ClassBoard[] = sortedClasses.map((carClass) => {
+        const rows = Array.from(byClass.get(carClass)!.values())
+          .sort((a, b) => a.lapMs - b.lapMs)
+          .slice(0, maxPerClass);
+        return { carClass, rows };
+      });
+
+      return { trackName, classes };
+    })
+    .sort((a, b) => a.trackName.localeCompare(b.trackName));
+}
 
 export default function Leaderboards() {
   const [trackId, setTrackId] = useState<string>("all");
+  const [classFilter, setClassFilter] = useState<string>("all");
   const { data: tracks } = useTracks();
   const { data: laps, isLoading } = useLaps();
 
-  // Лучшее время каждого пилота (глобально или по трассе)
-  const boards = useMemo(() => {
+  // Список уникальных классов для фильтра
+  const availableClasses = useMemo(() => {
     if (!laps) return [];
-    const filtered = trackId === "all" ? laps : laps.filter((l) => l.trackId === Number(trackId));
+    const set = new Set<string>(laps.map((l: LapRow) => l.carClass).filter(Boolean));
+    return Array.from(set).sort((a, b) => {
+      const ai = CLASS_ORDER.indexOf(a);
+      const bi = CLASS_ORDER.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+  }, [laps]);
 
-    if (trackId !== "all") {
-      // Один лидерборд по конкретной трассе: лучший круг каждого пилота
-      const best = new Map<number, typeof filtered[0]>();
-      for (const l of filtered) {
-        const cur = best.get(l.driverId);
-        if (!cur || l.lapMs < cur.lapMs) best.set(l.driverId, l);
-      }
-      const rows = Array.from(best.values()).sort((a, b) => a.lapMs - b.lapMs);
-      const trackName = tracks?.find((t) => t.id === Number(trackId))?.name ?? "";
-      return [{ trackName, rows }];
+  const boards = useMemo((): TrackBoard[] => {
+    if (!laps) return [];
+
+    let filtered: LapRow[] = trackId === "all"
+      ? laps
+      : laps.filter((l: LapRow) => l.trackId === Number(trackId));
+
+    if (classFilter !== "all") {
+      filtered = filtered.filter((l: LapRow) => l.carClass === classFilter);
     }
 
-    // Все трассы: по одному лидерборду на трассу (топ-5)
-    const byTrack = new Map<string, typeof filtered>();
-    for (const l of filtered) {
-      if (!byTrack.has(l.trackName)) byTrack.set(l.trackName, []);
-      byTrack.get(l.trackName)!.push(l);
-    }
-    return Array.from(byTrack.entries()).map(([trackName, ls]) => {
-      const best = new Map<number, typeof ls[0]>();
-      for (const l of ls) {
-        const cur = best.get(l.driverId);
-        if (!cur || l.lapMs < cur.lapMs) best.set(l.driverId, l);
-      }
-      const rows = Array.from(best.values()).sort((a, b) => a.lapMs - b.lapMs).slice(0, 5);
-      return { trackName, rows };
-    }).sort((a, b) => a.trackName.localeCompare(b.trackName));
-  }, [laps, trackId, tracks]);
+    const maxPerClass = trackId === "all" ? 3 : 50; // глобально топ-3 на класс, по трассе — все
+    const all = buildBoards(filtered, maxPerClass);
+
+    // В режиме конкретной трассы оставляем один борд (он же и есть)
+    return all;
+  }, [laps, trackId, classFilter]);
 
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between gap-4">
+      {/* Заголовок + фильтры */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-xl font-bold tracking-tight">Лидерборды</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Лучшее время каждого пилота по трассам</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Лучшее время каждого пилота по трассам и классам
+          </p>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Трасса</span>
-          <Select value={trackId} onValueChange={setTrackId}>
-            <SelectTrigger className="h-9 w-[200px]" data-testid="filter-track-lb">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Все трассы (топ-5)</SelectItem>
-              {(tracks ?? []).map((t) => (
-                <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Трасса</span>
+            <Select value={trackId} onValueChange={setTrackId}>
+              <SelectTrigger className="h-9 w-[200px]" data-testid="filter-track-lb">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все трассы (топ-3 / класс)</SelectItem>
+                {(tracks ?? []).map((t: { id: number; name: string }) => (
+                  <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Класс</span>
+            <Select value={classFilter} onValueChange={setClassFilter}>
+              <SelectTrigger className="h-9 w-[160px]" data-testid="filter-class-lb">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все классы</SelectItem>
+                {availableClasses.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -83,49 +170,78 @@ export default function Leaderboards() {
         </div>
       )}
 
-      <div className={trackId === "all" ? "grid gap-4 md:grid-cols-2" : ""}>
+      {/* Сетка трасс */}
+      <div className={trackId === "all" ? "grid gap-4 md:grid-cols-2" : "space-y-4"}>
         {boards.map((board) => (
           <Card key={board.trackName} className="overflow-hidden">
+            {/* Заголовок трассы */}
             <div className="flex items-center gap-2 border-b border-border bg-secondary/40 px-4 py-3">
               <Trophy size={16} className="text-primary" />
               <h2 className="font-semibold">{board.trackName}</h2>
-              <span className="ml-auto text-xs text-muted-foreground">{board.rows.length} пилотов</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {board.classes.reduce((s, c) => s + c.rows.length, 0)} пилотов
+              </span>
             </div>
-            <ol>
-              {board.rows.map((l, i) => {
-                const best = board.rows[0].lapMs;
-                return (
-                  <li
-                    key={l.id}
-                    data-testid={`lb-row-${board.trackName}-${i}`}
-                    className="flex items-center gap-3 border-t border-border/60 px-4 py-2.5 first:border-t-0 hover:bg-muted/40"
+
+            {/* Секции по классам */}
+            {board.classes.map((cls) => (
+              <div key={cls.carClass}>
+                {/* Заголовок класса */}
+                <div
+                  className={`flex items-center gap-2 border-l-4 bg-muted/30 px-4 py-1.5 ${CLASS_ACCENT[cls.carClass] ?? "border-border"}`}
+                >
+                  <Badge
+                    variant="outline"
+                    className={`text-[11px] ${CLASS_BADGE[cls.carClass] ?? "bg-muted/40 text-muted-foreground border-border"}`}
                   >
-                    <RankBadge rank={i + 1} />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{l.driverName}</div>
-                      <div className="truncate text-xs text-muted-foreground">{l.team}</div>
-                      <div className="truncate text-xs text-muted-foreground/80" data-testid={`text-car-${l.id}`}>{l.car}</div>
-                    </div>
-                    <Badge variant="outline" className={`${CLASS_BADGE[l.carClass]} hidden sm:inline-flex`}>
-                      {l.carClass}
-                    </Badge>
-                    <div className="text-right">
-                      <div className={`font-data text-sm tabular-nums ${i === 0 ? "font-bold text-primary" : ""}`}>
-                        {formatLap(l.lapMs)}
-                      </div>
-                      {i > 0 && (
-                        <div className="font-data text-[11px] tabular-nums text-muted-foreground">
-                          {formatDelta(l.lapMs, best)}
+                    {cls.carClass}
+                  </Badge>
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    {cls.rows.length} пилот{cls.rows.length === 1 ? "" : cls.rows.length < 5 ? "а" : "ов"}
+                  </span>
+                </div>
+
+                {/* Строки пилотов */}
+                <ol>
+                  {cls.rows.map((l, i) => {
+                    const best = cls.rows[0].lapMs;
+                    return (
+                      <li
+                        key={l.id}
+                        data-testid={`lb-row-${board.trackName}-${cls.carClass}-${i}`}
+                        className="flex items-center gap-3 border-t border-border/60 px-4 py-2.5 first:border-t-0 hover:bg-muted/40"
+                      >
+                        <RankBadge rank={i + 1} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">{l.driverName}</div>
+                          <div className="truncate text-xs text-muted-foreground">{l.team}</div>
+                          <div className="truncate text-xs text-muted-foreground/80" data-testid={`text-car-${l.id}`}>
+                            {l.car}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
+                        <div className="text-right">
+                          <div className={`font-data text-sm tabular-nums ${i === 0 ? "font-bold text-primary" : ""}`}>
+                            {formatLap(l.lapMs)}
+                          </div>
+                          {i > 0 && (
+                            <div className="font-data text-[11px] tabular-nums text-muted-foreground">
+                              {formatDelta(l.lapMs, best)}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            ))}
           </Card>
         ))}
       </div>
+
+      {!isLoading && boards.length === 0 && (
+        <p className="py-12 text-center text-sm text-muted-foreground">Нет данных для выбранных фильтров</p>
+      )}
     </div>
   );
 }
@@ -137,7 +253,9 @@ function RankBadge({ rank }: { rank: number }) {
     3: "bg-chart-1/20 text-chart-1",
   };
   return (
-    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-data text-sm font-bold tabular-nums ${colors[rank] ?? "bg-muted/50 text-muted-foreground"}`}>
+    <div
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-data text-sm font-bold tabular-nums ${colors[rank] ?? "bg-muted/50 text-muted-foreground"}`}
+    >
       {rank <= 3 ? <Medal size={15} /> : rank}
     </div>
   );
