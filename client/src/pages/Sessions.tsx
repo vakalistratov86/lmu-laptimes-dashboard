@@ -13,11 +13,24 @@ import {
 // ─── Утилиты ───────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
+  // Даты в базе хранятся как "YYYY-MM-DD" без времени.
+  // new Date("YYYY-MM-DD") трактует строку как UTC, что при toLocaleString
+  // с hour/minute даёт сдвиг и одинаковое время 00:00 / 03:00 для всех записей.
+  // Решение: отображать только дату, без времени.
+  if (!iso) return "";
+  // Если строка уже в формате YYYY-MM-DD — форматируем напрямую через split,
+  // избегая любого UTC-сдвига.
+  const datePart = iso.slice(0, 10); // "YYYY-MM-DD"
+  const parts = datePart.split("-");
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return `${day}.${month}.${year}`;
+  }
+  // Fallback для полных ISO-строк с временем (например из XML)
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString("ru-RU", {
     day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
   });
 }
 
