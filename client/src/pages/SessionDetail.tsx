@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useRoute, useSearch } from "wouter";
 import { useSession, useSessionLaps } from "@/lib/api";
 import { formatLap, formatSector, formatDelta } from "@/lib/format";
 import { Card } from "@/components/ui/card";
@@ -20,6 +20,9 @@ function formatDate(iso: string): string {
 
 export default function SessionDetail() {
   const [, params] = useRoute("/sessions/:id");
+  const searchString = useSearch();
+  const backFilter = new URLSearchParams(searchString).get("from_filter");
+  const backHref = backFilter ? `/sessions?filter=${encodeURIComponent(backFilter)}` : "/sessions";
   const id = params ? Number(params.id) : undefined;
   const { data: session, isLoading } = useSession(id);
   const { data: laps } = useSessionLaps(id);
@@ -47,7 +50,7 @@ export default function SessionDetail() {
     return (
       <div className="space-y-4">
         <p className="text-muted-foreground">Сессия не найдена.</p>
-        <Link href="/sessions" className="text-primary underline">Назад к сессиям</Link>
+        <Link href={backHref} className="text-primary underline">Назад к сессиям</Link>
       </div>
     );
   }
@@ -65,7 +68,7 @@ export default function SessionDetail() {
   return (
     <div className="space-y-5">
       <Link
-        href="/sessions"
+        href={backHref}
         data-testid="link-back"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
@@ -73,19 +76,21 @@ export default function SessionDetail() {
       </Link>
 
       <div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Flag size={18} className="text-primary" />
+          <Badge variant="outline" className="bg-secondary/40">{session.sessionType}</Badge>
           <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-session-title">
             {session.trackName}
             {courseLabel && (
               <span className="ml-2 text-base font-normal text-muted-foreground">· {courseLabel}</span>
             )}
           </h1>
-          <Badge variant="outline" className="bg-secondary/40">{session.sessionType}</Badge>
+          <span className="text-sm text-muted-foreground font-mono">
+            {formatDate(session.dateTime)}
+          </span>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">{session.event}</p>
         <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1"><CalendarClock size={13} /> {formatDate(session.dateTime)}</span>
           <span>Пилотов: {session.driverCount}</span>
           <span>Кругов засчитано: {session.lapCount}</span>
           {session.gameVersion && <span>Версия игры: {session.gameVersion}</span>}
