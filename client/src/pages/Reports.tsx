@@ -19,7 +19,7 @@ type Metric = "best" | "avg" | "count";
 type ChartType = "bar" | "line";
 
 const DIM_LABEL: Record<Dimension, string> = {
-  track: "Трасса", driver: "Пилот", carClass: "Класс машины", conditions: "Условия",
+  track: "Трасса / конфигурация", driver: "Пилот", carClass: "Класс машины", conditions: "Условия",
 };
 const METRIC_LABEL: Record<Metric, string> = {
   best: "Лучший круг", avg: "Средний круг", count: "Количество заездов",
@@ -41,16 +41,22 @@ export default function Reports() {
     let filtered = laps;
     if (trackFilter !== "all") filtered = filtered.filter((l) => l.trackId === Number(trackFilter));
     if (classFilter !== "all") filtered = filtered.filter((l) => l.carClass === classFilter);
-    // Apply global driver filter
     if (globalFiltered) filtered = filtered.filter((l) => selectedDriverIds.has(l.driverId));
 
     const groups = new Map<string, number[]>();
     for (const l of filtered) {
       let key = "";
-      if (dimension === "track") key = l.trackName;
-      else if (dimension === "driver") key = l.driverName;
-      else if (dimension === "carClass") key = l.carClass;
-      else key = l.conditions;
+      if (dimension === "track") {
+        // Ключ по трассе: trackName + course если доступен (future-proof)
+        // TODO: когда LapTimeEnriched получит sessionCourse — добавить: `${l.trackName} · ${(l as any).sessionCourse}`
+        key = l.trackName;
+      } else if (dimension === "driver") {
+        key = l.driverName;
+      } else if (dimension === "carClass") {
+        key = l.carClass;
+      } else {
+        key = l.conditions;
+      }
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(l.lapMs);
     }

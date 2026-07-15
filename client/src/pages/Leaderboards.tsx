@@ -32,7 +32,10 @@ interface ClassBoard {
 }
 
 interface TrackBoard {
-  trackName: string;
+  /** Уникальный ключ: "trackName|||course" */
+  boardKey: string;
+  /** Отображаемое название: "trackName · course" или просто "trackName" */
+  displayName: string;
   classes: ClassBoard[];
 }
 
@@ -53,15 +56,27 @@ function formatRecordDate(dateStr?: string): string {
   }
 }
 
+/**
+ * Строит борды, группируя по паре trackName + course (через lap.sessionCourse или fallback trackName).
+ * Пока LapTimeEnriched не содержит course, используем только trackName.
+ * Когда поле появится — достаточно заменить ключ.
+ */
 function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
-  const byTrack = new Map<string, LapRow[]>();
+  // Ключ борда = trackName (в будущем: trackName + course из lap)
+  const byBoard = new Map<string, { displayName: string; laps: LapRow[] }>();
   for (const l of laps) {
-    if (!byTrack.has(l.trackName)) byTrack.set(l.trackName, []);
-    byTrack.get(l.trackName)!.push(l);
+    // TODO: добавить course когда LapTimeEnriched будет его содержать
+    // const course = (l as any).sessionCourse ?? null;
+    // const boardKey = course ? `${l.trackName}|||${course}` : l.trackName;
+    // const displayName = course ? `${l.trackName} · ${course}` : l.trackName;
+    const boardKey = l.trackName;
+    const displayName = l.trackName;
+    if (!byBoard.has(boardKey)) byBoard.set(boardKey, { displayName, laps: [] });
+    byBoard.get(boardKey)!.laps.push(l);
   }
 
-  return Array.from(byTrack.entries())
-    .map(([trackName, ls]) => {
+  return Array.from(byBoard.entries())
+    .map(([boardKey, { displayName, laps: ls }]) => {
       const byClass = new Map<string, Map<number, LapRow>>();
       for (const l of ls) {
         if (!byClass.has(l.carClass)) byClass.set(l.carClass, new Map());
@@ -86,9 +101,9 @@ function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
         return { carClass, rows };
       });
 
-      return { trackName, classes };
+      return { boardKey, displayName, classes };
     })
-    .sort((a, b) => a.trackName.localeCompare(b.trackName));
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
 export default function Leaderboards() {
@@ -179,10 +194,10 @@ export default function Leaderboards() {
 
       <div className={trackId === "all" ? "grid gap-4 md:grid-cols-2" : "space-y-4"}>
         {boards.map((board) => (
-          <Card key={board.trackName} className="overflow-hidden">
+          <Card key={board.boardKey} className="overflow-hidden">
             <div className="flex items-center gap-2 border-b border-border bg-secondary/40 px-4 py-3">
               <Trophy size={16} className="text-primary" />
-              <h2 className="font-semibold">{board.trackName}</h2>
+              <h2 className="font-semibold">{board.displayName}</h2>
               <span className="ml-auto text-xs text-muted-foreground">
                 {board.classes.reduce((s, c) => s + c.rows.length, 0)} пилотов
               </span>
@@ -211,7 +226,7 @@ export default function Leaderboards() {
                     return (
                       <li
                         key={l.id}
-                        data-testid={`lb-row-${board.trackName}-${cls.carClass}-${i}`}
+                        data-testid={`lb-row-${board.displayName}-${cls.carClass}-${i}`}
                         className="flex items-center gap-3 border-t border-border/60 px-4 py-2.5 first:border-t-0 hover:bg-muted/40"
                       >
                         <RankBadge rank={i + 1} />
@@ -258,7 +273,7 @@ export default function Leaderboards() {
 
 function RankBadge({ rank }: { rank: number }) {
   const colors: Record<number, string> = {
-    1: "bg-chart-2/20 text-chart-2",
+     1: "bg-chart-2/20 text-chart-2",
     2: "bg-muted-foreground/15 text-muted-foreground",
     3: "bg-chart-1/20 text-chart-1",
   };
