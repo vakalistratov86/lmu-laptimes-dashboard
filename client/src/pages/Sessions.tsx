@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import { useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
@@ -25,6 +25,12 @@ function formatDate(iso: string): string {
   return d.toLocaleString("ru-RU", {
     day: "2-digit", month: "2-digit", year: "numeric",
   });
+}
+
+/** Извлекает строку даты "YYYY-MM-DD" из ISO-строки */
+function extractDateKey(iso: string): string {
+  if (!iso) return "";
+  return iso.slice(0, 10);
 }
 
 function normalizeType(raw: string): SessionCategory {
@@ -80,22 +86,54 @@ function trackDisplayLabel(trackName: string, course: string | null | undefined)
   return `${trackName} · ${course}`;
 }
 
-/** Группирует сессии: сначала по трассе+конфигурации, затем по категории */
-function groupSessions<T extends { trackName: string; course?: string | null; sessionType: string }>(
-  items: T[],
-): [string, string | null, [SessionCategory, T[]][]][] {
-  // Шаг 1: по ключу trackName + course
-  const byTrack = new Map<string, { trackName: string; course: string | null; items: T[] }>();
+interface GroupedEntry {
+  /** Ключ группы: "YYYY-MM-DD|||trackName|||course" */
+  groupKey: string;
+  dateKey: string;       // "YYYY-MM-DD"
+  trackName: string;
+  course: string | null;
+  categories: [SessionCategory, SessionItem[]][];
+}
+
+type SessionItem = {
+  id: number;
+  trackName: string;
+  course?: string | null;
+  sessionType: string;
+  dateTime: string;
+  event: string;
+  driverCount: number;
+  lapCount: number;
+  results: { isPlayer: number; position: number; bestLapMs: number | null }[];
+};
+
+/**
+ * Группирует сессии по (дата + трасса + конфигурация),
+ * затем внутри каждой группы — по категории.
+ * Одна и та же трасса в разные дни — разные группы.
+ */
+function groupSessions(items: SessionItem[]): GroupedEntry[] {
+  const byGroup = new Map<string, { dateKey: string; trackName: string; course: string | null; items: SessionItem[] }>();
+
   for (const item of items) {
+    const dateKey = extractDateKey(item.dateTime);
     const course = item.course ?? null;
-    const key = `${item.trackName}|||${course ?? ""}`;
-    if (!byTrack.has(key)) byTrack.set(key, { trackName: item.trackName, course, items: [] });
-    byTrack.get(key)!.items.push(item);
+    const groupKey = `${dateKey}|||${item.trackName}|||${course ?? ""}`;
+    if (!byGroup.has(groupKey)) {
+      byGroup.set(groupKey, { dateKey, trackName: item.trackName, course, items: [] });
+    }
+    byGroup.get(groupKey)!.items.push(item);
   }
 
-  // Шаг 2: внутри каждой группы — по категории
-  return Array.from(byTrack.values()).map(({ trackName, course, items: groupItems }) => {
-    const byCategory = new Map<SessionCategory, T[]>();
+  // Сортируем группы по дате убывания (новые сверху)
+  const entries = Array.from(byGroup.entries()).sort(([a], [b]) => {
+    const dateA = a.slice(0, 10);
+    const dateB = b.slice(0, 10);
+    return dateB.localeCompare(dateA);
+  });
+
+  return entries.map(([groupKey, { dateKey, trackName, course, items: groupItems }]) => {
+    const byCategory = new Map<SessionCategory, SessionItem[]>();
     for (const s of groupItems) {
       const cat = normalizeType(s.sessionType);
       if (!byCategory.has(cat)) byCategory.set(cat, []);
@@ -104,7 +142,7 @@ function groupSessions<T extends { trackName: string; course?: string | null; se
     const sorted = Array.from(byCategory.entries()).sort(
       ([a], [b]) => CATEGORY_META[a].order - CATEGORY_META[b].order,
     );
-    return [trackName, course, sorted] as [string, string | null, [SessionCategory, T[]][]];
+    return { groupKey, dateKey, trackName, course, categories: sorted } as GroupedEntry;
   });
 }
 
@@ -113,18 +151,22 @@ function groupSessions<T extends { trackName: string; course?: string | null; se
 export default function Sessions() {
   const { data: sessions, isLoading } = useSessions();
 
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [collapsedTracks, setCollapsedTracks] = useState<Record<string, boolean>>({});
+  const grouped = useMemo(() => (sessions ? groupSessions(sessions as SessionItem[]) : []), [sessions]);
 
-  const toggleTrack = (key: string) =>
-    setCollapsedTracks((prev) => ({ ...prev, [key]: !prev[key] }));
+  // По умолчанию все группы и категории свёрнуты
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
-  const toggleCategory = (trackKey: string, cat: string) => {
-    const key = `${trackKey}::${cat}`;
-    setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
+  const isGroupCollapsed = (key: string) => collapsedGroups[key] ?? true;
+  const isCatCollapsed = (key: string) => collapsedCategories[key] ?? true;
+
+  const toggleGroup = (key: string) =>
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !isGroupCollapsed(key) }));
+
+  const toggleCategory = (groupKey: string, cat: string) => {
+    const key = `${groupKey}::${cat}`;
+    setCollapsedCategories((prev) => ({ ...prev, [key]: !isCatCollapsed(key) }));
   };
-
-  const grouped = sessions ? groupSessions(sessions) : [];
 
   return (
     <div className="space-y-5">
@@ -133,7 +175,7 @@ export default function Sessions() {
           Сессии
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Импортированные из логов игры сессии — по трассе и типу сессии
+          Импортированные из логов игры сессии — по дате, трассе и типу сессии
         </p>
       </div>
 
@@ -166,45 +208,48 @@ export default function Sessions() {
 
       {!isLoading && sessions && sessions.length > 0 && (
         <div className="space-y-8">
-          {grouped.map(([trackName, course, categories]) => {
-            const trackKey = `${trackName}|||${course ?? ""}`;
-            const isTrackCollapsed = collapsedTracks[trackKey] ?? false;
+          {grouped.map(({ groupKey, dateKey, trackName, course, categories }) => {
+            const isCollapsed = isGroupCollapsed(groupKey);
             const totalSessions = categories.reduce((sum, [, s]) => sum + s.length, 0);
             const displayLabel = trackDisplayLabel(trackName, course);
+            const displayDate = formatDate(dateKey);
 
             return (
-              <section key={trackKey}>
-                {/* ── Заголовок трассы ── */}
+              <section key={groupKey}>
+                {/* ── Заголовок группы (дата + трасса) ── */}
                 <button
                   type="button"
-                  onClick={() => toggleTrack(trackKey)}
+                  onClick={() => toggleGroup(groupKey)}
                   className="mb-3 flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-secondary/40 transition-colors"
                 >
                   <Flag size={16} className="shrink-0 text-primary" />
                   <h2 className="flex-1 font-display font-bold tracking-tight">{displayLabel}</h2>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
+                    <CalendarClock size={12} /> {displayDate}
+                  </span>
                   <Badge variant="secondary" className="font-mono text-xs">
                     {totalSessions}{" "}
                     {totalSessions === 1 ? "сессия" : totalSessions < 5 ? "сессии" : "сессий"}
                   </Badge>
-                  {isTrackCollapsed
+                  {isCollapsed
                     ? <ChevronDown size={16} className="text-muted-foreground" />
                     : <ChevronUp size={16} className="text-muted-foreground" />}
                 </button>
 
-                {/* ── Категории внутри трассы ── */}
-                {!isTrackCollapsed && (
+                {/* ── Категории внутри группы ── */}
+                {!isCollapsed && (
                   <div className="space-y-4 pl-5 border-l-2 border-border/40">
                     {categories.map(([cat, catSessions]) => {
                       const meta = CATEGORY_META[cat];
-                      const catKey = `${trackKey}::${cat}`;
-                      const isCatCollapsed = collapsed[catKey] ?? false;
+                      const catKey = `${groupKey}::${cat}`;
+                      const isCatCol = isCatCollapsed(catKey);
 
                       return (
                         <div key={cat}>
                           {/* Заголовок категории */}
                           <button
                             type="button"
-                            onClick={() => toggleCategory(trackKey, cat)}
+                            onClick={() => toggleCategory(groupKey, cat)}
                             className="mb-2 flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-secondary/30 transition-colors"
                           >
                             <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${meta.badgeClass}`}>
@@ -214,13 +259,13 @@ export default function Sessions() {
                             <span className="text-xs text-muted-foreground font-mono">
                               ×{catSessions.length}
                             </span>
-                            {isCatCollapsed
+                            {isCatCol
                               ? <ChevronDown size={14} className="text-muted-foreground" />
                               : <ChevronUp size={14} className="text-muted-foreground" />}
                           </button>
 
                           {/* Карточки сессий */}
-                          {!isCatCollapsed && (
+                          {!isCatCol && (
                             <div className="grid gap-3 md:grid-cols-2">
                               {catSessions.map((s) => {
                                 const player = s.results.find((r) => r.isPlayer === 1);
