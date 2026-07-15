@@ -258,16 +258,20 @@ export class DatabaseStorage implements IStorage {
     const all = db.select().from(tracks).all();
     const course = parsed.course;
 
+    // Нормализуем venue из XML через ту же canonicalTrackName
+    const canonicalName = canonicalTrackName(parsed.venue).name.toLowerCase();
+    const parsedCourseNorm = (course ?? "").toLowerCase();
+
     const exactMatch = all.find((t) => {
-      const venueLower = t.name.toLowerCase();
-      const parsedVenueLower = parsed.venue.toLowerCase();
-      const parsedCourseNorm = (course ?? "").toLowerCase();
+      const dbNameLower = t.name.toLowerCase();
       const layoutNorm = (t.layout ?? "").toLowerCase();
+
       if (course) {
-        return venueLower === parsedVenueLower && layoutNorm === parsedCourseNorm;
+        return dbNameLower === canonicalName && layoutNorm === parsedCourseNorm;
       }
-      return venueLower === parsedVenueLower;
+      return dbNameLower === canonicalName;
     });
+
     if (exactMatch) return exactMatch;
 
     const canonical = canonicalTrackName(parsed.venue);
