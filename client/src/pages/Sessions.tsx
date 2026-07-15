@@ -9,6 +9,7 @@ import {
   CalendarClock, Users, Flag, ChevronRight, Upload,
   ChevronDown, ChevronUp, Dumbbell, Trophy, Timer, Gauge,
 } from "lucide-react";
+import { getSessionTypeBadgeClass, SESSION_TYPE_ORDER } from "@/lib/classStyles";
 
 // ─── Утилиты ───────────────────────────────────────────────────────────────────
 
@@ -33,47 +34,49 @@ function extractDateKey(iso: string): string {
   return iso.slice(0, 10);
 }
 
+type SessionCategory = "practice" | "qualify" | "race" | "warmup" | "superpole";
+
 function normalizeType(raw: string): SessionCategory {
   const s = raw.toLowerCase();
   if (s.includes("гонка") || s.includes("race")) return "race";
   if (s.includes("квалификация") || s.includes("qualify")) return "qualify";
+  if (s.includes("superpole")) return "superpole";
   if (s.includes("прогрев") || s.includes("warmup")) return "warmup";
   return "practice";
 }
 
-type SessionCategory = "practice" | "qualify" | "race" | "warmup";
-
 interface CategoryMeta {
   label: string;
   icon: React.ReactNode;
-  badgeClass: string;
   order: number;
 }
 
+/** Metadata for display (label + icon + order). Badge colours come from classStyles.ts. */
 const CATEGORY_META: Record<SessionCategory, CategoryMeta> = {
   practice: {
     label: "Тренировка",
     icon: <Dumbbell size={14} />,
-    badgeClass: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-    order: 0,
+    order: SESSION_TYPE_ORDER["practice"],
   },
   qualify: {
     label: "Квалификация",
     icon: <Timer size={14} />,
-    badgeClass: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-    order: 1,
+    order: SESSION_TYPE_ORDER["qualify"],
+  },
+  superpole: {
+    label: "Superpole",
+    icon: <Timer size={14} />,
+    order: SESSION_TYPE_ORDER["superpole"],
   },
   warmup: {
     label: "Прогрев",
     icon: <Gauge size={14} />,
-    badgeClass: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-    order: 2,
+    order: SESSION_TYPE_ORDER["warmup"],
   },
   race: {
     label: "Гонка",
     icon: <Trophy size={14} />,
-    badgeClass: "bg-red-500/15 text-red-400 border-red-500/30",
-    order: 3,
+    order: SESSION_TYPE_ORDER["race"],
   },
 };
 
@@ -241,6 +244,7 @@ export default function Sessions() {
                   <div className="space-y-4 pl-5 border-l-2 border-border/40">
                     {categories.map(([cat, catSessions]) => {
                       const meta = CATEGORY_META[cat];
+                      const badgeClass = getSessionTypeBadgeClass(cat);
                       const catKey = `${groupKey}::${cat}`;
                       const isCatCol = isCatCollapsed(catKey);
 
@@ -252,7 +256,7 @@ export default function Sessions() {
                             onClick={() => toggleCategory(groupKey, cat)}
                             className="mb-2 flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-secondary/30 transition-colors"
                           >
-                            <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${meta.badgeClass}`}>
+                            <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badgeClass}`}>
                               {meta.icon}
                               {meta.label}
                             </span>
@@ -284,7 +288,7 @@ export default function Sessions() {
                                       </div>
 
                                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                                        <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.badgeClass}`}>
+                                        <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${badgeClass}`}>
                                           {meta.icon}
                                           {s.sessionType.replace(/\s*\(.*\)/, "")}
                                         </span>
@@ -312,6 +316,7 @@ export default function Sessions() {
                                         </div>
                                       )}
                                     </Card>
+
                                   </Link>
                                 );
                               })}

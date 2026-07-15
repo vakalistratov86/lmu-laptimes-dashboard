@@ -29,3 +29,43 @@ export function getClassAccentClass(carClass?: string): string {
     ? CLASS_ACCENT[carClass] ?? "border-border"
     : "border-border";
 }
+
+// ─── Session-type badge styles ─────────────────────────────────────────────────
+
+/** Neutral fallback used for any unknown session type. */
+export const SESSION_TYPE_BADGE_FALLBACK =
+  "bg-muted/40 text-muted-foreground border-border";
+
+/**
+ * Maps normalised session categories to Tailwind badge classes.
+ * Works in both light and dark mode via Tailwind's opacity modifiers
+ * (bg-*/15 stays subtle; text-* colours are already theme-aware with
+ * shadcn/ui CSS-variable colour tokens if you use them, or the raw
+ * Tailwind colours below for a simple dark-compatible palette).
+ */
+export const SESSION_TYPE_BADGE: Record<string, string> = {
+  practice:  "bg-blue-500/15   text-blue-500   dark:text-blue-400   border-blue-500/30",
+  qualify:   "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
+  warmup:    "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
+  race:      "bg-red-500/15    text-red-600    dark:text-red-400    border-red-500/30",
+  superpole: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
+};
+
+/** Display order for session categories inside a group. */
+export const SESSION_TYPE_ORDER: Record<string, number> = {
+  practice:  0,
+  qualify:   1,
+  superpole: 2,
+  warmup:    3,
+  race:      4,
+};
+
+/**
+ * Returns the badge Tailwind classes for a normalised session category.
+ * Falls back to a neutral muted style for any unknown category.
+ */
+export function getSessionTypeBadgeClass(category?: string): string {
+  return category
+    ? SESSION_TYPE_BADGE[category] ?? SESSION_TYPE_BADGE_FALLBACK
+    : SESSION_TYPE_BADGE_FALLBACK;
+}
