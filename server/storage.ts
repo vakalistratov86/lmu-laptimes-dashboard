@@ -76,12 +76,26 @@ export class DatabaseStorage implements IStorage {
     const trackMap = new Map(db.select().from(tracks).all().map((t) => [t.id, t]));
     const driverMap = new Map(db.select().from(drivers).all().map((d) => [d.id, d]));
 
-    return rows.map((r) => ({
-      ...r,
-      trackName: trackMap.get(r.trackId)?.name ?? "—",
-      driverName: driverMap.get(r.driverId)?.name ?? "—",
-      team: driverMap.get(r.driverId)?.team ?? "—",
-    }));
+    // Строим мап: (sessionId, driverId) → isPlayer из session_results
+    // Ключ: "sessionId:driverId"
+    const srRows = db.select().from(sessionResults).all();
+    const isPlayerMap = new Map<string, number>();
+    for (const sr of srRows) {
+      isPlayerMap.set(`${sr.sessionId}:${sr.driverId}`, sr.isPlayer);
+    }
+
+    return rows.map((r) => {
+      const isPlayer = r.sessionId != null
+        ? (isPlayerMap.get(`${r.sessionId}:${r.driverId}`) ?? null)
+        : null; // demo круги не связаны с session_results
+      return {
+        ...r,
+        trackName: trackMap.get(r.trackId)?.name ?? "—",
+        driverName: driverMap.get(r.driverId)?.name ?? "—",
+        team: driverMap.get(r.driverId)?.team ?? "—",
+        isPlayer,
+      };
+    });
   }
 
   async getSessions(): Promise<SessionEnriched[]> {
@@ -119,7 +133,6 @@ export class DatabaseStorage implements IStorage {
       return { fileName, ok: false, message: "Не похоже на лог результатов LMU/rFactor (нет RaceResults)" };
     }
 
-    // Дубликат по имени файла — пропускаем
     const dup = db.select().from(sessions).where(eq(sessions.fileName, fileName)).get();
     if (dup) {
       return { fileName, ok: false, message: "Уже импортировано (тот же файл)", sessionId: dup.id };
@@ -129,7 +142,6 @@ export class DatabaseStorage implements IStorage {
     const dateOnly = parsed.dateTimeIso.slice(0, 10);
 
     let totalLaps = 0;
-    // Сначала создаём запись сессии (обновим счётчики в конце)
     const session = db.insert(sessions).values({
       trackId: track.id,
       event: parsed.event,
@@ -162,12 +174,10 @@ export class DatabaseStorage implements IStorage {
         finishStatus: d.finishStatus ?? null,
       }).run();
 
-      // Заносим засчитанные круги (с валидным временем) в общую таблицу времён
       for (const lap of d.lapList) {
         if (lap.lapMs == null || lap.isPit) continue;
         const s1 = lap.s1Ms ?? 0;
         const s2 = lap.s2Ms ?? 0;
-        // если s3 отсутствует, вычисляем как остаток
         const s3 = lap.s3Ms ?? Math.max(0, lap.lapMs - s1 - s2);
         db.insert(lapTimes).values({
           trackId: track.id,
@@ -188,7 +198,6 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Обновляем счётчик кругов сессии
     db.update(sessions).set({ lapCount: totalLaps }).where(eq(sessions.id, session.id)).run();
 
     return {
@@ -235,14 +244,12 @@ export class DatabaseStorage implements IStorage {
 
 export const storage = new DatabaseStorage();
 
-// Нормализация класса машины из лога (GT3 -> GT3; прочее сохраняем)
 function normalizeClass(raw: string): string {
   const r = (raw || "").trim();
   if (!r || r === "—") return "GT3";
   return r;
 }
 
-// Приведение TrackVenue к каноничному названию + метаданные
 function canonicalTrackName(venue: string): { name: string; country: string; turns: number } {
   const v = venue.toLowerCase();
   if (v.includes("carlos pace") || v.includes("interlagos")) return { name: "Interlagos", country: "Бразилия", turns: 15 };

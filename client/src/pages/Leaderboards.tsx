@@ -10,8 +10,21 @@ import {
 } from "@/components/ui/select";
 import { Trophy, Medal } from "lucide-react";
 import { CLASS_ORDER, getClassBadgeClass, getClassAccentClass } from "@/lib/classStyles";
+import { DriverName } from "@/components/DriverName";
 
-type LapRow = { id: number; driverId: number; driverName: string; team: string; car: string; carClass: string; lapMs: number; trackId: number; trackName: string; date?: string };
+type LapRow = {
+  id: number;
+  driverId: number;
+  driverName: string;
+  team: string;
+  car: string;
+  carClass: string;
+  lapMs: number;
+  trackId: number;
+  trackName: string;
+  date?: string;
+  isPlayer?: number | null;
+};
 
 interface ClassBoard {
   carClass: string;
@@ -203,7 +216,9 @@ export default function Leaderboards() {
                       >
                         <RankBadge rank={i + 1} />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">{l.driverName}</div>
+                          <div className="truncate text-sm font-medium">
+                            <DriverName name={l.driverName} isPlayer={l.isPlayer} />
+                          </div>
                           <div className="truncate text-xs text-muted-foreground">{l.team}</div>
                           <div className="truncate text-xs text-muted-foreground/80" data-testid={`text-car-${l.id}`}>
                             {l.car}

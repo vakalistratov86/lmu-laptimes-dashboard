@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLaps, useTracks, useDrivers } from "@/lib/api";
 import { useDriverFilter } from "@/lib/driverFilter";
-import { formatLap, formatSector, formatDelta, countryFlag } from "@/lib/format";
+import { formatLap, formatSector, formatDelta } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Download, ArrowUpDown, X } from "lucide-react";
 import { getClassBadgeClass } from "@/lib/classStyles";
+import { DriverName } from "@/components/DriverName";
 
 type SortKey = "lapMs" | "driverName" | "trackName" | "date";
 
@@ -68,11 +69,12 @@ export default function Laps() {
   const hasFilters = trackId !== "all" || driverId !== "all" || carClass !== "all" || conditions !== "all";
 
   const exportCsv = () => {
-    const headers = ["Трасса", "Пилот", "Команда", "Класс", "Машина", "Круг", "S1", "S2", "S3", "Условия", "Шины", "Дата"];
+    const headers = ["Трасса", "Пилот", "Команда", "Класс", "Машина", "Круг", "S1", "S2", "S3", "Условия", "Шины", "Дата", "ИИ"];
     const rows = sorted.map((l) => [
       l.trackName, l.driverName, l.team, l.carClass, l.car,
       formatLap(l.lapMs), formatSector(l.sector1Ms), formatSector(l.sector2Ms), formatSector(l.sector3Ms),
       l.conditions, l.tyre, l.date,
+      l.isPlayer === 1 ? "Нет" : "Да",
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
@@ -102,7 +104,6 @@ export default function Laps() {
         </Button>
       </div>
 
-      {/* Filters */}
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-3">
           <FilterSelect label="Трасса" value={trackId} onChange={setTrackId}
@@ -121,7 +122,6 @@ export default function Laps() {
         </div>
       </Card>
 
-      {/* Table */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -157,7 +157,9 @@ export default function Laps() {
                   className="border-t border-border transition-colors hover:bg-muted/40"
                 >
                   <td className="px-4 py-2.5 font-medium">{l.trackName}</td>
-                  <td className="px-4 py-2.5">{l.driverName}</td>
+                  <td className="px-4 py-2.5">
+                    <DriverName name={l.driverName} isPlayer={l.isPlayer} />
+                  </td>
                   <td className="hidden px-4 py-2.5 text-muted-foreground md:table-cell" data-testid={`text-car-${l.id}`}>{l.car}</td>
                   <td className="px-4 py-2.5">
                     <Badge variant="outline" className={getClassBadgeClass(l.carClass)}>{l.carClass}</Badge>

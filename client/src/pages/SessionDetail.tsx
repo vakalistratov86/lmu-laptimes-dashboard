@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Flag, CalendarClock, Medal, User, Fuel } from "lucide-react";
+import { DriverName } from "@/components/DriverName";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -22,7 +23,6 @@ export default function SessionDetail() {
   const { data: session, isLoading } = useSession(id);
   const { data: laps } = useSessionLaps(id);
 
-  // Круги по пилотам
   const lapsByDriver = useMemo(() => {
     const map = new Map<string, typeof laps>();
     for (const l of laps ?? []) {
@@ -66,7 +66,6 @@ export default function SessionDetail() {
         <ArrowLeft size={15} /> Все сессии
       </Link>
 
-      {/* Заголовок сессии */}
       <div>
         <div className="flex items-center gap-2">
           <Flag size={18} className="text-primary" />
@@ -84,7 +83,6 @@ export default function SessionDetail() {
         </div>
       </div>
 
-      {/* Итоговая таблица результатов */}
       <Card className="overflow-hidden">
         <div className="border-b border-border bg-secondary/40 px-4 py-3">
           <h2 className="font-semibold">Итоговые результаты</h2>
@@ -117,7 +115,11 @@ export default function SessionDetail() {
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
                       {r.isPlayer === 1 && <User size={13} className="text-primary" />}
-                      <span className={`font-medium ${r.isPlayer ? "text-primary" : ""}`}>{r.driverName}</span>
+                      <DriverName
+                        name={r.driverName}
+                        isPlayer={r.isPlayer}
+                        className={r.isPlayer === 1 ? "font-medium text-primary" : "font-medium"}
+                      />
                     </div>
                   </td>
                   <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
@@ -141,7 +143,6 @@ export default function SessionDetail() {
         </div>
       </Card>
 
-      {/* Круги по пилотам */}
       {lapsByDriver.size > 0 && (
         <div className="space-y-4">
           <h2 className="font-display text-lg font-bold tracking-tight">Круги по пилотам</h2>

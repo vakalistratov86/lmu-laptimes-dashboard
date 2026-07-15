@@ -19,6 +19,12 @@ import {
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 
+/**
+ * Маркер «ИИ» для дррайвербара.
+ * Используем отдельный локальный бейдж чтобы не импортировать DriverName.
+ * Таблица drivers не хранит isPlayer, поэтому маркер не отображаем здесь.
+ */
+
 export function DriverFilterBar() {
   const { data: drivers } = useDrivers();
   const { selectedDriverIds, toggleDriver, clearDrivers, isFiltered } = useDriverFilter();
@@ -80,6 +86,7 @@ export function DriverFilterBar() {
                         )}
                       />
                       {d.name}
+                      {/* isPlayer в таблице drivers отсутствует — метка будет добавлена позже */}
                     </CommandItem>
                   );
                 })}
