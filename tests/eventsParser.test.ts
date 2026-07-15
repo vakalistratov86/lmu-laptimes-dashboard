@@ -11,16 +11,15 @@ describe('eventsParser', () => {
     vi.restoreAllMocks();
   });
 
+  // ── invalidateCache ────────────────────────────────────────────────────────
   describe('invalidateCache', () => {
     it('сбрасывает кэш — следующий вызов делает новый запрос', async () => {
-      // Подменяем fetch чтобы вернуть ошибку (упадём на fallback-статику)
       const mockFetch = vi.fn().mockRejectedValue(new Error('network error'));
       vi.stubGlobal('fetch', mockFetch);
 
       await getSpecialEvents();
       const callsAfterFirst = mockFetch.mock.calls.length;
 
-      // После инвалидации fetch должен вызваться снова
       invalidateCache();
       await getSpecialEvents();
 
@@ -29,13 +28,13 @@ describe('eventsParser', () => {
 
     it('после сброса возвращает актуальные статические данные', async () => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
-
       invalidateCache();
       const result = await getSpecialEvents();
       expect(result.events.length).toBeGreaterThan(0);
     });
   });
 
+  // ── Fallback на статику ────────────────────────────────────────────────────
   describe('getSpecialEvents — fallback на статику', () => {
     beforeEach(() => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
@@ -51,7 +50,7 @@ describe('eventsParser', () => {
       expect(result.events.length).toBeGreaterThan(0);
     });
 
-    it('каждое событие имеет поле id', async () => {
+    it('каждое событие имеет строковое поле id', async () => {
       const result = await getSpecialEvents();
       for (const event of result.events) {
         expect(event).toHaveProperty('id');
@@ -63,6 +62,7 @@ describe('eventsParser', () => {
       const result = await getSpecialEvents();
       for (const event of result.events) {
         expect(event).toHaveProperty('track');
+        expect(typeof event.track).toBe('string');
       }
     });
 
@@ -73,7 +73,7 @@ describe('eventsParser', () => {
       }
     });
 
-    it('у каждого события есть массив classes', async () => {
+    it('у каждого события есть непустой массив classes', async () => {
       const result = await getSpecialEvents();
       for (const event of result.events) {
         expect(Array.isArray(event.classes)).toBe(true);
@@ -83,14 +83,26 @@ describe('eventsParser', () => {
 
     it('fetchedAt — валидная ISO-дата', async () => {
       const result = await getSpecialEvents();
-      expect(() => new Date(result.fetchedAt)).not.toThrow();
       expect(new Date(result.fetchedAt).getTime()).not.toBeNaN();
+    });
+
+    it('sourceUrl — непустая строка', async () => {
+      const result = await getSpecialEvents();
+      expect(typeof result.sourceUrl).toBe('string');
+      expect(result.sourceUrl.length).toBeGreaterThan(0);
+    });
+
+    it('каждое событие имеет sourceUrl', async () => {
+      const result = await getSpecialEvents();
+      for (const event of result.events) {
+        expect(typeof event.sourceUrl).toBe('string');
+        expect(event.sourceUrl.length).toBeGreaterThan(0);
+      }
     });
 
     it('возвращает кэшированный результат при повторном вызове', async () => {
       const first = await getSpecialEvents();
       const second = await getSpecialEvents();
-      // При кэше ссылки должны совпадать
       expect(first).toBe(second);
     });
 
@@ -109,6 +121,13 @@ describe('eventsParser', () => {
       }
     });
 
+    it('trackTba = false у событий с известной трассой', async () => {
+      const result = await getSpecialEvents();
+      const knownTrack = result.events.find((e) => !e.trackTba);
+      expect(knownTrack).toBeDefined();
+      expect(knownTrack!.track.toUpperCase()).not.toContain('TBA');
+    });
+
     it('dateIso имеет формат YYYY-MM-DD', async () => {
       const result = await getSpecialEvents();
       const isoRe = /^\d{4}-\d{2}-\d{2}$/;
@@ -116,8 +135,30 @@ describe('eventsParser', () => {
         expect(e.dateIso).toMatch(isoRe);
       }
     });
+
+    it('weekOf начинается с «w/c»', async () => {
+      const result = await getSpecialEvents();
+      for (const e of result.events) {
+        expect(e.weekOf).toMatch(/^w\/c /);
+      }
+    });
+
+    it('у каждого события isFeatured — булево значение', async () => {
+      const result = await getSpecialEvents();
+      for (const e of result.events) {
+        expect(typeof e.isFeatured).toBe('boolean');
+      }
+    });
+
+    it('id совпадает с dateIso', async () => {
+      const result = await getSpecialEvents();
+      for (const e of result.events) {
+        expect(e.id).toBe(e.dateIso);
+      }
+    });
   });
 
+  // ── Кэширование ────────────────────────────────────────────────────────────
   describe('getSpecialEvents — кэширование', () => {
     it('не вызывает fetch повторно пока кэш живёт', async () => {
       const mockFetch = vi.fn().mockRejectedValue(new Error('offline'));
@@ -127,8 +168,65 @@ describe('eventsParser', () => {
       await getSpecialEvents();
       await getSpecialEvents();
 
-      // fetch должен быть вызван ровно 1 раз
       expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('после invalidateCache fetch вызывается снова', async () => {
+      const mockFetch = vi.fn().mockRejectedValue(new Error('offline'));
+      vi.stubGlobal('fetch', mockFetch);
+
+      await getSpecialEvents();
+      invalidateCache();
+      await getSpecialEvents();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ── Успешный fetch (HTML-парсинг) ─────────────────────────────────────────
+  describe('getSpecialEvents — успешный fetch', () => {
+    it('при успешном fetch возвращает данные (не пустой массив)', async () => {
+      const fakeHtml = `
+        <html><body>
+          <p>w/c 14/7 – 6 Hours Interlagos – Hypercar, LMGT3</p>
+          <p>w/c 28/7 – 4 Hours TBA – Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 20/10 – 24 Hours Le Mans – Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 8/9 – 6 Hours COTA – Hypercar, LMGT3</p>
+          <p>w/c 6/10 – 10 Hours TBA – Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 10/11 – 8 Hours Bahrain – Hypercar, LMGT3</p>
+        </body></html>
+      `;
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => fakeHtml,
+      }));
+
+      const result = await getSpecialEvents();
+      expect(result.events.length).toBeGreaterThan(0);
+    });
+
+    it('при HTTP-ошибке (не ok) fallback на статику', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => '',
+      }));
+
+      const result = await getSpecialEvents();
+      expect(result.events.length).toBeGreaterThan(0);
+    });
+
+    it('при слишком малом числе распознанных событий fallback на статику', async () => {
+      // Только 1 строка — меньше порога 5
+      const fakeHtml = `<p>w/c 14/7 – 6 Hours Interlagos – Hypercar</p>`;
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => fakeHtml,
+      }));
+
+      const result = await getSpecialEvents();
+      // Должны получить статику (>= 5 событий)
+      expect(result.events.length).toBeGreaterThanOrEqual(5);
     });
   });
 });

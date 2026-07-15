@@ -4,13 +4,12 @@ import {
   insertDriverSchema,
   insertLapTimeSchema,
   insertSessionSchema,
+  insertSessionResultSchema,
 } from '../shared/schema';
 
 describe('Zod-схемы (shared/schema)', () => {
 
-  // -------------------------------------------------------------------------
-  // insertTrackSchema
-  // -------------------------------------------------------------------------
+  // ── insertTrackSchema ─────────────────────────────────────────────────────
   describe('insertTrackSchema', () => {
     const validTrack = {
       name: 'Le Mans',
@@ -24,9 +23,9 @@ describe('Zod-схемы (shared/schema)', () => {
       expect(() => insertTrackSchema.parse(validTrack)).not.toThrow();
     });
 
-    it('отклоняет пустой name', () => {
+    it('принимает пустую строку name (min() не задан в схеме)', () => {
+      // drizzle-zod генерирует z.string() без min() — пустая строка проходит тип
       expect(() => insertTrackSchema.parse({ ...validTrack, name: '' })).not.toThrow();
-      // Zod не накладывает min(), просто проверяем что тип строка
     });
 
     it('отклоняет name как число', () => {
@@ -46,11 +45,23 @@ describe('Zod-схемы (shared/schema)', () => {
     it('turns должно быть числом', () => {
       expect(() => insertTrackSchema.parse({ ...validTrack, turns: 'много' })).toThrow();
     });
+
+    it('отклоняет отсутствие name', () => {
+      const { name, ...rest } = validTrack;
+      expect(() => insertTrackSchema.parse(rest)).toThrow();
+    });
+
+    it('отклоняет отсутствие layout', () => {
+      const { layout, ...rest } = validTrack;
+      expect(() => insertTrackSchema.parse(rest)).toThrow();
+    });
+
+    it('отклоняет lengthKm как строку', () => {
+      expect(() => insertTrackSchema.parse({ ...validTrack, lengthKm: '13.6' })).toThrow();
+    });
   });
 
-  // -------------------------------------------------------------------------
-  // insertDriverSchema
-  // -------------------------------------------------------------------------
+  // ── insertDriverSchema ────────────────────────────────────────────────────
   describe('insertDriverSchema', () => {
     const validDriver = {
       name: 'Nikita Mazepin',
@@ -70,11 +81,18 @@ describe('Zod-схемы (shared/schema)', () => {
     it('отклоняет числовой name', () => {
       expect(() => insertDriverSchema.parse({ ...validDriver, name: 42 })).toThrow();
     });
+
+    it('отклоняет отсутствие country', () => {
+      const { country, ...rest } = validDriver;
+      expect(() => insertDriverSchema.parse(rest)).toThrow();
+    });
+
+    it('отклоняет числовой team', () => {
+      expect(() => insertDriverSchema.parse({ ...validDriver, team: 99 })).toThrow();
+    });
   });
 
-  // -------------------------------------------------------------------------
-  // insertLapTimeSchema
-  // -------------------------------------------------------------------------
+  // ── insertLapTimeSchema ───────────────────────────────────────────────────
   describe('insertLapTimeSchema', () => {
     const validLap = {
       trackId: 1,
@@ -99,6 +117,11 @@ describe('Zod-схемы (shared/schema)', () => {
       expect(result.source).toBe('demo');
     });
 
+    it('source можно переопределить на "import"', () => {
+      const result = insertLapTimeSchema.parse({ ...validLap, source: 'import' });
+      expect(result.source).toBe('import');
+    });
+
     it('отклоняет lapMs как строку', () => {
       expect(() => insertLapTimeSchema.parse({ ...validLap, lapMs: '101907' })).toThrow();
     });
@@ -120,11 +143,13 @@ describe('Zod-схемы (shared/schema)', () => {
     it('sessionId принимает число', () => {
       expect(() => insertLapTimeSchema.parse({ ...validLap, sessionId: 5 })).not.toThrow();
     });
+
+    it('отклоняет sector1Ms как строку', () => {
+      expect(() => insertLapTimeSchema.parse({ ...validLap, sector1Ms: '27440' })).toThrow();
+    });
   });
 
-  // -------------------------------------------------------------------------
-  // insertSessionSchema
-  // -------------------------------------------------------------------------
+  // ── insertSessionSchema ───────────────────────────────────────────────────
   describe('insertSessionSchema', () => {
     const validSession = {
       trackId: 1,
@@ -145,6 +170,11 @@ describe('Zod-схемы (shared/schema)', () => {
       expect(() => insertSessionSchema.parse({ ...validSession, gameVersion: undefined })).not.toThrow();
     });
 
+    it('gameVersion принимает строку', () => {
+      const result = insertSessionSchema.parse({ ...validSession, gameVersion: '2.00' });
+      expect(result.gameVersion).toBe('2.00');
+    });
+
     it('отклоняет отсутствие event', () => {
       const { event, ...rest } = validSession;
       expect(() => insertSessionSchema.parse(rest)).toThrow();
@@ -152,6 +182,62 @@ describe('Zod-схемы (shared/schema)', () => {
 
     it('отклоняет driverCount как строку', () => {
       expect(() => insertSessionSchema.parse({ ...validSession, driverCount: 'много' })).toThrow();
+    });
+
+    it('отклоняет отсутствие trackId', () => {
+      const { trackId, ...rest } = validSession;
+      expect(() => insertSessionSchema.parse(rest)).toThrow();
+    });
+
+    it('отклоняет отсутствие fileName', () => {
+      const { fileName, ...rest } = validSession;
+      expect(() => insertSessionSchema.parse(rest)).toThrow();
+    });
+  });
+
+  // ── insertSessionResultSchema ─────────────────────────────────────────────
+  describe('insertSessionResultSchema', () => {
+    const validResult = {
+      sessionId: 1,
+      driverId: 1,
+      position: 1,
+      classPosition: 1,
+      carClass: 'Hypercar',
+      car: 'Toyota GR010',
+      team: 'Toyota Gazoo Racing',
+      laps: 30,
+      pitstops: 2,
+    };
+
+    it('принимает корректный результат сессии', () => {
+      expect(() => insertSessionResultSchema.parse(validResult)).not.toThrow();
+    });
+
+    it('isPlayer по умолчанию = 0', () => {
+      const result = insertSessionResultSchema.parse(validResult);
+      expect(result.isPlayer).toBe(0);
+    });
+
+    it('bestLapMs опционален', () => {
+      expect(() => insertSessionResultSchema.parse({ ...validResult, bestLapMs: undefined })).not.toThrow();
+    });
+
+    it('bestLapMs принимает число', () => {
+      const result = insertSessionResultSchema.parse({ ...validResult, bestLapMs: 101907 });
+      expect(result.bestLapMs).toBe(101907);
+    });
+
+    it('carNumber опционален', () => {
+      expect(() => insertSessionResultSchema.parse({ ...validResult, carNumber: undefined })).not.toThrow();
+    });
+
+    it('отклоняет отсутствие sessionId', () => {
+      const { sessionId, ...rest } = validResult;
+      expect(() => insertSessionResultSchema.parse(rest)).toThrow();
+    });
+
+    it('отклоняет position как строку', () => {
+      expect(() => insertSessionResultSchema.parse({ ...validResult, position: 'первый' })).toThrow();
     });
   });
 });
