@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Flag, CalendarClock, Medal, User, Fuel } from "lucide-react";
 import { DriverName } from "@/components/DriverName";
+import { getClassBadgeClass } from "@/lib/classStyles";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -135,7 +136,7 @@ export default function SessionDetail() {
                     <div className="truncate text-xs">{r.car}{r.carNumber ? ` · #${r.carNumber}` : ""}</div>
                   </td>
                   <td className="px-4 py-2.5">
-                    <Badge variant="outline" className="bg-chart-3/15 text-chart-3 border-chart-3/30">{r.carClass}</Badge>
+                    <Badge variant="outline" className={getClassBadgeClass(r.carClass)}>{r.carClass}</Badge>
                   </td>
                   <td className="px-4 py-2.5 text-right font-data tabular-nums">{r.laps}</td>
                   <td className="hidden px-4 py-2.5 text-right font-data tabular-nums md:table-cell">{r.pitstops}</td>
