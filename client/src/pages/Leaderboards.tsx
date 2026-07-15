@@ -9,26 +9,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Trophy, Medal } from "lucide-react";
-
-const CLASS_ORDER = ["Hypercar", "LMP2", "LMP3", "GTE", "GT3", "GT4"];
-
-const CLASS_BADGE: Record<string, string> = {
-  Hypercar: "bg-chart-1/15 text-chart-1 border-chart-1/30",
-  LMP2:     "bg-chart-4/15 text-chart-4 border-chart-4/30",
-  LMP3:     "bg-chart-5/15 text-chart-5 border-chart-5/30",
-  GTE:      "bg-chart-3/15 text-chart-3 border-chart-3/30",
-  GT3:      "bg-chart-2/15 text-chart-2 border-chart-2/30",
-  GT4:      "bg-chart-6/15 text-chart-6 border-chart-6/30",
-};
-
-const CLASS_ACCENT: Record<string, string> = {
-  Hypercar: "border-chart-1",
-  LMP2:     "border-chart-4",
-  LMP3:     "border-chart-5",
-  GTE:      "border-chart-3",
-  GT3:      "border-chart-2",
-  GT4:      "border-chart-6",
-};
+import { CLASS_ORDER, getClassBadgeClass, getClassAccentClass } from "@/lib/classStyles";
 
 type LapRow = { id: number; driverId: number; driverName: string; team: string; car: string; carClass: string; lapMs: number; trackId: number; trackName: string; date?: string };
 
@@ -77,8 +58,8 @@ function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
       }
 
       const sortedClasses = Array.from(byClass.keys()).sort((a, b) => {
-        const ai = CLASS_ORDER.indexOf(a);
-        const bi = CLASS_ORDER.indexOf(b);
+        const ai = CLASS_ORDER.indexOf(a as typeof CLASS_ORDER[number]);
+        const bi = CLASS_ORDER.indexOf(b as typeof CLASS_ORDER[number]);
         if (ai === -1 && bi === -1) return a.localeCompare(b);
         if (ai === -1) return 1;
         if (bi === -1) return -1;
@@ -108,8 +89,8 @@ export default function Leaderboards() {
     if (!laps) return [];
     const set = new Set<string>(laps.map((l: LapRow) => l.carClass).filter(Boolean));
     return Array.from(set).sort((a, b) => {
-      const ai = CLASS_ORDER.indexOf(a);
-      const bi = CLASS_ORDER.indexOf(b);
+      const ai = CLASS_ORDER.indexOf(a as typeof CLASS_ORDER[number]);
+      const bi = CLASS_ORDER.indexOf(b as typeof CLASS_ORDER[number]);
       if (ai === -1 && bi === -1) return a.localeCompare(b);
       if (ai === -1) return 1;
       if (bi === -1) return -1;
@@ -128,7 +109,6 @@ export default function Leaderboards() {
       filtered = filtered.filter((l: LapRow) => l.carClass === classFilter);
     }
 
-    // Apply global driver filter
     if (globalFiltered) {
       filtered = filtered.filter((l: LapRow) => selectedDriverIds.has(l.driverId));
     }
@@ -198,11 +178,11 @@ export default function Leaderboards() {
             {board.classes.map((cls) => (
               <div key={cls.carClass}>
                 <div
-                  className={`flex items-center gap-2 border-l-4 bg-muted/30 px-4 py-1.5 ${CLASS_ACCENT[cls.carClass] ?? "border-border"}`}
+                  className={`flex items-center gap-2 border-l-4 bg-muted/30 px-4 py-1.5 ${getClassAccentClass(cls.carClass)}`}
                 >
                   <Badge
                     variant="outline"
-                    className={`text-[11px] ${CLASS_BADGE[cls.carClass] ?? "bg-muted/40 text-muted-foreground border-border"}`}
+                    className={`text-[11px] ${getClassBadgeClass(cls.carClass)}`}
                   >
                     {cls.carClass}
                   </Badge>

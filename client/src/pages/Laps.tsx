@@ -10,14 +10,9 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Download, ArrowUpDown, X } from "lucide-react";
+import { getClassBadgeClass } from "@/lib/classStyles";
 
 type SortKey = "lapMs" | "driverName" | "trackName" | "date";
-
-const CLASS_BADGE: Record<string, string> = {
-  Hypercar: "bg-chart-1/15 text-chart-1 border-chart-1/30",
-  LMP2: "bg-chart-4/15 text-chart-4 border-chart-4/30",
-  GTE: "bg-chart-3/15 text-chart-3 border-chart-3/30",
-};
 
 export default function Laps() {
   const [trackId, setTrackId] = useState<string>("all");
@@ -38,7 +33,6 @@ export default function Laps() {
     conditions: conditions !== "all" ? conditions : undefined,
   });
 
-  // Apply global driver filter on top of server-side results
   const globalFiltered2 = useMemo(() => {
     if (!laps) return [];
     if (!globalFiltered) return laps;
@@ -88,7 +82,6 @@ export default function Laps() {
     URL.revokeObjectURL(url);
   };
 
-  // Driver selector in local filter respects global filter: only show globally selected (if active)
   const driverOptions = useMemo(() => {
     const all = drivers ?? [];
     const list = globalFiltered ? all.filter((d) => selectedDriverIds.has(d.id)) : all;
@@ -167,7 +160,7 @@ export default function Laps() {
                   <td className="px-4 py-2.5">{l.driverName}</td>
                   <td className="hidden px-4 py-2.5 text-muted-foreground md:table-cell" data-testid={`text-car-${l.id}`}>{l.car}</td>
                   <td className="px-4 py-2.5">
-                    <Badge variant="outline" className={CLASS_BADGE[l.carClass]}>{l.carClass}</Badge>
+                    <Badge variant="outline" className={getClassBadgeClass(l.carClass)}>{l.carClass}</Badge>
                   </td>
                   <td className={`px-4 py-2.5 text-right font-data tabular-nums ${l.lapMs === bestMs ? "font-bold text-primary" : ""}`}>
                     {formatLap(l.lapMs)}
