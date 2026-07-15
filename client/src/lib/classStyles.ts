@@ -38,10 +38,10 @@ export const SESSION_TYPE_BADGE_FALLBACK =
 
 /**
  * Maps normalised session categories to Tailwind badge classes.
- * Works in both light and dark mode via Tailwind's opacity modifiers
- * (bg-*/15 stays subtle; text-* colours are already theme-aware with
- * shadcn/ui CSS-variable colour tokens if you use them, or the raw
- * Tailwind colours below for a simple dark-compatible palette).
+ * Works in both light and dark mode via Tailwind opacity modifiers:
+ * background opacity like 15% stays subtle, while text colours remain readable.
+ * This also works with shadcn/ui CSS-variable colour tokens, or with
+ * the raw Tailwind colours below for a simple dark-compatible palette.
  */
 export const SESSION_TYPE_BADGE: Record<string, string> = {
   practice:  "bg-blue-500/15   text-blue-500   dark:text-blue-400   border-blue-500/30",
