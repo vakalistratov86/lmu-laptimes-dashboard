@@ -39,6 +39,11 @@ function classColor(cls: string): string {
   return CLASS_COLORS[cls] ?? "bg-zinc-800 text-zinc-300 border-zinc-700";
 }
 
+function formatDateRu(dateIso: string): string {
+  const [year, month, day] = dateIso.slice(0, 10).split("-");
+  return `${day}.${month}.${year}`;
+}
+
 function groupByMonth(events: SpecialEvent[]): Map<string, SpecialEvent[]> {
   const map = new Map<string, SpecialEvent[]>();
   for (const ev of events) {
@@ -102,7 +107,7 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
 
       <div className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
         <CalendarDays size={12} />
-        <span>{ev.weekOf}</span>
+        <span>{formatDateRu(ev.dateIso)}</span>
         {past && <span className="ml-1 text-zinc-600">(прошло)</span>}
       </div>
 
