@@ -13,20 +13,13 @@ import {
 // ─── Утилиты ───────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
-  // Даты в базе хранятся как "YYYY-MM-DD" без времени.
-  // new Date("YYYY-MM-DD") трактует строку как UTC, что при toLocaleString
-  // с hour/minute даёт сдвиг и одинаковое время 00:00 / 03:00 для всех записей.
-  // Решение: отображать только дату, без времени.
   if (!iso) return "";
-  // Если строка уже в формате YYYY-MM-DD — форматируем напрямую через split,
-  // избегая любого UTC-сдвига.
   const datePart = iso.slice(0, 10); // "YYYY-MM-DD"
   const parts = datePart.split("-");
   if (parts.length === 3) {
     const [year, month, day] = parts;
     return `${day}.${month}.${year}`;
   }
-  // Fallback для полных ISO-строк с временем (например из XML)
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString("ru-RU", {
@@ -34,16 +27,12 @@ function formatDate(iso: string): string {
   });
 }
 
-/**
- * Нормализует sessionType к одной из четырёх категорий.
- * Поле хранится в виде "Практика (Practice1)", "Квалификация (Qualify1)", "Гонка (Race)" и т.д.
- */
 function normalizeType(raw: string): SessionCategory {
   const s = raw.toLowerCase();
   if (s.includes("гонка") || s.includes("race")) return "race";
   if (s.includes("квалификация") || s.includes("qualify")) return "qualify";
   if (s.includes("прогрев") || s.includes("warmup")) return "warmup";
-  return "practice"; // Практика, TestDay, Тесты — всё сюда
+  return "practice";
 }
 
 type SessionCategory = "practice" | "qualify" | "race" | "warmup";
@@ -51,8 +40,8 @@ type SessionCategory = "practice" | "qualify" | "race" | "warmup";
 interface CategoryMeta {
   label: string;
   icon: React.ReactNode;
-  badgeClass: string;   // Tailwind классы для Badge
-  order: number;        // порядок отображения внутри трассы
+  badgeClass: string;
+  order: number;
 }
 
 const CATEGORY_META: Record<SessionCategory, CategoryMeta> = {
@@ -82,22 +71,32 @@ const CATEGORY_META: Record<SessionCategory, CategoryMeta> = {
   },
 };
 
-/** Группирует сессии: сначала по трассе, затем по категории */
-function groupSessions<T extends { trackName: string; sessionType: string }>(
+/**
+ * Формирует отображаемый заголовок трассы:
+ * если course есть и отличается от trackName — добавляем через «·»
+ */
+function trackDisplayLabel(trackName: string, course: string | null | undefined): string {
+  if (!course || course.toLowerCase() === trackName.toLowerCase()) return trackName;
+  return `${trackName} · ${course}`;
+}
+
+/** Группирует сессии: сначала по трассе+конфигурации, затем по категории */
+function groupSessions<T extends { trackName: string; course?: string | null; sessionType: string }>(
   items: T[],
-): [string, [SessionCategory, T[]][]][] {
-  // Шаг 1: по трассе
-  const byTrack = new Map<string, T[]>();
+): [string, string | null, [SessionCategory, T[]][]][] {
+  // Шаг 1: по ключу trackName + course
+  const byTrack = new Map<string, { trackName: string; course: string | null; items: T[] }>();
   for (const item of items) {
-    const key = item.trackName || "Неизвестная трасса";
-    if (!byTrack.has(key)) byTrack.set(key, []);
-    byTrack.get(key)!.push(item);
+    const course = item.course ?? null;
+    const key = `${item.trackName}|||${course ?? ""}`;
+    if (!byTrack.has(key)) byTrack.set(key, { trackName: item.trackName, course, items: [] });
+    byTrack.get(key)!.items.push(item);
   }
 
-  // Шаг 2: внутри каждой трассы — по категории, сортируем по order
-  return Array.from(byTrack.entries()).map(([track, sessions]) => {
+  // Шаг 2: внутри каждой группы — по категории
+  return Array.from(byTrack.values()).map(({ trackName, course, items: groupItems }) => {
     const byCategory = new Map<SessionCategory, T[]>();
-    for (const s of sessions) {
+    for (const s of groupItems) {
       const cat = normalizeType(s.sessionType);
       if (!byCategory.has(cat)) byCategory.set(cat, []);
       byCategory.get(cat)!.push(s);
@@ -105,7 +104,7 @@ function groupSessions<T extends { trackName: string; sessionType: string }>(
     const sorted = Array.from(byCategory.entries()).sort(
       ([a], [b]) => CATEGORY_META[a].order - CATEGORY_META[b].order,
     );
-    return [track, sorted] as [string, [SessionCategory, T[]][]];
+    return [trackName, course, sorted] as [string, string | null, [SessionCategory, T[]][]];
   });
 }
 
@@ -114,15 +113,14 @@ function groupSessions<T extends { trackName: string; sessionType: string }>(
 export default function Sessions() {
   const { data: sessions, isLoading } = useSessions();
 
-  // collapsed state: "track::category" -> boolean
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [collapsedTracks, setCollapsedTracks] = useState<Record<string, boolean>>({});
 
-  const toggleTrack = (track: string) =>
-    setCollapsedTracks((prev) => ({ ...prev, [track]: !prev[track] }));
+  const toggleTrack = (key: string) =>
+    setCollapsedTracks((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const toggleCategory = (track: string, cat: string) => {
-    const key = `${track}::${cat}`;
+  const toggleCategory = (trackKey: string, cat: string) => {
+    const key = `${trackKey}::${cat}`;
     setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -168,20 +166,22 @@ export default function Sessions() {
 
       {!isLoading && sessions && sessions.length > 0 && (
         <div className="space-y-8">
-          {grouped.map(([track, categories]) => {
-            const isTrackCollapsed = collapsedTracks[track] ?? false;
+          {grouped.map(([trackName, course, categories]) => {
+            const trackKey = `${trackName}|||${course ?? ""}`;
+            const isTrackCollapsed = collapsedTracks[trackKey] ?? false;
             const totalSessions = categories.reduce((sum, [, s]) => sum + s.length, 0);
+            const displayLabel = trackDisplayLabel(trackName, course);
 
             return (
-              <section key={track}>
+              <section key={trackKey}>
                 {/* ── Заголовок трассы ── */}
                 <button
                   type="button"
-                  onClick={() => toggleTrack(track)}
+                  onClick={() => toggleTrack(trackKey)}
                   className="mb-3 flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-secondary/40 transition-colors"
                 >
                   <Flag size={16} className="shrink-0 text-primary" />
-                  <h2 className="flex-1 font-display font-bold tracking-tight">{track}</h2>
+                  <h2 className="flex-1 font-display font-bold tracking-tight">{displayLabel}</h2>
                   <Badge variant="secondary" className="font-mono text-xs">
                     {totalSessions}{" "}
                     {totalSessions === 1 ? "сессия" : totalSessions < 5 ? "сессии" : "сессий"}
@@ -196,7 +196,7 @@ export default function Sessions() {
                   <div className="space-y-4 pl-5 border-l-2 border-border/40">
                     {categories.map(([cat, catSessions]) => {
                       const meta = CATEGORY_META[cat];
-                      const catKey = `${track}::${cat}`;
+                      const catKey = `${trackKey}::${cat}`;
                       const isCatCollapsed = collapsed[catKey] ?? false;
 
                       return (
@@ -204,7 +204,7 @@ export default function Sessions() {
                           {/* Заголовок категории */}
                           <button
                             type="button"
-                            onClick={() => toggleCategory(track, cat)}
+                            onClick={() => toggleCategory(trackKey, cat)}
                             className="mb-2 flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-secondary/30 transition-colors"
                           >
                             <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${meta.badgeClass}`}>
@@ -239,7 +239,6 @@ export default function Sessions() {
                                       </div>
 
                                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                                        {/* Тип из XML — точное значение */}
                                         <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.badgeClass}`}>
                                           {meta.icon}
                                           {s.sessionType.replace(/\s*\(.*\)/, "")}

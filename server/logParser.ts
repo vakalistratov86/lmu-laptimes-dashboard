@@ -28,6 +28,7 @@ export interface ParsedDriver {
 
 export interface ParsedSession {
   venue: string;
+  course: string | null;  // TrackCourse из XML
   event: string;
   sessionType: string;
   trackLengthM: number | null;
@@ -143,6 +144,7 @@ export function parseRaceResults(xml: string): ParsedSession | null {
   if (!xml.includes("<RaceResults>") && !xml.includes("rFactorXML")) return null;
 
   const venue = tagValue(xml, "TrackVenue") ?? tagValue(xml, "TrackCourse") ?? "Неизвестная трасса";
+  const course = tagValue(xml, "TrackCourse");  // null если тег отсутствует
   const event = tagValue(xml, "TrackEvent") ?? venue;
   const gameVersion = tagValue(xml, "GameVersion");
   const trackLenStr = tagValue(xml, "TrackLength");
@@ -179,6 +181,7 @@ export function parseRaceResults(xml: string): ParsedSession | null {
 
   return {
     venue,
+    course,
     event,
     sessionType,
     trackLengthM: Number.isFinite(trackLengthM as number) ? (trackLengthM as number) : null,

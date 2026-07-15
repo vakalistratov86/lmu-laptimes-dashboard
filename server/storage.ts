@@ -33,6 +33,7 @@ export interface ImportResult {
   sessionId?: number;
   event?: string;
   venue?: string;
+  course?: string | null;
   laps?: number;
   drivers?: number;
 }
@@ -163,6 +164,7 @@ export class DatabaseStorage implements IStorage {
       event: parsed.event,
       sessionType: parsed.sessionType,
       venue: parsed.venue,
+      course: parsed.course ?? null,
       gameVersion: parsed.gameVersion ?? null,
       dateTime: parsed.dateTimeIso,
       fileName,
@@ -223,26 +225,42 @@ export class DatabaseStorage implements IStorage {
       sessionId: session.id,
       event: parsed.event,
       venue: parsed.venue,
+      course: parsed.course ?? null,
       laps: totalLaps,
       drivers: parsed.drivers.length,
     };
   }
 
   private findOrCreateTrack(parsed: ParsedSession): Track {
-    const canonical = canonicalTrackName(parsed.venue);
+    // Идентифицируем трассу по комбинации venue + course (разные конфигурации = разные трассы)
     const all = db.select().from(tracks).all();
-    const found = all.find(
-      (t) => t.name.toLowerCase() === canonical.name.toLowerCase() ||
-             t.name.toLowerCase() === parsed.venue.toLowerCase()
-    );
-    if (found) return found;
+    const course = parsed.course;
+
+    // Точное совпадение venue + course
+    const exactMatch = all.find((t) => {
+      const venueLower = t.name.toLowerCase();
+      const parsedVenueLower = parsed.venue.toLowerCase();
+      const parsedCourseNorm = (course ?? "").toLowerCase();
+      const layoutNorm = (t.layout ?? "").toLowerCase();
+      // Если course есть — ищем по venue и layout (layout хранит course)
+      if (course) {
+        return venueLower === parsedVenueLower && layoutNorm === parsedCourseNorm;
+      }
+      // Без course — классическое совпадение по venue
+      return venueLower === parsedVenueLower;
+    });
+    if (exactMatch) return exactMatch;
+
+    // Фолбэк: canonicalTrackName
+    const canonical = canonicalTrackName(parsed.venue);
     const lengthKm = parsed.trackLengthM ? +(parsed.trackLengthM / 1000).toFixed(3) : 0;
     return db.insert(tracks).values({
       name: canonical.name,
       country: canonical.country,
       lengthKm,
       turns: canonical.turns,
-      layout: "Импорт",
+      // Сохраняем course как layout, чтобы различать конфигурации
+      layout: course ?? "Импорт",
     }).returning().get();
   }
 

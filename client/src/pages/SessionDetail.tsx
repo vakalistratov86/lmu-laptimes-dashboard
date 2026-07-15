@@ -56,6 +56,11 @@ export default function SessionDetail() {
     return min == null || r.bestLapMs < min ? r.bestLapMs : min;
   }, null);
 
+  // Заголовок: trackName + course если отличается
+  const courseLabel = session.course && session.course.toLowerCase() !== session.trackName.toLowerCase()
+    ? session.course
+    : null;
+
   return (
     <div className="space-y-5">
       <Link
@@ -71,6 +76,9 @@ export default function SessionDetail() {
           <Flag size={18} className="text-primary" />
           <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-session-title">
             {session.trackName}
+            {courseLabel && (
+              <span className="ml-2 text-base font-normal text-muted-foreground">· {courseLabel}</span>
+            )}
           </h1>
           <Badge variant="outline" className="bg-secondary/40">{session.sessionType}</Badge>
         </div>
