@@ -24,6 +24,7 @@ type LapRow = {
   trackName: string;
   date?: string;
   isPlayer?: number | null;
+  sessionCourse?: string | null;
 };
 
 interface ClassBoard {
@@ -32,7 +33,7 @@ interface ClassBoard {
 }
 
 interface TrackBoard {
-  /** Уникальный ключ: "trackName|||course" */
+  /** Уникальный ключ: "trackName|||course" или просто "trackName" */
   boardKey: string;
   /** Отображаемое название: "trackName · course" или просто "trackName" */
   displayName: string;
@@ -57,20 +58,15 @@ function formatRecordDate(dateStr?: string): string {
 }
 
 /**
- * Строит борды, группируя по паре trackName + course (через lap.sessionCourse или fallback trackName).
- * Пока LapTimeEnriched не содержит course, используем только trackName.
- * Когда поле появится — достаточно заменить ключ.
+ * Строит борды, группируя по паре trackName + sessionCourse.
+ * Для кругов без course (demo) ключ — только trackName.
  */
 function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
-  // Ключ борда = trackName (в будущем: trackName + course из lap)
   const byBoard = new Map<string, { displayName: string; laps: LapRow[] }>();
   for (const l of laps) {
-    // TODO: добавить course когда LapTimeEnriched будет его содержать
-    // const course = (l as any).sessionCourse ?? null;
-    // const boardKey = course ? `${l.trackName}|||${course}` : l.trackName;
-    // const displayName = course ? `${l.trackName} · ${course}` : l.trackName;
-    const boardKey = l.trackName;
-    const displayName = l.trackName;
+    const course = l.sessionCourse ?? null;
+    const boardKey = course ? `${l.trackName}|||${course}` : l.trackName;
+    const displayName = course ? `${l.trackName} · ${course}` : l.trackName;
     if (!byBoard.has(boardKey)) byBoard.set(boardKey, { displayName, laps: [] });
     byBoard.get(boardKey)!.laps.push(l);
   }
@@ -109,6 +105,7 @@ function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
 export default function Leaderboards() {
   const [trackId, setTrackId] = useState<string>("all");
   const [classFilter, setClassFilter] = useState<string>("all");
+  const [courseFilter, setCourseFilter] = useState<string>("all");
   const { data: tracks } = useTracks();
   const { data: laps, isLoading } = useLaps();
   const { selectedDriverIds, isFiltered: globalFiltered } = useDriverFilter();
@@ -126,6 +123,15 @@ export default function Leaderboards() {
     });
   }, [laps]);
 
+  const availableCourses = useMemo(() => {
+    if (!laps) return [];
+    const set = new Set<string>();
+    for (const l of laps as LapRow[]) {
+      if (l.sessionCourse) set.add(l.sessionCourse);
+    }
+    return Array.from(set).sort();
+  }, [laps]);
+
   const boards = useMemo((): TrackBoard[] => {
     if (!laps) return [];
 
@@ -137,13 +143,17 @@ export default function Leaderboards() {
       filtered = filtered.filter((l: LapRow) => l.carClass === classFilter);
     }
 
+    if (courseFilter !== "all") {
+      filtered = filtered.filter((l: LapRow) => l.sessionCourse === courseFilter);
+    }
+
     if (globalFiltered) {
       filtered = filtered.filter((l: LapRow) => selectedDriverIds.has(l.driverId));
     }
 
     const maxPerClass = trackId === "all" ? 3 : 50;
     return buildBoards(filtered, maxPerClass);
-  }, [laps, trackId, classFilter, globalFiltered, selectedDriverIds]);
+  }, [laps, trackId, classFilter, courseFilter, globalFiltered, selectedDriverIds]);
 
   return (
     <div className="space-y-5">
@@ -183,6 +193,22 @@ export default function Leaderboards() {
               </SelectContent>
             </Select>
           </div>
+          {availableCourses.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Конфигурация</span>
+              <Select value={courseFilter} onValueChange={setCourseFilter}>
+                <SelectTrigger className="h-9 w-[180px]" data-testid="filter-course-lb">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все конфигурации</SelectItem>
+                  {availableCourses.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </div>
 

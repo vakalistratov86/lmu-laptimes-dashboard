@@ -24,6 +24,7 @@ export interface LapFilter {
   conditions?: string;
   source?: string; // demo | import
   sessionId?: number;
+  sessionCourse?: string;
 }
 
 export interface ImportResult {
@@ -86,33 +87,55 @@ export class DatabaseStorage implements IStorage {
     if (filter.source) conditions.push(eq(lapTimes.source, filter.source));
     if (filter.sessionId) conditions.push(eq(lapTimes.sessionId, filter.sessionId));
 
+    // JOIN с таблицей sessions для получения sessionCourse
     const rows = conditions.length
-      ? db.select().from(lapTimes).where(and(...conditions)).all()
-      : db.select().from(lapTimes).all();
+      ? db
+          .select({
+            lap: lapTimes,
+            sessionCourse: sessions.course,
+          })
+          .from(lapTimes)
+          .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
+          .where(and(...conditions))
+          .all()
+      : db
+          .select({
+            lap: lapTimes,
+            sessionCourse: sessions.course,
+          })
+          .from(lapTimes)
+          .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
+          .all();
 
     const trackMap = new Map(db.select().from(tracks).all().map((t) => [t.id, t]));
     const driverMap = new Map(db.select().from(drivers).all().map((d) => [d.id, d]));
 
     // Строим мап: (sessionId, driverId) → isPlayer из session_results
-    // Ключ: "sessionId:driverId"
     const srRows = db.select().from(sessionResults).all();
     const isPlayerMap = new Map<string, number>();
     for (const sr of srRows) {
       isPlayerMap.set(`${sr.sessionId}:${sr.driverId}`, sr.isPlayer);
     }
 
-    return rows.map((r) => {
+    // Постфильтрация по sessionCourse (если задан)
+    const enriched = rows.map(({ lap: r, sessionCourse }) => {
       const isPlayer = r.sessionId != null
         ? (isPlayerMap.get(`${r.sessionId}:${r.driverId}`) ?? null)
-        : null; // demo круги не связаны с session_results
+        : null;
       return {
         ...r,
         trackName: trackMap.get(r.trackId)?.name ?? "—",
         driverName: driverMap.get(r.driverId)?.name ?? "—",
         team: driverMap.get(r.driverId)?.team ?? "—",
         isPlayer,
-      };
+        sessionCourse: sessionCourse ?? null,
+      } satisfies LapTimeEnriched;
     });
+
+    if (filter.sessionCourse) {
+      return enriched.filter((r) => r.sessionCourse === filter.sessionCourse);
+    }
+    return enriched;
   }
 
   async getSessions(): Promise<SessionEnriched[]> {
@@ -232,26 +255,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   private findOrCreateTrack(parsed: ParsedSession): Track {
-    // Идентифицируем трассу по комбинации venue + course (разные конфигурации = разные трассы)
     const all = db.select().from(tracks).all();
     const course = parsed.course;
 
-    // Точное совпадение venue + course
     const exactMatch = all.find((t) => {
       const venueLower = t.name.toLowerCase();
       const parsedVenueLower = parsed.venue.toLowerCase();
       const parsedCourseNorm = (course ?? "").toLowerCase();
       const layoutNorm = (t.layout ?? "").toLowerCase();
-      // Если course есть — ищем по venue и layout (layout хранит course)
       if (course) {
         return venueLower === parsedVenueLower && layoutNorm === parsedCourseNorm;
       }
-      // Без course — классическое совпадение по venue
       return venueLower === parsedVenueLower;
     });
     if (exactMatch) return exactMatch;
 
-    // Фолбэк: canonicalTrackName
     const canonical = canonicalTrackName(parsed.venue);
     const lengthKm = parsed.trackLengthM ? +(parsed.trackLengthM / 1000).toFixed(3) : 0;
     return db.insert(tracks).values({
@@ -259,7 +277,6 @@ export class DatabaseStorage implements IStorage {
       country: canonical.country,
       lengthKm,
       turns: canonical.turns,
-      // Сохраняем course как layout, чтобы различать конфигурации
       layout: course ?? "Импорт",
     }).returning().get();
   }

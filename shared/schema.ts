@@ -206,6 +206,11 @@ export type LapTimeEnriched = LapTime & {
   team: string;
   /** 1 = живой игрок, 0 = ИИ. null для кругов demo (нет session_results). */
   isPlayer: number | null;
+  /**
+   * Конфигурация трассы из сессии (sessions.course).
+   * null для кругов demo (source=demo, нет связанной сессии).
+   */
+  sessionCourse: string | null;
 };
 
 // Сессия с трассой и результатами (для API)
