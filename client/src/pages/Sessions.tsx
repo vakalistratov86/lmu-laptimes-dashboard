@@ -149,12 +149,33 @@ function groupSessions(items: SessionItem[]): GroupedEntry[] {
   });
 }
 
+// ─── Фильтр-кнопки ─────────────────────────────────────────────────────────────
+
+const FILTER_BUTTONS: { key: string; label: string }[] = [
+  { key: "Все",        label: "Все" },
+  { key: "practice",  label: "Тренировка" },
+  { key: "qualify",   label: "Квалификация" },
+  { key: "race",      label: "Гонка" },
+  { key: "superpole", label: "Суперпол" },
+];
+
 // ─── Компонент ─────────────────────────────────────────────────────────────────
 
 export default function Sessions() {
   const { data: sessions, isLoading } = useSessions();
 
-  const grouped = useMemo(() => (sessions ? groupSessions(sessions as SessionItem[]) : []), [sessions]);
+  const [activeFilter, setActiveFilter] = useState<string>("Все");
+
+  const filtered = useMemo(() =>
+    activeFilter === "Все"
+      ? (sessions as SessionItem[])
+      : (sessions as SessionItem[]).filter(
+          (s) => normalizeType(s.sessionType) === activeFilter,
+        ),
+    [sessions, activeFilter],
+  );
+
+  const grouped = useMemo(() => (filtered ? groupSessions(filtered) : []), [filtered]);
 
   // По умолчанию все группы и категории свёрнуты
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -180,6 +201,24 @@ export default function Sessions() {
         <p className="mt-1 text-sm text-muted-foreground">
           Импортированные из логов игры сессии — по дате, трассе и типу сессии
         </p>
+      </div>
+
+      {/* ── Фильтр-кнопки ── */}
+      <div className="flex flex-wrap gap-2">
+        {FILTER_BUTTONS.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setActiveFilter(key)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${
+              activeFilter === key
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background text-muted-foreground border-border hover:bg-accent"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {isLoading && (
@@ -211,6 +250,13 @@ export default function Sessions() {
 
       {!isLoading && sessions && sessions.length > 0 && (
         <div className="space-y-8">
+          {grouped.length === 0 && (
+            <Card className="flex flex-col items-center gap-3 p-10 text-center">
+              <p className="font-semibold text-muted-foreground">
+                Нет сессий с выбранным типом
+              </p>
+            </Card>
+          )}
           {grouped.map(({ groupKey, dateKey, trackName, course, categories }) => {
             const isCollapsed = isGroupCollapsed(groupKey);
             const totalSessions = categories.reduce((sum, [, s]) => sum + s.length, 0);
