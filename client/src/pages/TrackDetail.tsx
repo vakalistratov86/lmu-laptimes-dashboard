@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, MapPin, Ruler, RotateCw, Timer, Users, Lightbulb } from "lucide-react";
 import { TrackMap, hasTrackMap } from "@/components/TrackMap";
+import { DriverName } from "@/components/DriverName";
 import { useMemo } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
@@ -16,6 +17,11 @@ const CLASS_BADGE: Record<string, string> = {
   LMP2: "bg-chart-4/15 text-chart-4 border-chart-4/30",
   GTE: "bg-chart-3/15 text-chart-3 border-chart-3/30",
 };
+
+/** Возвращает CSS-классы бейджа класса машины. Для неизвестных классов — нейтральный стиль. */
+function getClassBadge(carClass: string): string {
+  return CLASS_BADGE[carClass] ?? "bg-muted/40 text-muted-foreground border-border";
+}
 
 const TRACK_FACTS: Record<string, string> = {
   "Spa-Francorchamps": "Радийон-де-Спа — самый быстрый поворот в мировом автоспорте, 8G при 300+ км/ч.",
@@ -174,11 +180,13 @@ export default function TrackDetail() {
                   <tr key={l.id} className="border-t border-border hover:bg-muted/40" data-testid={`td-row-${l.id}`}>
                     <td className="px-4 py-2.5 font-data tabular-nums text-muted-foreground">{i + 1}</td>
                     <td className="px-4 py-2.5">
-                      <div className="font-medium">{l.driverName}</div>
+                      <div className="font-medium">
+                        <DriverName name={l.driverName} isPlayer={l.isPlayer} />
+                      </div>
                       <div className="text-xs text-muted-foreground">{l.team}</div>
                     </td>
                     <td className="px-4 py-2.5">
-                      <Badge variant="outline" className={CLASS_BADGE[l.carClass]}>{l.carClass}</Badge>
+                      <Badge variant="outline" className={getClassBadge(l.carClass)}>{l.carClass}</Badge>
                     </td>
                     <td className={`px-4 py-2.5 text-right font-data tabular-nums ${i === 0 ? "font-bold text-primary" : ""}`}>
                       {formatLap(l.lapMs)}

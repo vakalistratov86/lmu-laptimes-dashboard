@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { DriverName } from "@/components/DriverName";
 
 export function DriverFilterBar() {
   const { data: drivers } = useDrivers();
@@ -88,7 +89,7 @@ export function DriverFilterBar() {
                           active ? "opacity-100" : "opacity-0"
                         )}
                       />
-                      {d.name}
+                      <DriverName name={d.name} isPlayer={d.isPlayer} />
                     </CommandItem>
                   );
                 })}
@@ -122,7 +123,7 @@ export function DriverFilterBar() {
               variant="secondary"
               className="h-5 gap-1 px-2 text-[11px] font-normal"
             >
-              {d.name}
+              <DriverName name={d.name} isPlayer={d.isPlayer} />
               <button
                 onClick={() => toggleDriver(d.id)}
                 className="ml-0.5 rounded-full opacity-60 hover:opacity-100"
