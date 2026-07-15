@@ -4,7 +4,7 @@ import { formatLap, formatSector, formatDelta } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, MapPin, Ruler, RotateCw, Timer, Users } from "lucide-react";
+import { ChevronLeft, MapPin, Ruler, RotateCw, Timer, Users, Lightbulb } from "lucide-react";
 import { TrackMap, hasTrackMap } from "@/components/TrackMap";
 import { useMemo } from "react";
 import {
@@ -15,6 +15,23 @@ const CLASS_BADGE: Record<string, string> = {
   Hypercar: "bg-chart-1/15 text-chart-1 border-chart-1/30",
   LMP2: "bg-chart-4/15 text-chart-4 border-chart-4/30",
   GTE: "bg-chart-3/15 text-chart-3 border-chart-3/30",
+};
+
+const TRACK_FACTS: Record<string, string> = {
+  "Spa-Francorchamps": "Радийон-де-Спа — самый быстрый поворот в мировом автоспорте, 8G при 300+ км/ч.",
+  "Monza": "Самая быстрая трасса Ф1: средняя скорость круга превышает 260 км/ч.",
+  "Bahrain": "Первая ночная гонка Ф1 в 2014 году; под трассой проложены нефтепроводы.",
+  "Portimão": "Самый новый автодром Ф1 (дебют 2020) с перепадом высот 80 м.",
+  "Imola": "В 1994 году здесь погибли Айртон Сенна и Роланд Ратценбергер за один уикенд.",
+  "Interlagos": "Работает с 1940 г.; дождь там падает сверху и снизу одновременно — из-за озера.",
+  "COTA": "Единственная трасса в США, спроектированная специально под Формулу 1.",
+  "Silverstone": "Первая в истории трасса Ф1: Гран-при Великобритании 1950 года.",
+  "Barcelona": "Используется для тестов всеми командами Ф1 — самая известная и изученная трасса.",
+  "Paul Ricard": "Пять разных конфигураций асфальта снижают скорость вылетов — полосы голубого цвета.",
+  "Lusail": "Первая трасса в Катаре; освещение 3400 прожекторов мощностью 100 000 люкс.",
+  "Le Mans": "24-часовая гонка с 1923 г.; победители преодолевают до 5800 км за сутки.",
+  "Fuji Speedway": "Проектирован в 1966 г. с уклоном для стока воды — трасса «наклонена» на 3°.",
+  "Sebring": "Гонки проводятся с 1950 г. на бывшей авиабазе — асфальт на бетоне взлётной полосы.",
 };
 
 export default function TrackDetail() {
@@ -63,6 +80,8 @@ export default function TrackDetail() {
     );
   }
 
+  const fact = TRACK_FACTS[track.name];
+
   return (
     <div className="space-y-5">
       <Link href="/tracks" data-testid="link-back-tracks"
@@ -81,6 +100,16 @@ export default function TrackDetail() {
           </div>
         </div>
       </div>
+
+      {fact && (
+        <Card className="flex items-start gap-3 px-4 py-3 bg-primary/5 border-primary/20">
+          <Lightbulb size={16} className="mt-0.5 shrink-0 text-primary" />
+          <div>
+            <span className="text-xs font-semibold uppercase tracking-widest text-primary">Интересно</span>
+            <p className="mt-0.5 text-sm text-foreground">{fact}</p>
+          </div>
+        </Card>
+      )}
 
       {hasTrackMap(track.name) && (
         <Card className="overflow-hidden">
