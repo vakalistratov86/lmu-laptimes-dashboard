@@ -1,0 +1,27 @@
+name: Docs Lint
+
+on:
+  push:
+    paths:
+      - '**.md'
+  pull_request:
+    paths:
+      - '**.md'
+
+jobs:
+  markdownlint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint Markdown files
+        uses: DavidAnson/markdownlint-cli2-action@v17
+        with:
+          globs: |
+            README.md
+            CHANGELOG.md
+            CONTRIBUTING.md
+            **/*.md
+            !node_modules/**/*.md
