@@ -14,12 +14,27 @@ import {
   Tooltip, CartesianGrid, Cell, Legend,
 } from "recharts";
 
-type Dimension = "track" | "driver" | "carClass" | "conditions";
+type LapRow = {
+  id: number;
+  driverId: number;
+  driverName: string;
+  team: string;
+  car: string;
+  carClass: string;
+  lapMs: number;
+  trackId: number;
+  trackName: string;
+  conditions: string;
+  sessionCourse?: string | null;
+};
+
+type Dimension = "track" | "driver" | "carClass" | "conditions" | "course";
 type Metric = "best" | "avg" | "count";
 type ChartType = "bar" | "line";
 
 const DIM_LABEL: Record<Dimension, string> = {
-  track: "Трасса / конфигурация", driver: "Пилот", carClass: "Класс машины", conditions: "Условия",
+  track: "Трасса", driver: "Пилот", carClass: "Класс машины", conditions: "Условия",
+  course: "Конфигурация трассы",
 };
 const METRIC_LABEL: Record<Metric, string> = {
   best: "Лучший круг", avg: "Средний круг", count: "Количество заездов",
@@ -38,7 +53,7 @@ export default function Reports() {
 
   const data = useMemo(() => {
     if (!laps) return [];
-    let filtered = laps;
+    let filtered = laps as LapRow[];
     if (trackFilter !== "all") filtered = filtered.filter((l) => l.trackId === Number(trackFilter));
     if (classFilter !== "all") filtered = filtered.filter((l) => l.carClass === classFilter);
     if (globalFiltered) filtered = filtered.filter((l) => selectedDriverIds.has(l.driverId));
@@ -47,16 +62,19 @@ export default function Reports() {
     for (const l of filtered) {
       let key = "";
       if (dimension === "track") {
-        // Ключ по трассе: trackName + course если доступен (future-proof)
-        // TODO: когда LapTimeEnriched получит sessionCourse — добавить: `${l.trackName} · ${(l as any).sessionCourse}`
         key = l.trackName;
       } else if (dimension === "driver") {
         key = l.driverName;
       } else if (dimension === "carClass") {
         key = l.carClass;
-      } else {
+      } else if (dimension === "conditions") {
         key = l.conditions;
+      } else if (dimension === "course") {
+        // Группируем по «trackName · course» для импортных кругов,
+        // для demo-кругов (sessionCourse == null) — просто trackName
+        key = l.sessionCourse ? `${l.trackName} · ${l.sessionCourse}` : l.trackName;
       }
+      if (!key) continue;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(l.lapMs);
     }
