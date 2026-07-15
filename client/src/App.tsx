@@ -8,9 +8,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { DriverFilterProvider } from "@/lib/driverFilter";
 import NotFound from "@/pages/not-found";
 import Overview from "@/pages/Overview";
-import Laps from "@/pages/Laps";
 import Leaderboards from "@/pages/Leaderboards";
-import Reports from "@/pages/Reports";
 import Tracks from "@/pages/Tracks";
 import TrackDetail from "@/pages/TrackDetail";
 import Sessions from "@/pages/Sessions";
@@ -22,9 +20,7 @@ function AppRouter() {
   return (
     <Switch>
       <Route path="/" component={Overview} />
-      <Route path="/laps" component={Laps} />
       <Route path="/leaderboards" component={Leaderboards} />
-      <Route path="/reports" component={Reports} />
       <Route path="/tracks" component={Tracks} />
       <Route path="/tracks/:id" component={TrackDetail} />
       <Route path="/sessions" component={Sessions} />
