@@ -16,7 +16,7 @@ import readline from "readline";
 // ───── Путь к БД (берём из переменной окружения или по умолчанию) ─────
 const DB_PATH = process.env.DATABASE_URL
   ? process.env.DATABASE_URL.replace("file:", "")
-  : path.resolve(process.cwd(), "data", "lmu.db");
+  : path.resolve(process.cwd(), "data.db");
 
 // ───── Парсинг аргументов ─────
 const args = process.argv.slice(2);
