@@ -1,6 +1,11 @@
-# LMU Dashboard
+# LMU Lap Times Dashboard
 
-Дашборд для мониторинга времён прохождения трасс в игре **Le Mans Ultimate (LMU)** с построением отчётов. Тёмный геймерский интерфейс в рейсинг-эстетике.
+![Node.js](https://img.shields.io/badge/Node.js-18%2B-brightgreen)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)
+![React](https://img.shields.io/badge/React-18-61dafb)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+Дашборд для мониторинга и анализа времён прохождения трасс в симуляторе **Le Mans Ultimate (LMU)**. Тёмный геймерский интерфейс в рейсинг-эстетике с поддержкой светлой темы.
 
 ## Возможности
 
@@ -13,45 +18,27 @@
 
 ## Технологический стек
 
-- **Frontend:** React + Vite + TypeScript, Tailwind CSS, shadcn/ui, wouter, TanStack Query, Recharts
-- **Backend:** Express (TypeScript)
-- **База данных:** SQLite (better-sqlite3) + Drizzle ORM
-
-## Запуск
-
-Требуется Node.js 18+.
-
-```bash
-# Установить зависимости
-npm install
-
-# Создать таблицы базы данных
-npm run db:push
-
-# Запустить в режиме разработки (Express + Vite на одном порту 5000)
-npm run dev
-```
-
-Приложение будет доступно на `http://localhost:5000`.
-
-При первом запуске база автоматически заполняется демо‑данными: 8 трасс, 8 пилотов и заезды сезона 2026 (файл `data.db` в `.gitignore` и не коммитится).
-
-## Сборка для продакшена
-
-```bash
-npm run build
-NODE_ENV=production node dist/index.cjs
-```
+| Слой | Технологии |
+|------|------------|
+| **Frontend** | React 18, Vite 7, TypeScript 5.6, Tailwind CSS 3, shadcn/ui, wouter, TanStack Query, Recharts, Framer Motion |
+| **Backend** | Express 5 (TypeScript) |
+| **База данных** | SQLite (better-sqlite3) + Drizzle ORM / опционально Supabase |
+| **Тестирование** | Vitest + coverage-v8 |
 
 ## Структура проекта
 
 ```
-client/          # Frontend (React)
-  src/pages/     # Страницы: Overview, Laps, Leaderboards, Reports, Tracks, TrackDetail
-  src/components/# Общие компоненты (AppLayout, Logo, UI)
-  src/lib/       # API-хуки, форматирование времён
-server/          # Backend (Express): routes.ts, storage.ts (+ сидинг)
-shared/          # Общая схема данных (Drizzle + Zod)
+.
+├── client/              # Frontend (React)
+│   └── src/
+│       ├── pages/       # Overview, Laps, Leaderboards, Reports, Tracks, TrackDetail
+│       ├── components/  # Общие компоненты (AppLayout, Logo, UI)
+│       └── lib/         # API-хуки, форматирование времён
+├── server/              # Backend (Express): routes.ts, storage.ts (+ сидинг)
+├── shared/              # Общая схема данных (Drizzle + Zod)
+├── script/              # Скрипты сборки
+├── tests/               # Тесты (Vitest)
+└── drizzle.config.ts    # Конфигурация Drizzle ORM
 ```
 
 ## Модель данных
@@ -60,6 +47,56 @@ shared/          # Общая схема данных (Drizzle + Zod)
 - **drivers** — пилоты (имя, команда, страна)
 - **lap_times** — заезды (время круга, секторы, класс машины, шины, условия, дата)
 
+## Запуск
+
+Требуется **Node.js 18+**.
+
+```bash
+# Установить зависимости
+npm install
+
+# Создать таблицы базы данных
+npm run db:push
+
+# Запустить в режиме разработки (Express + Vite на порту 5000)
+npm run dev
+```
+
+Приложение будет доступно на `http://localhost:5000`.
+
+При первом запуске база автоматически заполняется демо‑данными: 8 трасс, 8 пилотов и заезды сезона 2026 (файл `data.db` в `.gitignore` и не коммитится).
+
+## Доступные скрипты
+
+| Скрипт | Описание |
+|--------|----------|
+| `npm run dev` | Запуск в режиме разработки (Express + Vite) |
+| `npm run build` | Сборка для продакшена |
+| `npm start` | Запуск продакшен-сборки |
+| `npm run check` | Проверка типов TypeScript |
+| `npm run db:push` | Применение схемы Drizzle к БД |
+| `npm test` | Запуск тестов (Vitest) |
+| `npm run test:watch` | Запуск тестов в watch-режиме |
+| `npm run test:coverage` | Отчёт о покрытии кода тестами |
+
+## Сборка для продакшена
+
+```bash
+npm run build
+NODE_ENV=production npm start
+```
+
+## Переменные окружения
+
+Для подключения к Supabase создайте файл `.env` в корне проекта:
+
+```env
+SUPABASE_URL=https://<your-project>.supabase.co
+SUPABASE_ANON_KEY=<your-anon-key>
+```
+
+Без этих переменных приложение работает в режиме локальной SQLite-базы данных.
+
 ---
 
-Демо‑данные носят иллюстративный характер и не связаны с официальной статистикой игры.
+> Демо‑данные носят иллюстративный характер и не связаны с официальной статистикой игры Le Mans Ultimate.
