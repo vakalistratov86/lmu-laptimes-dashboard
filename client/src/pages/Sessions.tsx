@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import { useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
@@ -188,8 +188,8 @@ export default function Sessions() {
   const grouped = useMemo(() => (filtered ? groupSessions(filtered) : []), [filtered]);
 
   // По умолчанию все группы и категории свёрнуты
-  const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
-  const [collapsedCategories, setCollapsedCategories] = React.useState<Record<string, boolean>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   const isGroupCollapsed = (key: string) => collapsedGroups[key] ?? true;
   const isCatCollapsed = (key: string) => collapsedCategories[key] ?? true;
