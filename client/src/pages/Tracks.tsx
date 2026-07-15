@@ -7,6 +7,7 @@ import { Link } from "wouter";
 import { Flag, MapPin, RotateCw, Ruler, ArrowRight, CalendarClock, Timer, Layers, Trophy } from "lucide-react";
 import { TrackMap, hasTrackMap } from "@/components/TrackMap";
 import { useMemo } from "react";
+import { getClassBadgeClass } from "@/lib/classStyles";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -111,15 +112,21 @@ export default function Tracks() {
 
                   {/* Физические характеристики */}
                   <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><Ruler size={12} /> {t.lengthKm} км</span>
-                    <span className="flex items-center gap-1"><RotateCw size={12} /> {t.turns} пов.</span>
+                    <span className="flex items-center gap-1"><Ruler size={12} /> {t.lengthKm} км</span>
+                    <span className="flex items-center gap-1"><RotateCw size={12} /> {t.turns} пов.</span>
                   </div>
 
                   {/* Классы автомобилей */}
                   {st && st.carClasses.size > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {Array.from(st.carClasses).map((cls) => (
-                        <Badge key={cls} variant="secondary" className="px-1.5 py-0 text-[10px]">{cls}</Badge>
+                        <Badge
+                          key={cls}
+                          variant="outline"
+                          className={`px-1.5 py-0 text-[10px] ${getClassBadgeClass(cls)}`}
+                        >
+                          {cls}
+                        </Badge>
                       ))}
                     </div>
                   )}
