@@ -129,7 +129,7 @@ export default function Laps() {
               <tr>
                 <Th onClick={() => toggleSort("trackName")}>Трасса</Th>
                 <Th onClick={() => toggleSort("driverName")}>Пилот</Th>
-                <th className="hidden px-4 py-3 text-left font-medium md:table-cell">Команда</th>
+                <th className="px-4 py-3 text-left font-medium">Команда</th>
                 <th className="hidden px-4 py-3 text-left font-medium md:table-cell">Машина</th>
                 <th className="px-4 py-3 text-left font-medium">Класс</th>
                 <Th onClick={() => toggleSort("lapMs")} className="text-right">Круг</Th>
@@ -161,7 +161,7 @@ export default function Laps() {
                   <td className="px-4 py-2.5">
                     <DriverName name={l.driverName} isPlayer={l.isPlayer} />
                   </td>
-                  <td className="hidden px-4 py-2.5 text-muted-foreground md:table-cell" data-testid={`text-team-${l.id}`}>{l.team}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground" data-testid={`text-team-${l.id}`}>{l.team}</td>
                   <td className="hidden px-4 py-2.5 text-muted-foreground md:table-cell" data-testid={`text-car-${l.id}`}>{l.car}</td>
                   <td className="px-4 py-2.5">
                     <Badge variant="outline" className={getClassBadgeClass(l.carClass)}>{l.carClass}</Badge>
