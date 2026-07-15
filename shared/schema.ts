@@ -198,6 +198,8 @@ export type LapTimeEnriched = LapTime & {
   trackName: string;
   driverName: string;
   team: string;
+  /** 1 = живой игрок, 0 = ИИ. null для кругов demo (нет session_results). */
+  isPlayer: number | null;
 };
 
 // Сессия с трассой и результатами (для API)
