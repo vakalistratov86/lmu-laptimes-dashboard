@@ -193,6 +193,12 @@ export type SessionSectorBest = typeof sessionSectorBests.$inferSelect;
 export type InsertSessionTrackLimits = z.infer<typeof insertSessionTrackLimitsSchema>;
 export type SessionTrackLimits = typeof sessionTrackLimits.$inferSelect;
 
+// Обогащённый пилот: добавляет флаг isPlayer
+// 1 = реальный игрок (хотя бы в одной сессии), 0 = только ИИ, null = нет данных сессий (demo)
+export type DriverEnriched = Driver & {
+  isPlayer: number | null;
+};
+
 // Обогащённая запись времени с данными трассы и пилота (для API)
 export type LapTimeEnriched = LapTime & {
   trackName: string;

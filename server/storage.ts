@@ -2,6 +2,7 @@ import { tracks, drivers, lapTimes, sessions, sessionResults } from '@shared/sch
 import type {
   Track, InsertTrack,
   Driver, InsertDriver,
+  DriverEnriched,
   LapTime, InsertLapTime,
   LapTimeEnriched,
   Session, SessionResult, SessionEnriched,
@@ -39,7 +40,7 @@ export interface ImportResult {
 export interface IStorage {
   getTracks(): Promise<Track[]>;
   getTrack(id: number): Promise<Track | undefined>;
-  getDrivers(): Promise<Driver[]>;
+  getDrivers(): Promise<DriverEnriched[]>;
   getDriver(id: number): Promise<Driver | undefined>;
   getLaps(filter?: LapFilter): Promise<LapTimeEnriched[]>;
   getSessions(): Promise<SessionEnriched[]>;
@@ -54,8 +55,23 @@ export class DatabaseStorage implements IStorage {
   async getTrack(id: number): Promise<Track | undefined> {
     return db.select().from(tracks).where(eq(tracks.id, id)).get();
   }
-  async getDrivers(): Promise<Driver[]> {
-    return db.select().from(drivers).all();
+  async getDrivers(): Promise<DriverEnriched[]> {
+    const allDrivers = db.select().from(drivers).all();
+    const srRows = db.select().from(sessionResults).all();
+
+    // Строим мап: driverId → maxIsPlayer
+    // Если у пилота хотя бы одна запись с isPlayer=1 — он реальный игрок
+    const playerMap = new Map<number, number>();
+    for (const sr of srRows) {
+      const current = playerMap.get(sr.driverId) ?? 0;
+      if (sr.isPlayer > current) playerMap.set(sr.driverId, sr.isPlayer);
+    }
+
+    return allDrivers.map((d) => ({
+      ...d,
+      // null если у пилота нет ни одной записи в session_results (demo-только)
+      isPlayer: playerMap.has(d.id) ? (playerMap.get(d.id) ?? 0) : null,
+    }));
   }
   async getDriver(id: number): Promise<Driver | undefined> {
     return db.select().from(drivers).where(eq(drivers.id, id)).get();

@@ -18,19 +18,22 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-
-/**
- * Маркер «ИИ» для дррайвербара.
- * Используем отдельный локальный бейдж чтобы не импортировать DriverName.
- * Таблица drivers не хранит isPlayer, поэтому маркер не отображаем здесь.
- */
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 export function DriverFilterBar() {
   const { data: drivers } = useDrivers();
   const { selectedDriverIds, toggleDriver, clearDrivers, isFiltered } = useDriverFilter();
   const [open, setOpen] = useState(false);
+  const [hideAI, setHideAI] = useState(false);
 
   if (!drivers || drivers.length === 0) return null;
+
+  // Пилоты, видимые в выпадающем списке с учётом фильтра ИИ
+  // isPlayer === 1 → реальный игрок; isPlayer === 0 → ИИ; isPlayer === null → demo (без данных сессий)
+  const visibleDrivers = hideAI
+    ? drivers.filter((d) => d.isPlayer === 1)
+    : drivers;
 
   const selectedDrivers = drivers.filter((d) => selectedDriverIds.has(d.id));
 
@@ -68,7 +71,7 @@ export function DriverFilterBar() {
                 Пилот не найден
               </CommandEmpty>
               <CommandGroup>
-                {drivers.map((d) => {
+                {visibleDrivers.map((d) => {
                   const active = selectedDriverIds.has(d.id);
                   return (
                     <CommandItem
@@ -86,7 +89,6 @@ export function DriverFilterBar() {
                         )}
                       />
                       {d.name}
-                      {/* isPlayer в таблице drivers отсутствует — метка будет добавлена позже */}
                     </CommandItem>
                   );
                 })}
@@ -95,6 +97,22 @@ export function DriverFilterBar() {
           </Command>
         </PopoverContent>
       </Popover>
+
+      {/* Чек-бокс «Скрыть ИИ игроков» */}
+      <div className="flex items-center gap-1.5">
+        <Checkbox
+          id="hide-ai-drivers"
+          checked={hideAI}
+          onCheckedChange={(checked) => setHideAI(checked === true)}
+          className="h-3.5 w-3.5"
+        />
+        <Label
+          htmlFor="hide-ai-drivers"
+          className="cursor-pointer select-none text-[11px] text-muted-foreground"
+        >
+          Скрыть ИИ игроков
+        </Label>
+      </div>
 
       {selectedDrivers.length > 0 && (
         <div className="flex flex-wrap gap-1">

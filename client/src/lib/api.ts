@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./queryClient";
-import type { Track, Driver, LapTimeEnriched, SessionEnriched } from "@shared/schema";
+import type { Track, DriverEnriched, LapTimeEnriched, SessionEnriched } from "@shared/schema";
 
 export function useTracks() {
   return useQuery<Track[]>({ queryKey: ["/api/tracks"] });
@@ -14,7 +14,7 @@ export function useTrack(id: number | undefined) {
 }
 
 export function useDrivers() {
-  return useQuery<Driver[]>({ queryKey: ["/api/drivers"] });
+  return useQuery<DriverEnriched[]>({ queryKey: ["/api/drivers"] });
 }
 
 export function useLaps(filter?: {
@@ -78,4 +78,4 @@ export type ImportResponse = {
   results: ImportFileResult[];
 };
 
-export type { Track, Driver, LapTimeEnriched, SessionEnriched };
+export type { Track, DriverEnriched as Driver, LapTimeEnriched, SessionEnriched };
