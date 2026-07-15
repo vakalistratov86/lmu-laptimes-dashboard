@@ -11,17 +11,7 @@ import { useMemo } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
 } from "recharts";
-
-const CLASS_BADGE: Record<string, string> = {
-  Hypercar: "bg-chart-1/15 text-chart-1 border-chart-1/30",
-  LMP2: "bg-chart-4/15 text-chart-4 border-chart-4/30",
-  GTE: "bg-chart-3/15 text-chart-3 border-chart-3/30",
-};
-
-/** Возвращает CSS-классы бейджа класса машины. Для неизвестных классов — нейтральный стиль. */
-function getClassBadge(carClass: string): string {
-  return CLASS_BADGE[carClass] ?? "bg-muted/40 text-muted-foreground border-border";
-}
+import { getClassBadgeClass } from "@/lib/classStyles";
 
 const TRACK_FACTS: Record<string, string> = {
   "Spa-Francorchamps": "Радийон-де-Спа — самый быстрый поворот в мировом автоспорте, 8G при 300+ км/ч.",
@@ -186,7 +176,7 @@ export default function TrackDetail() {
                       <div className="text-xs text-muted-foreground">{l.team}</div>
                     </td>
                     <td className="px-4 py-2.5">
-                      <Badge variant="outline" className={getClassBadge(l.carClass)}>{l.carClass}</Badge>
+                      <Badge variant="outline" className={getClassBadgeClass(l.carClass)}>{l.carClass}</Badge>
                     </td>
                     <td className={`px-4 py-2.5 text-right font-data tabular-nums ${i === 0 ? "font-bold text-primary" : ""}`}>
                       {formatLap(l.lapMs)}
