@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Link } from "wouter";
+import { useMemo } from "react";
+import { Link, useSearch, useLocation } from "wouter";
 import { useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
 import { Card } from "@/components/ui/card";
@@ -163,8 +163,18 @@ const FILTER_BUTTONS: { key: string; label: string }[] = [
 
 export default function Sessions() {
   const { data: sessions, isLoading } = useSessions();
+  const searchString = useSearch();
+  const [, navigate] = useLocation();
 
-  const [activeFilter, setActiveFilter] = useState<string>("Все");
+  const activeFilter = useMemo(() => {
+    const params = new URLSearchParams(searchString);
+    return params.get("filter") ?? "Все";
+  }, [searchString]);
+
+  const setActiveFilter = (key: string) => {
+    if (key === "Все") navigate("/sessions");
+    else navigate(`/sessions?filter=${encodeURIComponent(key)}`);
+  };
 
   const filtered = useMemo(() =>
     activeFilter === "Все"
@@ -178,8 +188,8 @@ export default function Sessions() {
   const grouped = useMemo(() => (filtered ? groupSessions(filtered) : []), [filtered]);
 
   // По умолчанию все группы и категории свёрнуты
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
+  const [collapsedCategories, setCollapsedCategories] = React.useState<Record<string, boolean>>({});
 
   const isGroupCollapsed = (key: string) => collapsedGroups[key] ?? true;
   const isCatCollapsed = (key: string) => collapsedCategories[key] ?? true;
@@ -318,10 +328,21 @@ export default function Sessions() {
                           {!isCatCol && (
                             <div className="grid gap-3 md:grid-cols-2">
                               {catSessions.map((s) => {
-                                const player = s.results.find((r) => r.isPlayer === 1);
+                                const playerResult = s.results.find((r) => r.isPlayer === 1);
+                                const bestLap = playerResult?.bestLapMs ?? null;
                                 const winner = s.results[0];
                                 return (
-                                  <Link key={s.id} href={`/sessions/${s.id}`} data-testid={`card-session-${s.id}`}>
+                                  <Link
+                                    key={s.id}
+                                    href={
+                                      `/sessions/${s.id}` +
+                                      (activeFilter !== "Все"
+                                        ? `?from_filter=${encodeURIComponent(activeFilter)}`
+                                        : "")
+                                    }
+                                    data-testid={`link-session-${s.id}`}
+                                    className="group flex items-center justify-between rounded-md border border-border bg-card px-3 py-2 text-sm hover-elevate transition-colors"
+                                  >
                                     <Card className="group h-full cursor-pointer p-4 transition-colors hover-elevate">
                                       <div className="flex items-start justify-between gap-2">
                                         <div className="min-w-0">
@@ -353,16 +374,15 @@ export default function Sessions() {
                                         />
                                       </div>
 
-                                      {player && (
+                                      {playerResult && (
                                         <div className="mt-3 flex items-center justify-between rounded-md bg-primary/10 px-3 py-2 text-sm">
                                           <span className="text-primary">Ваш результат</span>
                                           <span className="font-data font-semibold tabular-nums text-primary">
-                                            P{player.position} · {player.bestLapMs ? formatLap(player.bestLapMs) : "—"}
+                                            P{playerResult.position} · {bestLap ? formatLap(bestLap) : "—"}
                                           </span>
                                         </div>
                                       )}
                                     </Card>
-
                                   </Link>
                                 );
                               })}
