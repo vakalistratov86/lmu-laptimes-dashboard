@@ -4,6 +4,7 @@ import { useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { Upload, Timer, Dumbbell, Trophy, Gauge, ChevronRight } from "lucide-react";
 import { getSessionTypeBadgeClass, SESSION_TYPE_ORDER } from "@/lib/classStyles";
 
@@ -39,6 +40,15 @@ const CATEGORY_META: Record<SessionCategory, { label: string; icon: React.ReactN
   superpole: { label: "Superpole",    icon: <Timer size={12} /> },
   warmup:    { label: "Прогрев",      icon: <Gauge size={12} /> },
   race:      { label: "Гонка",        icon: <Trophy size={12} /> },
+};
+
+// Цветовые классы фильтров — совпадают с цветами бейджей сессий
+const FILTER_BG_CLASSES: Record<SessionCategory, string> = {
+  practice:  "bg-sky-400/10 text-sky-400",
+  qualify:   "bg-amber-400/10 text-amber-400",
+  race:      "bg-emerald-400/10 text-emerald-400",
+  superpole: "bg-fuchsia-400/10 text-fuchsia-400",
+  warmup:    "bg-slate-400/10 text-slate-300",
 };
 
 function trackDisplayLabel(trackName: string, course: string | null | undefined): string {
@@ -150,23 +160,48 @@ export default function Sessions() {
         </p>
       </div>
 
-      {/* Filter buttons (Issue #22) */}
+      {/* Filter buttons с цветовым фоном и иконками (Issue #22) */}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Фильтр по типу сессии">
-        {FILTER_BUTTONS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setActiveFilter(key)}
-            aria-pressed={activeFilter === key}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${
-              activeFilter === key
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background text-muted-foreground border-border hover:bg-accent hover:text-accent-foreground"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+        {FILTER_BUTTONS.map(({ key, label }) => {
+          const isAll = key === "Все";
+          const normalizedType: SessionCategory | null = isAll ? null : normalizeType(key);
+          const colorClass = normalizedType != null ? FILTER_BG_CLASSES[normalizedType] : "";
+
+          const icon =
+            normalizedType === "practice"  ? <Dumbbell className="h-3 w-3" /> :
+            normalizedType === "qualify"   ? <Timer className="h-3 w-3" /> :
+            normalizedType === "race"      ? <Trophy className="h-3 w-3" /> :
+            normalizedType === "superpole" ? <Timer className="h-3 w-3" /> :
+            normalizedType === "warmup"    ? <Gauge className="h-3 w-3" /> :
+            null;
+
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveFilter(key)}
+              aria-pressed={activeFilter === key}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-colors",
+                isAll
+                  ? activeFilter === key
+                    ? "bg-accent text-accent-foreground border-border"
+                    : "bg-background text-muted-foreground border-border hover:bg-accent/40"
+                  : cn(
+                      colorClass,
+                      "border-transparent hover:ring-1 hover:ring-border/60",
+                    ),
+              )}
+            >
+              {icon && (
+                <span className="flex h-4 w-4 items-center justify-center">
+                  {icon}
+                </span>
+              )}
+              <span>{label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Loading state (Issue #30) */}
