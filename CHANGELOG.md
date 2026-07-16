@@ -10,9 +10,34 @@
 ## [Unreleased]
 
 ### Added
+- **Session Detail — полный рефакторинг архитектуры компонентов (SD-1 – SD-14)**
+  - Barrel-файл типов `client/src/components/session-detail/types.ts` (SD-1, #32, #46)
+  - Доменная view-model `SessionDetailViewModel` в `client/src/lib/sessionDetail.types.ts` (SD-2, #33)
+  - Селекторы `normalizeSessionType`, `buildHeroStats`, `buildResultRows`, `buildLapProgressSeries`, `buildSectorSummary`, `buildDriverLapGroups` в `sessionDetailSelectors.ts` (SD-3, #34)
+  - Функция-агрегатор `buildSessionDetailViewModel` в `client/src/lib/sessionDetail.ts` (SD-4, #35)
+  - Компонент `SessionHeader` с кнопкой назад, badge типа сессии, трассой, датой (SD-5, #36)
+  - Компонент `SessionHeroStats` с KPI-карточками (победитель, fastest lap, круги и т.д.) (SD-6, #37)
+  - Компонент `SessionResultsTable` + `SessionResultsRow` с медалями топ-3, выделением игрока и управляемыми колонками (SD-7, #38)
+  - Компонент `SessionTabs` с поддержкой вкладок results / laps / sectors (SD-8, #39)
+  - Компонент `SessionLoadingSkeleton` со скелет-строками и флагами hero/tabs (SD-9, #40)
+  - Компонент `SessionEmptyState` для сценариев 404, no laps, no chart data (SD-10, #41)
+  - Рефакторинг страницы `pages/SessionDetail.tsx` под новую архитектуру и view-model (SD-11, #42)
+  - Компонент `SessionSectorsSummary` со сводкой best-секторов и theoretical best (SD-12, #43)
+  - Компоненты `DriverLapsAccordion` и `DriverLapTable` для детальных кругов по пилотам (SD-13, #44)
+  - Компонент `SessionLapProgressChart` — график прогрессии кругов по нескольким пилотам (SD-14, #45)
+- Страница Sessions переработана в табличный layout (#21)
+- Фильтры по типу сессии над таблицей (`Все`, `Тренировка`, `Квалификация`, `Гонка`, ...) (#22)
+- Стилизованные badge-и для типов сессий с цветовой схемой (#23, #17)
+- Таблица сессий приведена к 4 колонкам: Тип, Трек, Лучший круг, Дата (#24)
+- Строки таблицы сессий полностью кликабельны (hover, cursor:pointer, keyboard nav) (#25)
+- Сохранение активного фильтра в URL; кнопка «Назад» возвращает в отфильтрованный список (#26)
+- Детальный вид сессии: заголовок + таблица результатов как главный блок (#27)
+- Финальный набор колонок таблицы результатов с выделением fastest lap и игрока (#28)
+- Блок «Круги по пилотам» перенесён ниже основной таблицы как вторичный раздел (#29)
+- Loading / empty / no-results состояния для страниц списка и деталей сессий (#30)
 - Блок «Интересно» в карточку трассы (`TrackDetail`)
 - Раздел Daily Races и Special Events в отдельные секции вкладки Events
-- Поле `sessionCourse` в тип `LapTimeEnriched`; обогащение через JOIN с таблицей `sessions`
+- Поле `sessionCourse` в тип `LapTimeEnriched`; обогащение через JOIN с таблицей `sessions` (#3)
 - Группировка лидерборда по `trackName + course`
 - Измерение `track` в Reports использует `trackName + course`
 - Фильтр `sessionCourse` в интерфейс `LapFilter`
@@ -28,12 +53,16 @@
 - Стили бейджей LMP3, GT3, GT4 в Laps.tsx
 
 ### Fixed
+- Унификация стилей badge класса машины в `SessionDetail` и `TrackDetail` через `getClassBadgeClass` (#14)
+- `SessionDetail.tsx`: захардкоженный GTE-цвет заменён на динамический `getClassBadgeClass` (#14)
+- `TrackDetail.tsx`: удалены локальные `CLASS_BADGE` / `getClassBadge()`, дублировавшие `classStyles.ts` (#14)
 - Формат даты в Special Events tab (DD.MM.YYYY)
 - `formatDate` — убрано время из `toLocaleString`, т.к. дата хранится без временной зоны
 - Синтаксические ошибки в тестах (`routes.test.ts`, `schema.test.ts`, `eventsParser.test.ts`)
 - Добавлены недостающие тесты для schema и eventsParser
 
 ### Refactored
+- `SessionDetail.tsx` разбит на компонентную архитектуру с view-model слоем (SD-11, #42)
 - Вкладка Events разделена на Daily Races и Special Events
 - Стили классов машин вынесены в `client/src/lib/classStyles.ts`
 
