@@ -1,21 +1,17 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import { useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  CalendarClock, Users, Flag, ChevronRight, Upload,
-  ChevronDown, ChevronUp, Dumbbell, Trophy, Timer, Gauge,
-} from "lucide-react";
+import { Upload, Timer, Dumbbell, Trophy, Gauge, ChevronRight } from "lucide-react";
 import { getSessionTypeBadgeClass, SESSION_TYPE_ORDER } from "@/lib/classStyles";
 
-// ─── Утилиты ───────────────────────────────────────────────────────────────────
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
   if (!iso) return "";
-  const datePart = iso.slice(0, 10); // "YYYY-MM-DD"
+  const datePart = iso.slice(0, 10);
   const parts = datePart.split("-");
   if (parts.length === 3) {
     const [year, month, day] = parts;
@@ -23,15 +19,7 @@ function formatDate(iso: string): string {
   }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("ru-RU", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-  });
-}
-
-/** Извлекает строку даты "YYYY-MM-DD" из ISO-строки */
-function extractDateKey(iso: string): string {
-  if (!iso) return "";
-  return iso.slice(0, 10);
+  return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 type SessionCategory = "practice" | "qualify" | "race" | "warmup" | "superpole";
@@ -45,57 +33,17 @@ function normalizeType(raw: string): SessionCategory {
   return "practice";
 }
 
-interface CategoryMeta {
-  label: string;
-  icon: React.ReactNode;
-  order: number;
-}
-
-/** Metadata for display (label + icon + order). Badge colours come from classStyles.ts. */
-const CATEGORY_META: Record<SessionCategory, CategoryMeta> = {
-  practice: {
-    label: "Тренировка",
-    icon: <Dumbbell size={14} />,
-    order: SESSION_TYPE_ORDER["practice"],
-  },
-  qualify: {
-    label: "Квалификация",
-    icon: <Timer size={14} />,
-    order: SESSION_TYPE_ORDER["qualify"],
-  },
-  superpole: {
-    label: "Superpole",
-    icon: <Timer size={14} />,
-    order: SESSION_TYPE_ORDER["superpole"],
-  },
-  warmup: {
-    label: "Прогрев",
-    icon: <Gauge size={14} />,
-    order: SESSION_TYPE_ORDER["warmup"],
-  },
-  race: {
-    label: "Гонка",
-    icon: <Trophy size={14} />,
-    order: SESSION_TYPE_ORDER["race"],
-  },
+const CATEGORY_META: Record<SessionCategory, { label: string; icon: React.ReactNode }> = {
+  practice:  { label: "Тренировка",   icon: <Dumbbell size={12} /> },
+  qualify:   { label: "Квалификация", icon: <Timer size={12} /> },
+  superpole: { label: "Superpole",    icon: <Timer size={12} /> },
+  warmup:    { label: "Прогрев",      icon: <Gauge size={12} /> },
+  race:      { label: "Гонка",        icon: <Trophy size={12} /> },
 };
 
-/**
- * Формирует отображаемый заголовок трассы:
- * если course есть и отличается от trackName — добавляем через «·»
- */
 function trackDisplayLabel(trackName: string, course: string | null | undefined): string {
   if (!course || course.toLowerCase() === trackName.toLowerCase()) return trackName;
   return `${trackName} · ${course}`;
-}
-
-interface GroupedEntry {
-  /** Ключ группы: "YYYY-MM-DD|||trackName|||course" */
-  groupKey: string;
-  dateKey: string;       // "YYYY-MM-DD"
-  trackName: string;
-  course: string | null;
-  categories: [SessionCategory, SessionItem[]][];
 }
 
 type SessionItem = {
@@ -110,46 +58,14 @@ type SessionItem = {
   results: { isPlayer: number; position: number; bestLapMs: number | null }[];
 };
 
-/**
- * Группирует сессии по (дата + трасса + конфигурация),
- * затем внутри каждой группы — по категории.
- * Одна и та же трасса в разные дни — разные группы.
- */
-function groupSessions(items: SessionItem[]): GroupedEntry[] {
-  const byGroup = new Map<string, { dateKey: string; trackName: string; course: string | null; items: SessionItem[] }>();
-
-  for (const item of items) {
-    const dateKey = extractDateKey(item.dateTime);
-    const course = item.course ?? null;
-    const groupKey = `${dateKey}|||${item.trackName}|||${course ?? ""}`;
-    if (!byGroup.has(groupKey)) {
-      byGroup.set(groupKey, { dateKey, trackName: item.trackName, course, items: [] });
-    }
-    byGroup.get(groupKey)!.items.push(item);
-  }
-
-  // Сортируем группы по дате убывания (новые сверху)
-  const entries = Array.from(byGroup.entries()).sort(([a], [b]) => {
-    const dateA = a.slice(0, 10);
-    const dateB = b.slice(0, 10);
-    return dateB.localeCompare(dateA);
-  });
-
-  return entries.map(([groupKey, { dateKey, trackName, course, items: groupItems }]) => {
-    const byCategory = new Map<SessionCategory, SessionItem[]>();
-    for (const s of groupItems) {
-      const cat = normalizeType(s.sessionType);
-      if (!byCategory.has(cat)) byCategory.set(cat, []);
-      byCategory.get(cat)!.push(s);
-    }
-    const sorted = Array.from(byCategory.entries()).sort(
-      ([a], [b]) => CATEGORY_META[a].order - CATEGORY_META[b].order,
-    );
-    return { groupKey, dateKey, trackName, course, categories: sorted } as GroupedEntry;
-  });
+function getBestLapForSession(session: SessionItem): number | null {
+  return session.results.reduce<number | null>((min, r) => {
+    if (r.bestLapMs == null) return min;
+    return min == null || r.bestLapMs < min ? r.bestLapMs : min;
+  }, null);
 }
 
-// ─── Фильтр-кнопки ─────────────────────────────────────────────────────────────
+// ─── Filter buttons ────────────────────────────────────────────────────────────
 
 const FILTER_BUTTONS: { key: string; label: string }[] = [
   { key: "Все",        label: "Все" },
@@ -157,9 +73,34 @@ const FILTER_BUTTONS: { key: string; label: string }[] = [
   { key: "qualify",   label: "Квалификация" },
   { key: "race",      label: "Гонка" },
   { key: "superpole", label: "Суперпол" },
+  { key: "warmup",    label: "Прогрев" },
 ];
 
-// ─── Компонент ─────────────────────────────────────────────────────────────────
+// ─── Loading Skeleton ─────────────────────────────────────────────────────────
+
+function SessionsTableSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="border-b border-border bg-secondary/30 px-4 py-3">
+        <div className="flex gap-6">
+          {["w-16", "w-28", "w-24", "w-20"].map((w, i) => (
+            <Skeleton key={i} className={`h-3 ${w}`} />
+          ))}
+        </div>
+      </div>
+      {[...Array(6)].map((_, i) => (
+        <div key={i} className="flex items-center gap-6 border-b border-border/50 px-4 py-3 last:border-0">
+          <Skeleton className="h-5 w-20 rounded-full" />
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Sessions() {
   const { data: sessions, isLoading } = useSessions();
@@ -176,54 +117,51 @@ export default function Sessions() {
     else navigate(`/sessions?filter=${encodeURIComponent(key)}`);
   };
 
-  const filtered = useMemo(() =>
-    activeFilter === "Все"
-      ? (sessions as SessionItem[])
-      : (sessions as SessionItem[]).filter(
-          (s) => normalizeType(s.sessionType) === activeFilter,
-        ),
-    [sessions, activeFilter],
+  const filtered = useMemo(() => {
+    if (!sessions) return [] as SessionItem[];
+    const all = sessions as SessionItem[];
+    if (activeFilter === "Все") return all;
+    return all.filter((s) => normalizeType(s.sessionType) === activeFilter);
+  }, [sessions, activeFilter]);
+
+  // Sort by date descending, then by session type order
+  const sorted = useMemo(() =>
+    [...filtered].sort((a, b) => {
+      const dateCmp = b.dateTime.localeCompare(a.dateTime);
+      if (dateCmp !== 0) return dateCmp;
+      return (SESSION_TYPE_ORDER[normalizeType(a.sessionType)] ?? 99) -
+             (SESSION_TYPE_ORDER[normalizeType(b.sessionType)] ?? 99);
+    }),
+    [filtered],
   );
 
-  const grouped = useMemo(() => (filtered ? groupSessions(filtered) : []), [filtered]);
-
-  // По умолчанию все группы и категории свёрнуты
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
-
-  const isGroupCollapsed = (key: string) => collapsedGroups[key] ?? true;
-  const isCatCollapsed = (key: string) => collapsedCategories[key] ?? true;
-
-  const toggleGroup = (key: string) =>
-    setCollapsedGroups((prev) => ({ ...prev, [key]: !isGroupCollapsed(key) }));
-
-  const toggleCategory = (groupKey: string, cat: string) => {
-    const key = `${groupKey}::${cat}`;
-    setCollapsedCategories((prev) => ({ ...prev, [key]: !isCatCollapsed(key) }));
-  };
+  const hasSessions = sessions && sessions.length > 0;
+  const hasFiltered = sorted.length > 0;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
+      {/* Page header */}
       <div>
         <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-page-title">
           Сессии
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Импортированные из логов игры сессии — по дате, трассе и типу сессии
+          Импортированные сессии — по дате, трассе и типу
         </p>
       </div>
 
-      {/* ── Фильтр-кнопки ── */}
-      <div className="flex flex-wrap gap-2">
+      {/* Filter buttons (Issue #22) */}
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Фильтр по типу сессии">
         {FILTER_BUTTONS.map(({ key, label }) => (
           <button
             key={key}
             type="button"
             onClick={() => setActiveFilter(key)}
+            aria-pressed={activeFilter === key}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${
               activeFilter === key
                 ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background text-muted-foreground border-border hover:bg-accent"
+                : "bg-background text-muted-foreground border-border hover:bg-accent hover:text-accent-foreground"
             }`}
           >
             {label}
@@ -231,193 +169,118 @@ export default function Sessions() {
         ))}
       </div>
 
-      {isLoading && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-40" />)}
-        </div>
-      )}
+      {/* Loading state (Issue #30) */}
+      {isLoading && <SessionsTableSkeleton />}
 
-      {!isLoading && (!sessions || sessions.length === 0) && (
-        <Card className="flex flex-col items-center gap-3 p-10 text-center">
+      {/* Empty state — no sessions at all (Issue #30) */}
+      {!isLoading && !hasSessions && (
+        <div className="flex flex-col items-center gap-4 rounded-lg border border-border bg-card p-14 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
             <Upload size={22} />
           </div>
           <div>
             <p className="font-semibold">Пока нет импортированных сессий</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">
               Подключите папку с логами игры, чтобы увидеть здесь результаты гонок и практик.
             </p>
           </div>
           <Link
             href="/import"
             data-testid="link-import-empty"
-            className="mt-1 flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover-elevate"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
           >
             <Upload size={16} /> Импортировать логи
           </Link>
-        </Card>
+        </div>
       )}
 
-      {!isLoading && sessions && sessions.length > 0 && (
-        <div className="space-y-8">
-          {grouped.length === 0 && (
-            <Card className="flex flex-col items-center gap-3 p-10 text-center">
-              <p className="font-semibold text-muted-foreground">
-                Нет сессий с выбранным типом
-              </p>
-            </Card>
-          )}
-          {grouped.map(({ groupKey, dateKey, trackName, course, categories }) => {
-            const isCollapsed = isGroupCollapsed(groupKey);
-            const totalSessions = categories.reduce((sum, [, s]) => sum + s.length, 0);
-            const displayLabel = trackDisplayLabel(trackName, course);
-            const displayDate = formatDate(dateKey);
+      {/* No-results state — sessions exist but filter yields nothing (Issue #30) */}
+      {!isLoading && hasSessions && !hasFiltered && (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-card p-12 text-center">
+          <p className="font-semibold text-muted-foreground">
+            Нет сессий с выбранным типом
+          </p>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("Все")}
+            className="text-sm text-primary underline-offset-4 hover:underline"
+          >
+            Показать все сессии
+          </button>
+        </div>
+      )}
+
+      {/* Sessions table (Issues #21, #24, #25) */}
+      {!isLoading && hasSessions && hasFiltered && (
+        <div className="overflow-hidden rounded-lg border border-border bg-card" role="table" aria-label="Список сессий">
+          {/* Table header */}
+          <div
+            className="grid border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            style={{ gridTemplateColumns: "160px 1fr 140px 110px 24px" }}
+            role="row"
+          >
+            <div role="columnheader">Тип</div>
+            <div role="columnheader">Трек</div>
+            <div role="columnheader" className="text-right">Лучший круг</div>
+            <div role="columnheader" className="text-right">Дата</div>
+            <div role="columnheader" />
+          </div>
+
+          {/* Table rows */}
+          {sorted.map((session) => {
+            const cat = normalizeType(session.sessionType);
+            const meta = CATEGORY_META[cat];
+            const bestLap = getBestLapForSession(session);
+            const filterParam = activeFilter !== "Все"
+              ? `?from_filter=${encodeURIComponent(activeFilter)}`
+              : "";
+            const href = `/sessions/${session.id}${filterParam}`;
 
             return (
-              <section key={groupKey}>
-                {/* ── Заголовок группы (дата + трасса) ── */}
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(groupKey)}
-                  className="mb-3 flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-secondary/40 transition-colors"
-                >
-                  <Flag size={16} className="shrink-0 text-primary" />
-                  <h2 className="flex-1 font-display font-bold tracking-tight">{displayLabel}</h2>
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
-                    <CalendarClock size={12} /> {displayDate}
-                  </span>
-                  <Badge variant="secondary" className="font-mono text-xs">
-                    {totalSessions}{" "}
-                    {totalSessions === 1 ? "сессия" : totalSessions < 5 ? "сессии" : "сессий"}
+              <Link
+                key={session.id}
+                href={href}
+                data-testid={`row-session-${session.id}`}
+                className="grid cursor-pointer items-center border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                style={{ gridTemplateColumns: "160px 1fr 140px 110px 24px" }}
+                role="row"
+                aria-label={`${meta.label} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime)}`}
+              >
+                {/* Type badge (Issue #23) */}
+                <div role="cell">
+                  <Badge
+                    variant="outline"
+                    className={`inline-flex items-center gap-1 text-xs font-medium ${getSessionTypeBadgeClass(cat)}`}
+                  >
+                    {meta.icon}
+                    {meta.label}
                   </Badge>
-                  {isCollapsed
-                    ? <ChevronDown size={16} className="text-muted-foreground" />
-                    : <ChevronUp size={16} className="text-muted-foreground" />}
-                </button>
+                </div>
 
-                {/* ── Категории внутри группы ── */}
-                {!isCollapsed && (
-                  <div className="space-y-4 pl-5 border-l-2 border-border/40">
-                    {categories.map(([cat, catSessions]) => {
-                      const meta = CATEGORY_META[cat];
-                      const badgeClass = getSessionTypeBadgeClass(cat);
-                      const catKey = `${groupKey}::${cat}`;
-                      const isCatCol = isCatCollapsed(catKey);
+                {/* Track */}
+                <div className="truncate font-medium" role="cell">
+                  {trackDisplayLabel(session.trackName, session.course)}
+                </div>
 
-                      return (
-                        <div key={cat}>
-                          {/* Заголовок категории */}
-                          <button
-                            type="button"
-                            onClick={() => toggleCategory(groupKey, cat)}
-                            className="mb-2 flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-secondary/30 transition-colors"
-                          >
-                            <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badgeClass}`}>
-                              {meta.icon}
-                              {meta.label}
-                            </span>
-                            <span className="text-xs text-muted-foreground font-mono">
-                              ×{catSessions.length}
-                            </span>
-                            {isCatCol
-                              ? <ChevronDown size={14} className="text-muted-foreground" />
-                              : <ChevronUp size={14} className="text-muted-foreground" />}
-                          </button>
+                {/* Best lap */}
+                <div className="text-right font-data tabular-nums text-sm text-muted-foreground" role="cell">
+                  {bestLap ? formatLap(bestLap) : "—"}
+                </div>
 
-                          {/* Карточки сессий */}
-                          {!isCatCol && (
-                            <div className="grid gap-3 md:grid-cols-2">
-                              {catSessions.map((s) => {
-                                const playerResult = s.results.find((r) => r.isPlayer === 1);
-                                const bestLap = playerResult?.bestLapMs ?? null;
-                                const winner = s.results[0];
-                                return (
-                                  <Link
-                                    key={s.id}
-                                    href={
-                                      `/sessions/${s.id}` +
-                                      (activeFilter !== "Все"
-                                        ? `?from_filter=${encodeURIComponent(activeFilter)}`
-                                        : "")
-                                    }
-                                    data-testid={`link-session-${s.id}`}
-                                    className="group flex items-center justify-between rounded-md border border-border bg-card px-3 py-2 text-sm hover-elevate transition-colors"
-                                  >
-                                    <Card className="group h-full cursor-pointer p-4 transition-colors hover-elevate">
-                                      <div className="flex items-start justify-between gap-2">
-                                        <div className="min-w-0">
-                                          <p className="truncate text-sm text-muted-foreground">{s.event}</p>
-                                        </div>
-                                        <ChevronRight
-                                          size={18}
-                                          className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-                                        />
-                                      </div>
+                {/* Date */}
+                <div className="text-right text-sm text-muted-foreground" role="cell">
+                  {formatDate(session.dateTime)}
+                </div>
 
-                                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                                        <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${badgeClass}`}>
-                                          {meta.icon}
-                                          {s.sessionType.replace(/\s*\(.*\)/, "")}
-                                        </span>
-                                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                          <CalendarClock size={12} /> {formatDate(s.dateTime)}
-                                        </span>
-                                      </div>
-
-                                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-3 text-center">
-                                        <Stat icon={<Users size={13} />} label="Пилотов" value={String(s.driverCount)} />
-                                        <Stat label="Кругов" value={String(s.lapCount)} />
-                                        <Stat
-                                          label="Лучший круг"
-                                          value={winner?.bestLapMs ? formatLap(winner.bestLapMs) : "—"}
-                                          mono
-                                        />
-                                      </div>
-
-                                      {playerResult && (
-                                        <div className="mt-3 flex items-center justify-between rounded-md bg-primary/10 px-3 py-2 text-sm">
-                                          <span className="text-primary">Ваш результат</span>
-                                          <span className="font-data font-semibold tabular-nums text-primary">
-                                            P{playerResult.position} · {bestLap ? formatLap(bestLap) : "—"}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </Card>
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
+                {/* Chevron */}
+                <div className="flex justify-end text-muted-foreground/50" role="cell" aria-hidden="true">
+                  <ChevronRight size={15} />
+                </div>
+              </Link>
             );
           })}
         </div>
       )}
-    </div>
-  );
-}
-
-function Stat({
-  icon, label, value, mono,
-}: {
-  icon?: React.ReactNode;
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-center gap-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-        {icon} {label}
-      </div>
-      <div className={`mt-0.5 text-sm font-semibold ${mono ? "font-data tabular-nums" : ""}`}>
-        {value}
-      </div>
     </div>
   );
 }

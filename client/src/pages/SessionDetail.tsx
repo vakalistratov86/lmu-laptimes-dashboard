@@ -5,9 +5,9 @@ import { formatLap, formatSector, formatDelta } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Flag, CalendarClock, Medal, User, Fuel } from "lucide-react";
+import { ArrowLeft, Medal, User } from "lucide-react";
 import { DriverName } from "@/components/DriverName";
-import { getClassBadgeClass } from "@/lib/classStyles";
+import { getClassBadgeClass, getSessionTypeBadgeClass } from "@/lib/classStyles";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -18,11 +18,42 @@ function formatDate(iso: string): string {
   });
 }
 
+function normalizeType(raw: string) {
+  const s = raw.toLowerCase();
+  if (s.includes("гонка") || s.includes("race")) return "race";
+  if (s.includes("квалификация") || s.includes("qualify")) return "qualify";
+  if (s.includes("superpole")) return "superpole";
+  if (s.includes("прогрев") || s.includes("warmup")) return "warmup";
+  return "practice";
+}
+
+// ─── Loading skeleton ────────────────────────────────────────────────────────
+
+function DetailSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-64" />
+        <Skeleton className="h-4 w-40" />
+      </div>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <Skeleton className="h-10 w-full rounded-none" />
+        {[...Array(6)].map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full rounded-none border-t border-border/40" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function SessionDetail() {
   const [, params] = useRoute("/sessions/:id");
   const searchString = useSearch();
   const backFilter = new URLSearchParams(searchString).get("from_filter");
   const backHref = backFilter ? `/sessions?filter=${encodeURIComponent(backFilter)}` : "/sessions";
+
   const id = params ? Number(params.id) : undefined;
   const { data: session, isLoading } = useSession(id);
   const { data: laps } = useSessionLaps(id);
@@ -36,21 +67,31 @@ export default function SessionDetail() {
     return map;
   }, [laps]);
 
+  // Loading state (Issue #30)
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-40" />
-        <Skeleton className="h-72" />
+        <Link href={backHref} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft size={15} /> Все сессии
+        </Link>
+        <DetailSkeleton />
       </div>
     );
   }
 
+  // Not found fallback
   if (!session) {
     return (
       <div className="space-y-4">
-        <p className="text-muted-foreground">Сессия не найдена.</p>
-        <Link href={backHref} className="text-primary underline">Назад к сессиям</Link>
+        <Link href={backHref} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft size={15} /> Все сессии
+        </Link>
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-card p-12 text-center">
+          <p className="font-semibold text-muted-foreground">Сессия не найдена.</p>
+          <Link href={backHref} className="text-sm text-primary underline-offset-4 hover:underline">
+            Вернуться к списку сессий
+          </Link>
+        </div>
       </div>
     );
   }
@@ -60,52 +101,60 @@ export default function SessionDetail() {
     return min == null || r.bestLapMs < min ? r.bestLapMs : min;
   }, null);
 
-  // Заголовок: trackName + course если отличается
-  const courseLabel = session.course && session.course.toLowerCase() !== session.trackName.toLowerCase()
-    ? session.course
-    : null;
+  const courseLabel = session.course &&
+    session.course.toLowerCase() !== session.trackName.toLowerCase()
+    ? session.course : null;
+
+  const cat = normalizeType(session.sessionType);
 
   return (
     <div className="space-y-5">
+      {/* Back button (Issue #27) */}
       <Link
         href={backHref}
         data-testid="link-back"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft size={15} /> Все сессии
       </Link>
 
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Flag size={18} className="text-primary" />
-          <Badge variant="outline" className="bg-secondary/40">{session.sessionType}</Badge>
-          <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-session-title">
-            {session.trackName}
-            {courseLabel && (
-              <span className="ml-2 text-base font-normal text-muted-foreground">· {courseLabel}</span>
-            )}
-          </h1>
-          <span className="text-sm text-muted-foreground font-mono">
-            {formatDate(session.dateTime)}
-          </span>
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">{session.event}</p>
-        <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
-          <span>Пилотов: {session.driverCount}</span>
-          <span>Кругов засчитано: {session.lapCount}</span>
-          {session.gameVersion && <span>Версия игры: {session.gameVersion}</span>}
-        </div>
+      {/* Compact session header (Issue #27) */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <Badge
+          variant="outline"
+          className={`text-xs ${getSessionTypeBadgeClass(cat)}`}
+        >
+          {session.sessionType}
+        </Badge>
+        <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-session-title">
+          {session.trackName}
+          {courseLabel && (
+            <span className="ml-2 text-base font-normal text-muted-foreground">· {courseLabel}</span>
+          )}
+        </h1>
+        <span className="text-sm text-muted-foreground font-mono">
+          {formatDate(session.dateTime)}
+        </span>
       </div>
 
+      {/* Session meta */}
+      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+        <span>{session.event}</span>
+        <span>Пилотов: {session.driverCount}</span>
+        <span>Кругов: {session.lapCount}</span>
+        {session.gameVersion && <span>Версия: {session.gameVersion}</span>}
+      </div>
+
+      {/* Results table — primary content (Issues #27, #28) */}
       <Card className="overflow-hidden">
         <div className="border-b border-border bg-secondary/40 px-4 py-3">
-          <h2 className="font-semibold">Итоговые результаты</h2>
+          <h2 className="font-semibold text-sm">Итоговые результаты</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <th className="px-4 py-2.5">Поз.</th>
+                <th className="px-4 py-2.5 w-12">Поз.</th>
                 <th className="px-4 py-2.5">Пилот</th>
                 <th className="hidden px-4 py-2.5 sm:table-cell">Команда / машина</th>
                 <th className="px-4 py-2.5">Класс</th>
@@ -157,61 +206,68 @@ export default function SessionDetail() {
         </div>
       </Card>
 
+      {/* Per-driver laps — secondary section, demoted below main table (Issue #29) */}
       {lapsByDriver.size > 0 && (
-        <div className="space-y-4">
-          <h2 className="font-display text-lg font-bold tracking-tight">Круги по пилотам</h2>
-          {Array.from(lapsByDriver.entries()).map(([driverName, dlaps]) => {
-            const sorted = [...(dlaps ?? [])].sort((a, b) => a.lapMs - b.lapMs);
-            const best = sorted[0]?.lapMs;
-            const byNum = [...(dlaps ?? [])];
-            return (
-              <Card key={driverName} className="overflow-hidden">
-                <div className="flex items-center justify-between border-b border-border bg-secondary/30 px-4 py-2.5">
-                  <h3 className="font-semibold">{driverName}</h3>
-                  <span className="font-data text-xs tabular-nums text-muted-foreground">
-                    засчитано кругов: {byNum.length} · лучший {best ? formatLap(best) : "—"}
-                  </span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-                        <th className="px-4 py-2">Круг</th>
-                        <th className="px-4 py-2 text-right">Сектор 1</th>
-                        <th className="px-4 py-2 text-right">Сектор 2</th>
-                        <th className="px-4 py-2 text-right">Сектор 3</th>
-                        <th className="px-4 py-2 text-right">Время круга</th>
-                        <th className="px-4 py-2 text-right">Дельта</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {byNum.map((l, i) => (
-                        <tr key={l.id} className="border-b border-border/50 last:border-0 hover:bg-muted/40">
-                          <td className="px-4 py-2 font-data tabular-nums text-muted-foreground">{i + 1}</td>
-                          <td className="px-4 py-2 text-right font-data tabular-nums">{formatSector(l.sector1Ms)}</td>
-                          <td className="px-4 py-2 text-right font-data tabular-nums">{formatSector(l.sector2Ms)}</td>
-                          <td className="px-4 py-2 text-right font-data tabular-nums">{formatSector(l.sector3Ms)}</td>
-                          <td className={`px-4 py-2 text-right font-data tabular-nums ${l.lapMs === best ? "font-bold text-primary" : ""}`}>
-                            {formatLap(l.lapMs)}
-                          </td>
-                          <td className="px-4 py-2 text-right font-data text-xs tabular-nums text-muted-foreground">
-                            {l.lapMs === best ? "—" : formatDelta(l.lapMs, best ?? l.lapMs)}
-                          </td>
+        <details className="group">
+          <summary className="flex cursor-pointer select-none items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors py-1 list-none">
+            <span className="transition-transform group-open:rotate-90">▶</span>
+            Круги по пилотам
+            <span className="font-normal text-xs">({lapsByDriver.size} пилотов)</span>
+          </summary>
+
+          <div className="mt-4 space-y-4">
+            {Array.from(lapsByDriver.entries()).map(([driverName, dlaps]) => {
+              const sortedLaps = [...(dlaps ?? [])].sort((a, b) => a.lapMs - b.lapMs);
+              const best = sortedLaps[0]?.lapMs;
+              const byNum = [...(dlaps ?? [])];
+              return (
+                <Card key={driverName} className="overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-border bg-secondary/30 px-4 py-2.5">
+                    <h3 className="font-semibold text-sm">{driverName}</h3>
+                    <span className="font-data text-xs tabular-nums text-muted-foreground">
+                      {byNum.length} кругов · лучший {best ? formatLap(best) : "—"}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+                          <th className="px-4 py-2">Круг</th>
+                          <th className="px-4 py-2 text-right">Сектор 1</th>
+                          <th className="px-4 py-2 text-right">Сектор 2</th>
+                          <th className="px-4 py-2 text-right">Сектор 3</th>
+                          <th className="px-4 py-2 text-right">Время</th>
+                          <th className="px-4 py-2 text-right">Дельта</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+                      </thead>
+                      <tbody>
+                        {byNum.map((l, i) => (
+                          <tr key={l.id} className="border-b border-border/50 last:border-0 hover:bg-muted/40">
+                            <td className="px-4 py-2 font-data tabular-nums text-muted-foreground">{i + 1}</td>
+                            <td className="px-4 py-2 text-right font-data tabular-nums">{formatSector(l.sector1Ms)}</td>
+                            <td className="px-4 py-2 text-right font-data tabular-nums">{formatSector(l.sector2Ms)}</td>
+                            <td className="px-4 py-2 text-right font-data tabular-nums">{formatSector(l.sector3Ms)}</td>
+                            <td className={`px-4 py-2 text-right font-data tabular-nums ${l.lapMs === best ? "font-bold text-primary" : ""}`}>
+                              {formatLap(l.lapMs)}
+                            </td>
+                            <td className="px-4 py-2 text-right font-data text-xs tabular-nums text-muted-foreground">
+                              {l.lapMs === best ? "—" : formatDelta(l.lapMs, best ?? l.lapMs)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </details>
       )}
 
       {lapsByDriver.size === 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-card/50 p-4 text-sm text-muted-foreground">
-          <Fuel size={16} className="text-primary" />
-          В этой сессии нет засчитанных кругов с валидным временем (например, только out-lap или пит).
+          Данные по кругам недоступны для этой сессии.
         </div>
       )}
     </div>
