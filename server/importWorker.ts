@@ -137,15 +137,23 @@ async function processNext() {
       durationMs,
     });
   } catch (e) {
-    db.update(importJobs)
-      .set({ status: "failed", error: (e as Error).message, finishedAt: Date.now() })
-      .where(eq(importJobs.id, job.id))
-      .run();
+    // fix(#60): оборачиваем db.update в try/catch, чтобы сбой записи статуса
+    // не оставлял running=true навсегда и не вешал всю очередь
+    try {
+      db.update(importJobs)
+        .set({ status: "failed", error: (e as Error).message, finishedAt: Date.now() })
+        .where(eq(importJobs.id, job.id))
+        .run();
+    } catch (dbErr) {
+      console.error("[importWorker] Failed to update job status to failed:", dbErr);
+    }
     // #12 — лог ошибки импорта
     logImportFailed(job.id, e as Error);
+  } finally {
+    // fix(#60): setImmediate перенесён в finally — очередь продолжает работу
+    // при любом исходе (успех, ошибка импорта или ошибка записи статуса)
+    setImmediate(processNext);
   }
-
-  setImmediate(processNext);
 }
 
 interface ImportResult {
