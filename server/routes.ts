@@ -4,7 +4,7 @@ import { storage, type LapFilter, db } from "./storage";
 import { tracks, drivers, lapTimes, sessions, sessionResults } from '@shared/schema';
 import { eq, notInArray } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
-import { enqueueImport, getJobStatus } from "./importWorker";
+import { enqueueImport, getJobStatus, getJobErrors } from "./importWorker";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -54,14 +54,6 @@ export async function registerRoutes(
 
   /**
    * POST /api/import — async ingestion (#5)
-   *
-   * Принимает массив файлов, для каждого:
-   *   - вычисляет SHA-256 хэш (#6)
-   *   - если файл уже импортирован → 409 Conflict
-   *   - иначе ставит задачу в очередь → 202 Accepted { importId, status: 'queued' }
-   *
-   * Парсинг и запись в БД происходят асинхронно в importWorker,
-   * не блокируя HTTP event loop.
    */
   app.post("/api/import", (req, res) => {
     const files = req.body?.files;
@@ -108,9 +100,6 @@ export async function registerRoutes(
 
   /**
    * GET /api/import/:id/status — polling статуса задачи (#5)
-   *
-   * Возвращает текущий статус задачи импорта:
-   *   queued | processing | completed | failed
    */
   app.get("/api/import/:id/status", (req, res) => {
     const job = getJobStatus(req.params.id);
@@ -121,9 +110,30 @@ export async function registerRoutes(
       status: job.status,
       sessionId: job.sessionId ?? null,
       totalLaps: job.totalLaps ?? null,
+      validLaps: job.validLaps ?? null,
+      errorLaps: job.errorLaps ?? null,
       error: job.error ?? null,
       createdAt: job.createdAt,
       finishedAt: job.finishedAt ?? null,
+    });
+  });
+
+  /**
+   * GET /api/import/:id/errors — просмотр DLQ ошибок импорта (#8)
+   *
+   * Возвращает список невалидных записей для данного задания:
+   *   id, importJobId, rawPayload, errorCode, errorMessage, occurredAt
+   */
+  app.get("/api/import/:id/errors", (req, res) => {
+    const job = getJobStatus(req.params.id);
+    if (!job) return res.status(404).json({ message: "Задача не найдена" });
+    const errors = getJobErrors(req.params.id);
+    res.json({
+      importId: job.id,
+      fileName: job.fileName,
+      status: job.status,
+      totalErrors: errors.length,
+      errors,
     });
   });
 

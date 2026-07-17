@@ -80,9 +80,21 @@ export const importJobs = sqliteTable("import_jobs", {
   status: text("status").notNull().default("queued"), // queued | processing | completed | failed
   sessionId: integer("session_id"),                  // заполняется после успешного импорта
   totalLaps: integer("total_laps"),
+  validLaps: integer("valid_laps"),                  // #8: кол-во прошедших валидацию кругов
+  errorLaps: integer("error_laps"),                  // #8: кол-во записей в DLQ
   error: text("error"),                              // сообщение об ошибке при failed
   createdAt: integer("created_at").notNull(),        // Unix ms
   finishedAt: integer("finished_at"),                // Unix ms
+});
+
+// Dead Letter Queue — битые/невалидные записи импорта (#8)
+export const importErrors = sqliteTable("import_errors", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  importJobId: text("import_job_id").notNull(),
+  rawPayload: text("raw_payload").notNull(),          // исходная строка/запись (JSON)
+  errorCode: text("error_code").notNull(),            // VALIDATION_ERROR | PARSE_ERROR | SEMANTIC_ERROR
+  errorMessage: text("error_message").notNull(),
+  occurredAt: integer("occurred_at").notNull(),       // Unix ms
 });
 
 // Результат конкретного пилота в сессии
@@ -186,6 +198,7 @@ export const insertSessionIncidentSchema = createInsertSchema(sessionIncidents).
 export const insertSessionSectorBestSchema = createInsertSchema(sessionSectorBests).omit({ id: true });
 export const insertSessionTrackLimitsSchema = createInsertSchema(sessionTrackLimits).omit({ id: true });
 export const insertImportJobSchema = createInsertSchema(importJobs).omit({ id: true });
+export const insertImportErrorSchema = createInsertSchema(importErrors).omit({ id: true });
 
 export type InsertTrack = z.infer<typeof insertTrackSchema>;
 export type Track = typeof tracks.$inferSelect;
@@ -207,6 +220,8 @@ export type InsertSessionTrackLimits = z.infer<typeof insertSessionTrackLimitsSc
 export type SessionTrackLimits = typeof sessionTrackLimits.$inferSelect;
 export type InsertImportJob = z.infer<typeof insertImportJobSchema>;
 export type ImportJob = typeof importJobs.$inferSelect;
+export type InsertImportError = z.infer<typeof insertImportErrorSchema>;
+export type ImportError = typeof importErrors.$inferSelect;
 
 export type DriverEnriched = Driver & {
   isPlayer: number | null;

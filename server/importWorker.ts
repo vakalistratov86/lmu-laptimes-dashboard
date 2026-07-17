@@ -4,19 +4,27 @@
  * Очередь задач реализована через setImmediate (zero-dependency, no Redis needed).
  * Каждая задача выполняется вне HTTP request-response цикла.
  * Batch insert выполняется в db.transaction() чанками по 500 записей (#11).
+ *
+ * Pipeline: parse → validate (#9) → normalize (#10) → persist / DLQ (#8)
+ * Импорт считается успешным, если валидных круга >= VALID_LAP_THRESHOLD_PCT% (#8).
  */
 import crypto from "node:crypto";
 import { db } from "./storage";
 import {
-  importJobs, sessions, lapTimes, sessionResults,
+  importJobs, importErrors, sessions, lapTimes, sessionResults,
   sessionLaps, sessionIncidents, sessionSectorBests, sessionTrackLimits,
   tracks, drivers,
 } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { parseRaceResults, type ParsedSession } from "./logParser";
+import { validateLapTime } from "@shared/validators";
+import { normalizeLapTime, normalizeDriverNameForStorage, normalizeTrackName, toMilliseconds } from "./normalizer";
 import type { Track, Driver } from "@shared/schema";
 
 export const CHUNK_SIZE = 500;
+
+/** Минимальный процент валидных кругов для успешного импорта (#8) */
+export const VALID_LAP_THRESHOLD_PCT = 80;
 
 export type JobStatus = "queued" | "processing" | "completed" | "failed";
 
@@ -83,6 +91,11 @@ export function getJobStatus(id: string) {
   return db.select().from(importJobs).where(eq(importJobs.id, id)).get();
 }
 
+/** Получить ошибки DLQ для задачи (#8) */
+export function getJobErrors(jobId: string) {
+  return db.select().from(importErrors).where(eq(importErrors.importJobId, jobId)).all();
+}
+
 function scheduleWorker() {
   if (running) return;
   setImmediate(processNext);
@@ -99,30 +112,35 @@ async function processNext() {
     .run();
 
   try {
-    const sessionId = await runImport(job);
+    const { sessionId, totalLaps, validLaps, errorLaps } = await runImport(job);
     db.update(importJobs)
-      .set({ status: "completed", sessionId, finishedAt: Date.now() })
+      .set({ status: "completed", sessionId, totalLaps, validLaps, errorLaps, finishedAt: Date.now() })
       .where(eq(importJobs.id, job.id))
       .run();
   } catch (e) {
-    // Atomic rollback already happened inside runImport's transaction.
-    // Record error in import_jobs.
     db.update(importJobs)
       .set({ status: "failed", error: (e as Error).message, finishedAt: Date.now() })
       .where(eq(importJobs.id, job.id))
       .run();
   }
 
-  // Process next job
   setImmediate(processNext);
+}
+
+interface ImportResult {
+  sessionId: number;
+  totalLaps: number;
+  validLaps: number;
+  errorLaps: number;
 }
 
 /**
  * Парсинг и сохранение сессии.
  * Все операции записи обёрнуты в db.transaction() (#11).
  * Batch insert выполняется чанками по CHUNK_SIZE записей (#11).
+ * Невалидные круги записываются в import_errors (DLQ) (#8).
  */
-async function runImport(job: ImportJobPayload): Promise<number> {
+async function runImport(job: ImportJobPayload): Promise<ImportResult> {
   let parsed: ParsedSession | null;
   try {
     parsed = parseRaceResults(job.content);
@@ -179,11 +197,14 @@ async function runImport(job: ImportJobPayload): Promise<number> {
     const driverIdByName = new Map<string, number>();
     const lapTimeRows: any[] = [];
     const sessionLapRows: any[] = [];
-    let totalLaps = 0;
+    const dlqRows: any[] = [];
+    let totalLapsCount = 0;
+    let validLapsCount = 0;
 
     for (const d of parsed!.drivers) {
-      const driver = findOrCreateDriver(tx, d.name, d.teamName);
-      driverIdByName.set(d.name.toLowerCase(), driver.id);
+      const normalizedName = normalizeDriverNameForStorage(d.name);
+      const driver = findOrCreateDriver(tx, normalizedName, d.teamName);
+      driverIdByName.set(normalizedName.toLowerCase(), driver.id);
       const cls = normalizeClass(d.carClass);
 
       const sr = tx.insert(sessionResults).values({
@@ -210,6 +231,8 @@ async function runImport(job: ImportJobPayload): Promise<number> {
       }).returning().get();
 
       for (const lap of d.lapList) {
+        totalLapsCount++;
+
         const s1 = lap.s1Ms;
         const s2 = lap.s2Ms;
         const s3 = lap.s3Ms != null
@@ -230,16 +253,46 @@ async function runImport(job: ImportJobPayload): Promise<number> {
           isPitLap: lap.isPit ? 1 : 0,
         });
 
+        // Validation + Normalization pipeline (#8, #9, #10)
         if (lap.lapMs != null && !lap.isPit) {
-          const ltS1 = s1 ?? 0;
-          const ltS2 = s2 ?? 0;
-          const ltS3 = s3 ?? Math.max(0, lap.lapMs - ltS1 - ltS2);
+          const rawForValidation = {
+            driverName: d.name,
+            trackName: parsed!.venue,
+            lapTimeMs: toMilliseconds(lap.lapMs),
+            sessionDate: parsed!.dateTimeIso,
+            carClass: cls,
+            sector1Ms: s1 != null ? toMilliseconds(s1) : undefined,
+            sector2Ms: s2 != null ? toMilliseconds(s2) : undefined,
+            sector3Ms: s3 != null ? toMilliseconds(s3) : undefined,
+          };
+
+          const validation = validateLapTime(rawForValidation);
+
+          if (!validation.ok) {
+            // Записываем в DLQ (#8)
+            dlqRows.push({
+              importJobId: job.id,
+              rawPayload: JSON.stringify({ driverName: d.name, lapNum: lap.num, lapMs: lap.lapMs }),
+              errorCode: validation.errorCode,
+              errorMessage: validation.errorMessage,
+              occurredAt: Date.now(),
+            });
+            continue;
+          }
+
+          // Нормализация (#10)
+          const normalized = normalizeLapTime(validation.data);
+
+          const ltS1 = normalized.sector1Ms ?? 0;
+          const ltS2 = normalized.sector2Ms ?? 0;
+          const ltS3 = normalized.sector3Ms ?? Math.max(0, normalized.lapTimeMs - ltS1 - ltS2);
+
           lapTimeRows.push({
             trackId: track.id,
             driverId: driver.id,
             carClass: cls,
             car: d.carType,
-            lapMs: lap.lapMs,
+            lapMs: normalized.lapTimeMs,
             sector1Ms: ltS1,
             sector2Ms: ltS2,
             sector3Ms: ltS3,
@@ -249,7 +302,7 @@ async function runImport(job: ImportJobPayload): Promise<number> {
             source: "import",
             sessionId: session.id,
           });
-          totalLaps++;
+          validLapsCount++;
         }
       }
     }
@@ -264,12 +317,30 @@ async function runImport(job: ImportJobPayload): Promise<number> {
       tx.insert(lapTimes).values(lapTimeRows.slice(i, i + CHUNK_SIZE)).run();
     }
 
+    // Batch insert DLQ записей (#8)
+    for (let i = 0; i < dlqRows.length; i += CHUNK_SIZE) {
+      tx.insert(importErrors).values(dlqRows.slice(i, i + CHUNK_SIZE)).run();
+    }
+
+    // Проверяем порог валидных кругов (#8)
+    const nonPitTotal = lapTimeRows.length + dlqRows.length;
+    if (nonPitTotal > 0) {
+      const validPct = (validLapsCount / nonPitTotal) * 100;
+      if (validPct < VALID_LAP_THRESHOLD_PCT) {
+        throw new Error(
+          `Слишком много невалидных кругов: ${dlqRows.length} из ${nonPitTotal} ` +
+          `(${validPct.toFixed(1)}% валидных, требуется >= ${VALID_LAP_THRESHOLD_PCT}%)`
+        );
+      }
+    }
+
     // Инциденты
     for (const inc of parsed!.incidents) {
-      const driverId = driverIdByName.get(inc.driverName.toLowerCase());
+      const normalizedIncDriver = inc.driverName.trim().toLowerCase();
+      const driverId = driverIdByName.get(normalizedIncDriver);
       if (driverId == null) continue;
       const targetDriverId = inc.targetDriverName
-        ? (driverIdByName.get(inc.targetDriverName.toLowerCase()) ?? null)
+        ? (driverIdByName.get(inc.targetDriverName.trim().toLowerCase()) ?? null)
         : null;
       tx.insert(sessionIncidents).values({
         sessionId: session.id,
@@ -283,7 +354,8 @@ async function runImport(job: ImportJobPayload): Promise<number> {
 
     // Лучшие времена секторов
     for (const sb of parsed!.sectorBests) {
-      const driverId = driverIdByName.get(sb.driverName.toLowerCase());
+      const normalizedSbDriver = sb.driverName.trim().toLowerCase();
+      const driverId = driverIdByName.get(normalizedSbDriver);
       if (driverId == null) continue;
       tx.insert(sessionSectorBests).values({
         sessionId: session.id,
@@ -297,7 +369,8 @@ async function runImport(job: ImportJobPayload): Promise<number> {
 
     // Нарушения трассы
     for (const tl of parsed!.trackLimits) {
-      const driverId = driverIdByName.get(tl.driverName.toLowerCase());
+      const normalizedTlDriver = tl.driverName.trim().toLowerCase();
+      const driverId = driverIdByName.get(normalizedTlDriver);
       if (driverId == null) continue;
       tx.insert(sessionTrackLimits).values({
         sessionId: session.id,
@@ -313,24 +386,18 @@ async function runImport(job: ImportJobPayload): Promise<number> {
 
     // Атомарное обновление lapCount внутри транзакции (#11)
     tx.update(sessions)
-      .set({ lapCount: totalLaps })
+      .set({ lapCount: validLapsCount })
       .where(eq(sessions.id, session.id))
       .run();
 
-    // Обновляем totalLaps в import_jobs внутри той же транзакции
-    tx.update(importJobs)
-      .set({ totalLaps })
-      .where(eq(importJobs.id, job.id))
-      .run();
-
-    return session.id;
+    return { sessionId: session.id, totalLaps: totalLapsCount, validLaps: validLapsCount, errorLaps: dlqRows.length };
   });
 
   return result;
 }
 
 // ──────────────────────────────────────────────
-// Helpers (дублируют логику из storage.ts, но работают с tx)
+// Helpers
 // ──────────────────────────────────────────────
 
 function findOrCreateTrack(tx: any, parsed: ParsedSession): Track {
