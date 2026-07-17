@@ -54,7 +54,8 @@ const STATIC_EVENTS_2026: Omit<SpecialEvent, "fetchedAt" | "sourceUrl">[] = [
 // Кэш в памяти
 let cache: ParsedRaw | null = null;
 let cacheExpiry = 0;
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 часов
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;       // 6 часов — для успешного ответа
+const CACHE_TTL_ERROR_MS = 5 * 60 * 1000;       // 5 минут — после сетевой ошибки (#52)
 
 export async function getSpecialEvents(): Promise<ParsedRaw> {
   const now = Date.now();
@@ -64,16 +65,30 @@ export async function getSpecialEvents(): Promise<ParsedRaw> {
     cache = await fetchAndParse();
     cacheExpiry = now + CACHE_TTL_MS;
   } catch {
-    // При любой ошибке сети возвращаем статические данные
+    // При любой ошибке сети возвращаем статические данные,
+    // но выставляем короткий TTL чтобы система быстро восстановилась (#52)
     const fetchedAt = new Date().toISOString();
     cache = {
       events: STATIC_EVENTS_2026.map((e) => ({ ...e, fetchedAt, sourceUrl: SOURCE_URL })),
       fetchedAt,
       sourceUrl: SOURCE_URL,
     };
-    cacheExpiry = now + CACHE_TTL_MS;
+    cacheExpiry = now + CACHE_TTL_ERROR_MS;
   }
   return cache!;
+}
+
+/**
+ * Определяет год для события по номеру месяца.
+ * Если месяц события меньше текущего месяца — считаем следующий год
+ * (событие ещё впереди, просто в начале следующего года). (#53)
+ */
+function resolveYear(month: number): number {
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1; // 1-based
+  const currentYear = now.getFullYear();
+  // Если месяц уже прошёл в текущем году — это следующий год
+  return month < currentMonth ? currentYear + 1 : currentYear;
 }
 
 async function fetchAndParse(): Promise<ParsedRaw> {
@@ -90,7 +105,6 @@ async function fetchAndParse(): Promise<ParsedRaw> {
   const lineRe = /w\/c\s+(\d+\/(\d+))\s*[–\-]\s*(\d+)\s*Hours\s+([^–\-<\n]+?)\s*[–\-]\s*([^<\n]+)/gi;
   const events: SpecialEvent[] = [];
   let match;
-  const currentYear = new Date().getFullYear();
 
   while ((match = lineRe.exec(html)) !== null) {
     const [, weekOf, monthStr, durationStr, trackRaw, classesRaw] = match;
@@ -101,7 +115,9 @@ async function fetchAndParse(): Promise<ParsedRaw> {
     const month = parseInt(monthStr, 10);
     const dayStr = weekOf.split("/")[0];
     const day = parseInt(dayStr, 10);
-    const dateIso = `${currentYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    // Используем resolveYear() для корректного определения года (#53)
+    const year = resolveYear(month);
+    const dateIso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const id = dateIso;
     const isFeatured = duration >= 24 || /24\s*h/i.test(trackRaw);
 
