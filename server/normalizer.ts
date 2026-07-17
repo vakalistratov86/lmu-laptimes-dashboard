@@ -125,13 +125,12 @@ export function toMilliseconds(value: number): number {
 
 /**
  * Приводит дату/строку к UTC ISO-строке.
- * Если строка не содержит timezone info — трактуется как UTC.
+ * fix(#75): бросает ошибку при невалидной дате вместо silent fallback.
  */
 export function toUTCIsoString(input: string | Date): string {
   const d = input instanceof Date ? input : new Date(input);
   if (isNaN(d.getTime())) {
-    // Fallback: вернуть как есть
-    return String(input);
+    throw new Error(`Невалидная дата: "${String(input)}"`);
   }
   return d.toISOString();
 }

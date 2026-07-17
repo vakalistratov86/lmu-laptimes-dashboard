@@ -79,16 +79,17 @@ export async function getSpecialEvents(): Promise<ParsedRaw> {
 }
 
 /**
- * Определяет год для события по номеру месяца.
- * Если месяц события меньше текущего месяца — считаем следующий год
- * (событие ещё впереди, просто в начале следующего года). (#53)
+ * fix(#77): Определяет год для события через скользящее 12-месячное окно.
+ * Если кандидатная дата в текущем году уже прошла — берём следующий год.
+ * Это корректно обрабатывает граничные месяцы (декабрь/январь).
  */
 function resolveYear(month: number): number {
   const now = new Date();
-  const currentMonth = now.getMonth() + 1; // 1-based
-  const currentYear = now.getFullYear();
-  // Если месяц уже прошёл в текущем году — это следующий год
-  return month < currentMonth ? currentYear + 1 : currentYear;
+  // Создаём дату события в текущем году (1-й день месяца)
+  const candidate = new Date(now.getFullYear(), month - 1, 1);
+  // Если событие уже прошло в текущем году — берём следующий год
+  if (candidate < now) return now.getFullYear() + 1;
+  return now.getFullYear();
 }
 
 async function fetchAndParse(): Promise<ParsedRaw> {
