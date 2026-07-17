@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from 'node:http';
 import { storage, type LapFilter, db } from "./storage";
 import { tracks, drivers, lapTimes, sessions, sessionResults } from '@shared/schema';
@@ -6,32 +6,43 @@ import { eq, notInArray } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
 import { enqueueImport, getJobStatus, getJobErrors } from "./importWorker";
 
+/**
+ * Wraps an async route handler so that any rejected Promise is forwarded
+ * to Express's next(err) — required in Express 4 which does NOT catch
+ * unhandled rejections automatically (fixed only in Express 5).
+ * Fixes issue #65.
+ */
+const asyncRoute =
+  (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) =>
+  (req: Request, res: Response, next: NextFunction) =>
+    fn(req, res, next).catch(next);
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  app.get("/api/tracks", async (_req, res) => {
+  app.get("/api/tracks", asyncRoute(async (_req, res) => {
     res.json(await storage.getTracks());
-  });
+  }));
 
-  app.get("/api/tracks/:id", async (req, res) => {
+  app.get("/api/tracks/:id", asyncRoute(async (req, res) => {
     const track = await storage.getTrack(Number(req.params.id));
     if (!track) return res.status(404).json({ message: "Трасса не найдена" });
     res.json(track);
-  });
+  }));
 
-  app.get("/api/drivers", async (_req, res) => {
+  app.get("/api/drivers", asyncRoute(async (_req, res) => {
     res.json(await storage.getDrivers());
-  });
+  }));
 
-  app.get("/api/drivers/:id", async (req, res) => {
+  app.get("/api/drivers/:id", asyncRoute(async (req, res) => {
     const driver = await storage.getDriver(Number(req.params.id));
     if (!driver) return res.status(404).json({ message: "Пилот не найден" });
     res.json(driver);
-  });
+  }));
 
-  app.get("/api/laps", async (req, res) => {
+  app.get("/api/laps", asyncRoute(async (req, res) => {
     const filter: LapFilter = {};
     if (req.query.trackId) filter.trackId = Number(req.query.trackId);
     if (req.query.driverId) filter.driverId = Number(req.query.driverId);
@@ -40,17 +51,17 @@ export async function registerRoutes(
     if (req.query.source) filter.source = String(req.query.source);
     if (req.query.sessionId) filter.sessionId = Number(req.query.sessionId);
     res.json(await storage.getLaps(filter));
-  });
+  }));
 
-  app.get("/api/sessions", async (_req, res) => {
+  app.get("/api/sessions", asyncRoute(async (_req, res) => {
     res.json(await storage.getSessions());
-  });
+  }));
 
-  app.get("/api/sessions/:id", async (req, res) => {
+  app.get("/api/sessions/:id", asyncRoute(async (req, res) => {
     const session = await storage.getSession(Number(req.params.id));
     if (!session) return res.status(404).json({ message: "Сессия не найдена" });
     res.json(session);
-  });
+  }));
 
   /**
    * POST /api/import — async ingestion (#5)
@@ -163,24 +174,16 @@ export async function registerRoutes(
   });
 
   // ── Special Events ──────────────────────────────────────────────
-  app.get("/api/special-events", async (_req, res) => {
-    try {
-      const data = await getSpecialEvents();
-      res.json(data);
-    } catch (e) {
-      res.status(500).json({ message: (e as Error).message });
-    }
-  });
+  app.get("/api/special-events", asyncRoute(async (_req, res) => {
+    const data = await getSpecialEvents();
+    res.json(data);
+  }));
 
-  app.post("/api/special-events/refresh", async (_req, res) => {
+  app.post("/api/special-events/refresh", asyncRoute(async (_req, res) => {
     invalidateCache();
-    try {
-      const data = await getSpecialEvents();
-      res.json({ ok: true, fetchedAt: data.fetchedAt, count: data.events.length });
-    } catch (e) {
-      res.status(500).json({ ok: false, message: (e as Error).message });
-    }
-  });
+    const data = await getSpecialEvents();
+    res.json({ ok: true, fetchedAt: data.fetchedAt, count: data.events.length });
+  }));
 
   return httpServer;
 }
