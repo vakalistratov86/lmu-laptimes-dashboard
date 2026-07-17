@@ -86,6 +86,8 @@ export class DatabaseStorage implements IStorage {
     if (filter.conditions) conditions.push(eq(lapTimes.conditions, filter.conditions));
     if (filter.source) conditions.push(eq(lapTimes.source, filter.source));
     if (filter.sessionId) conditions.push(eq(lapTimes.sessionId, filter.sessionId));
+    // #54 — фильтр по sessionCourse переносим в SQL WHERE, а не в post-process
+    if (filter.sessionCourse) conditions.push(eq(sessions.course, filter.sessionCourse));
 
     const rows = conditions.length
       ? db
@@ -109,7 +111,7 @@ export class DatabaseStorage implements IStorage {
       isPlayerMap.set(`${sr.sessionId}:${sr.driverId}`, sr.isPlayer);
     }
 
-    const enriched = rows.map(({ lap: r, sessionCourse }) => {
+    return rows.map(({ lap: r, sessionCourse }) => {
       const isPlayer = r.sessionId != null
         ? (isPlayerMap.get(`${r.sessionId}:${r.driverId}`) ?? null)
         : null;
@@ -122,11 +124,6 @@ export class DatabaseStorage implements IStorage {
         sessionCourse: sessionCourse ?? null,
       } satisfies LapTimeEnriched;
     });
-
-    if (filter.sessionCourse) {
-      return enriched.filter((r) => r.sessionCourse === filter.sessionCourse);
-    }
-    return enriched;
   }
 
   async getSessions(): Promise<SessionEnriched[]> {
@@ -417,7 +414,49 @@ function canonicalTrackName(venue: string): { name: string; country: string; tur
   return { name: venue, country: "—", turns: 0 };
 }
 
-function guessCountry(_name: string): string {
+// #55 — эвристика страны: сначала по команде, потом по суффиксу фамилии
+function guessCountry(name: string): string {
+  // Кириллическое имя → Россия/СНГ по умолчанию
+  if (/[а-яёА-ЯЁ]/.test(name)) return "RU";
+
+  const lower = name.toLowerCase();
+
+  // Типичные японские фамилии / имена
+  const jpSuffixes = ["moto", "hiko", "yuki", "taro", "suke", "nori", "hide", "kazu"];
+  const jpNames = ["tanaka", "suzuki", "yamamoto", "nakamura", "kobayashi", "sato", "ito",
+                   "kato", "watanabe", "yamada", "hayashi", "matsumoto", "inoue", "kimura",
+                   "ogawa", "fujita", "hashimoto", "ishikawa", "nakanishi", "okamoto"];
+  if (jpNames.some((n) => lower.includes(n))) return "JP";
+  if (jpSuffixes.some((s) => lower.endsWith(s))) return "JP";
+
+  // Типичные немецкие фамилии
+  const deSuffixes = ["mann", "ner", "ger", "berger", "schneider", "bauer", "müller", "muller",
+                      "wagner", "hoffmann", "schulz", "schwarz", "braun", "koch", "richter"];
+  if (deSuffixes.some((s) => lower.includes(s))) return "DE";
+
+  // Французские фамилии
+  const frNames = ["blanc", "dupont", "martin", "bernard", "thomas", "petit", "robert",
+                   "richard", "durand", "moreau", "leroy", "simon", "laurent", "michel",
+                   "garcia", "david", "fontaine", "rousseau", "vincent", "fournier"];
+  if (frNames.some((n) => lower.includes(n))) return "FR";
+
+  // Итальянские
+  const itSuffixes = ["rossi", "russo", "ferrari", "bianchi", "ricci", "romano", "marino",
+                      "colombo", "conti", "esposito", "de luca", "de santis", "fontana",
+                      "mancini", "rinaldi", "lombardi", "barbieri", "cattaneo"];
+  if (itSuffixes.some((s) => lower.includes(s))) return "IT";
+
+  // Испанские / португальские
+  const esSuffixes = ["rodriguez", "garcia", "martinez", "fernandez", "lopez", "gonzalez",
+                      "perez", "sanchez", "ramirez", "torres", "flores", "diaz", "reyes",
+                      "morales", "gutierrez", "vargas", "castillo"];
+  if (esSuffixes.some((s) => lower.includes(s))) return "ES";
+
+  // Британские / англоязычные по именам
+  const gbNames = ["smith", "jones", "williams", "brown", "wilson", "taylor", "davies",
+                   "evans", "thomas", "johnson", "white", "martin", "carter", "walker"];
+  if (gbNames.some((n) => lower.includes(n))) return "GB";
+
   return "—";
 }
 
