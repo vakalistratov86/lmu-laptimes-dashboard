@@ -78,13 +78,14 @@ export class DatabaseStorage implements IStorage {
   }
   async getLaps(filter: LapFilter = {}): Promise<LapTimeEnriched[]> {
     const conditions = [];
-    if (filter.trackId) conditions.push(eq(lapTimes.trackId, filter.trackId));
-    if (filter.driverId) conditions.push(eq(lapTimes.driverId, filter.driverId));
-    if (filter.carClass) conditions.push(eq(lapTimes.carClass, filter.carClass));
-    if (filter.conditions) conditions.push(eq(lapTimes.conditions, filter.conditions));
-    if (filter.source) conditions.push(eq(lapTimes.source, filter.source));
-    if (filter.sessionId) conditions.push(eq(lapTimes.sessionId, filter.sessionId));
-    if (filter.sessionCourse) conditions.push(eq(sessions.course, filter.sessionCourse));
+    // fix(#73): use != null to correctly handle numeric IDs equal to 0
+    if (filter.trackId   != null) conditions.push(eq(lapTimes.trackId,   filter.trackId));
+    if (filter.driverId  != null) conditions.push(eq(lapTimes.driverId,  filter.driverId));
+    if (filter.carClass)          conditions.push(eq(lapTimes.carClass,  filter.carClass));
+    if (filter.conditions)        conditions.push(eq(lapTimes.conditions, filter.conditions));
+    if (filter.source)            conditions.push(eq(lapTimes.source,    filter.source));
+    if (filter.sessionId != null) conditions.push(eq(lapTimes.sessionId, filter.sessionId));
+    if (filter.sessionCourse)     conditions.push(eq(sessions.course,    filter.sessionCourse));
 
     const rows = conditions.length
       ? db
