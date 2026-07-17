@@ -15,8 +15,14 @@ export interface ParsedDriver {
   isPlayer: boolean;
   position: number;
   classPosition: number;
+  lapRankIncludingDiscos: number | null; // #48
   carClass: string;
   carType: string;
+  vehFile: string | null;               // #48
+  vehName: string | null;               // #48
+  category: string | null;              // #48
+  controlAndAids: string | null;        // #48
+  connected: number | null;             // #48 (1/0)
   teamName: string;
   carNumber: string | null;
   laps: number;
@@ -26,20 +32,77 @@ export interface ParsedDriver {
   lapList: ParsedLap[];
 }
 
+// #49 — инциденты из Stream
+export interface ParsedIncident {
+  driverName: string;
+  targetDriverName: string | null;
+  elapsedTimeSec: number;
+  severity: number;
+  isImmovable: boolean;
+}
+
+// #49 — лучшие времена по секторам из Stream
+export interface ParsedSectorBest {
+  driverName: string;
+  carClass: string;
+  sector: number;           // 1, 2 или 3
+  elapsedTimeSec: number;
+  lapNum: number | null;
+}
+
+// #49 — нарушения трассы из Stream
+export interface ParsedTrackLimit {
+  driverName: string;
+  lapNum: number;
+  elapsedTimeSec: number;
+  warningPoints: number | null;
+  currentPoints: number | null;
+  resolution: number | null;
+  decision: string | null;
+}
+
 export interface ParsedSession {
   venue: string;
-  course: string | null;  // TrackCourse из XML
+  course: string | null;        // TrackCourse из XML
   event: string;
   sessionType: string;
-  trackLengthM: number | null;
+  trackLengthM: number | null;  // #50
   gameVersion: string | null;
-  dateTimeIso: string; // ISO 8601
+  dateTimeIso: string;          // ISO 8601
+  dateTimeUnix: number | null;  // #48 — DateTime (Unix секунды)
+  // #48 — настройки сессии
+  setting: string | null;
+  raceLaps: number | null;
+  raceTimeMin: number | null;
+  mechFailRate: number | null;
+  damageMult: number | null;
+  fuelMult: number | null;
+  tireMult: number | null;
+  vehiclesAllowed: string | null;
+  parcFerme: number | null;
+  fixedSetups: number | null;
+  freeSettings: number | null;
+  fixedUpgrades: number | null;
+  tireWarmers: number | null;
+  dedicated: number | null;
+  sessionDurationMin: number | null;
+  sessionMaxLaps: number | null;
+  mostLapsCompleted: number | null;
   drivers: ParsedDriver[];
+  // #49 — данные из Stream
+  incidents: ParsedIncident[];
+  sectorBests: ParsedSectorBest[];
+  trackLimits: ParsedTrackLimit[];
 }
 
 function tagValue(xml: string, tag: string): string | null {
   const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
   return m ? m[1].trim() : null;
+}
+
+function attrValue(attrs: string, name: string): string | null {
+  const m = attrs.match(new RegExp(`${name}="([^"]*)"`));
+  return m ? m[1] : null;
 }
 
 // Секунды (строка вида "101.9073") -> целые миллисекунды. Возвращает null для служебных значений.
@@ -52,6 +115,18 @@ function secToMs(v: string | null | undefined): number | null {
   return Math.round(num * 1000);
 }
 
+function toInt(v: string | null | undefined): number | null {
+  if (v == null) return null;
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toFloat(v: string | null | undefined): number | null {
+  if (v == null) return null;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 function parseDriverBlock(block: string): ParsedDriver | null {
   const name = tagValue(block, "Name");
   if (!name) return null;
@@ -59,8 +134,15 @@ function parseDriverBlock(block: string): ParsedDriver | null {
   const isPlayer = tagValue(block, "isPlayer") === "1";
   const position = parseInt(tagValue(block, "Position") ?? "0", 10) || 0;
   const classPosition = parseInt(tagValue(block, "ClassPosition") ?? "0", 10) || 0;
+  const lapRankIncludingDiscos = toInt(tagValue(block, "LapRankIncludingDiscos")); // #48
   const carClass = tagValue(block, "CarClass") ?? "—";
   const carType = tagValue(block, "CarType") ?? tagValue(block, "VehName") ?? "—";
+  const vehFile = tagValue(block, "VehFile");                                      // #48
+  const vehName = tagValue(block, "VehName");                                      // #48
+  const category = tagValue(block, "Category");                                    // #48
+  const controlAndAids = tagValue(block, "ControlAndAids");                        // #48
+  const connectedStr = tagValue(block, "Connected");                               // #48
+  const connected = connectedStr != null ? (connectedStr === "1" ? 1 : 0) : null;
   const teamName = tagValue(block, "TeamName") ?? "—";
   const carNumber = tagValue(block, "CarNumber");
   const laps = parseInt(tagValue(block, "Laps") ?? "0", 10) || 0;
@@ -75,10 +157,7 @@ function parseDriverBlock(block: string): ParsedDriver | null {
   while ((lm = lapRe.exec(block)) !== null) {
     const attrs = lm[1];
     const inner = lm[2];
-    const attr = (a: string): string | null => {
-      const mm = attrs.match(new RegExp(`${a}="([^"]*)"`));
-      return mm ? mm[1] : null;
-    };
+    const attr = (a: string): string | null => attrValue(attrs, a);
     const num = parseInt(attr("num") ?? "0", 10) || 0;
     lapList.push({
       num,
@@ -95,8 +174,14 @@ function parseDriverBlock(block: string): ParsedDriver | null {
     isPlayer,
     position,
     classPosition,
+    lapRankIncludingDiscos,
     carClass,
     carType,
+    vehFile,
+    vehName,
+    category,
+    controlAndAids,
+    connected,
     teamName,
     carNumber,
     laps,
@@ -105,6 +190,76 @@ function parseDriverBlock(block: string): ParsedDriver | null {
     finishStatus,
     lapList,
   };
+}
+
+// #49 — парсинг Stream-блока
+function parseStream(
+  streamXml: string,
+  driverNameByBlock?: (block: string) => string | null,
+): {
+  incidents: ParsedIncident[];
+  sectorBests: ParsedSectorBest[];
+  trackLimits: ParsedTrackLimit[];
+} {
+  const incidents: ParsedIncident[] = [];
+  const sectorBests: ParsedSectorBest[] = [];
+  const trackLimits: ParsedTrackLimit[] = [];
+
+  // --- Incidents ---
+  // <Incident et="..." severity="..."><Name>DriverName</Name>...<Name>TargetName</Name></Incident>
+  // or <Incident et="..." severity="..."><Name>DriverName</Name>...<Immovable>...</Immovable></Incident>
+  const incidentRe = /<Incident\b([^>]*)>([\s\S]*?)<\/Incident>/g;
+  let im: RegExpExecArray | null;
+  while ((im = incidentRe.exec(streamXml)) !== null) {
+    const attrs = im[1];
+    const inner = im[2];
+    const et = toFloat(attrValue(attrs, "et")) ?? 0;
+    const severityStr = inner.match(/\(([\d.]+)\)/);
+    const severity = severityStr ? parseFloat(severityStr[1]) : 0;
+    const names = [...inner.matchAll(/<Name>([\s\S]*?)<\/Name>/g)].map((m) => m[1].trim());
+    const isImmovable = inner.includes("<Immovable>") || inner.includes("Immovable");
+    incidents.push({
+      driverName: names[0] ?? "Unknown",
+      targetDriverName: isImmovable ? null : (names[1] ?? null),
+      elapsedTimeSec: et,
+      severity,
+      isImmovable,
+    });
+  }
+
+  // --- SectorBests ---
+  // <Sector et="..." lap="..." s="1"><Name>...</Name><CarClass>...</CarClass></Sector>
+  const sectorRe = /<Sector\b([^>]*)>([\s\S]*?)<\/Sector>/g;
+  let sm: RegExpExecArray | null;
+  while ((sm = sectorRe.exec(streamXml)) !== null) {
+    const attrs = sm[1];
+    const inner = sm[2];
+    const et = toFloat(attrValue(attrs, "et")) ?? 0;
+    const lapNum = toInt(attrValue(attrs, "lap"));
+    const sector = toInt(attrValue(attrs, "s")) ?? 0;
+    const driverName = tagValue(inner, "Name") ?? "Unknown";
+    const carClass = tagValue(inner, "CarClass") ?? "—";
+    sectorBests.push({ driverName, carClass, sector, elapsedTimeSec: et, lapNum });
+  }
+
+  // --- TrackLimits ---
+  // <TrackLimits et="..." lap="..."><Name>...</Name>...<WarningPoints>...</WarningPoints>...<Decision>...</Decision></TrackLimits>
+  const tlRe = /<TrackLimits\b([^>]*)>([\s\S]*?)<\/TrackLimits>/g;
+  let tm: RegExpExecArray | null;
+  while ((tm = tlRe.exec(streamXml)) !== null) {
+    const attrs = tm[1];
+    const inner = tm[2];
+    const et = toFloat(attrValue(attrs, "et")) ?? 0;
+    const lapNum = toInt(attrValue(attrs, "lap")) ?? 0;
+    const driverName = tagValue(inner, "Name") ?? "Unknown";
+    const warningPoints = toInt(tagValue(inner, "WarningPoints"));
+    const currentPoints = toInt(tagValue(inner, "CurrentPoints"));
+    const resolution = toInt(attrValue(attrs, "Resolution") ?? tagValue(inner, "Resolution") ?? null);
+    const decision = tagValue(inner, "Decision");
+    trackLimits.push({ driverName, lapNum, elapsedTimeSec: et, warningPoints, currentPoints, resolution, decision });
+  }
+
+  return { incidents, sectorBests, trackLimits };
 }
 
 // Определяем тип сессии по имени секции-обёртки (<Practice1>, <Qualify>, <Race> и т.п.)
@@ -147,14 +302,18 @@ export function parseRaceResults(xml: string): ParsedSession | null {
   const course = tagValue(xml, "TrackCourse");  // null если тег отсутствует
   const event = tagValue(xml, "TrackEvent") ?? venue;
   const gameVersion = tagValue(xml, "GameVersion");
+
+  // #50 — trackLengthM
   const trackLenStr = tagValue(xml, "TrackLength");
   const trackLengthM = trackLenStr ? parseFloat(trackLenStr) : null;
 
   // Дата: предпочитаем Unix DateTime верхнего уровня; иначе TimeString
   let dateTimeIso: string;
-  const unix = tagValue(xml, "DateTime");
-  if (unix && /^\d+$/.test(unix)) {
-    dateTimeIso = new Date(parseInt(unix, 10) * 1000).toISOString();
+  let dateTimeUnix: number | null = null; // #48
+  const unixStr = tagValue(xml, "DateTime");
+  if (unixStr && /^\d+$/.test(unixStr)) {
+    dateTimeUnix = parseInt(unixStr, 10); // #48
+    dateTimeIso = new Date(dateTimeUnix * 1000).toISOString();
   } else {
     const ts = tagValue(xml, "TimeString"); // "2026/07/10 20:54:44"
     if (ts) {
@@ -165,6 +324,27 @@ export function parseRaceResults(xml: string): ParsedSession | null {
       dateTimeIso = new Date().toISOString();
     }
   }
+
+  // #48 — настройки сессии
+  const setting = tagValue(xml, "Setting");
+  const raceLaps = toInt(tagValue(xml, "RaceLaps"));
+  const raceTimeMin = toInt(tagValue(xml, "RaceTime"));
+  const mechFailRate = toInt(tagValue(xml, "MechFailRate"));
+  const damageMult = toInt(tagValue(xml, "DamageMult"));
+  const fuelMult = toFloat(tagValue(xml, "FuelMult"));
+  const tireMult = toFloat(tagValue(xml, "TireMult"));
+  const vehiclesAllowed = tagValue(xml, "VehiclesAllowed");
+  const parcFerme = toInt(tagValue(xml, "ParcFerme"));
+  const fixedSetups = toInt(tagValue(xml, "FixedSetups"));
+  const freeSettings = toInt(tagValue(xml, "FreeSettings"));
+  const fixedUpgrades = toInt(tagValue(xml, "FixedUpgrades"));
+  const tireWarmers = toInt(tagValue(xml, "TireWarmers"));
+  const dedicated = toInt(tagValue(xml, "Dedicated"));
+  // sessionDurationMin: из тега <Minutes> (для Practice/Qualify)
+  const sessionDurationMin = toInt(tagValue(xml, "Minutes"));
+  // sessionMaxLaps: из тега <Laps> (для Practice)
+  const sessionMaxLaps = toInt(tagValue(xml, "Laps"));
+  const mostLapsCompleted = toInt(tagValue(xml, "MostLapsCompleted"));
 
   const { type: sessionType, block: sessionBlock } = detectSessionType(xml);
 
@@ -179,6 +359,12 @@ export function parseRaceResults(xml: string): ParsedSession | null {
 
   if (drivers.length === 0) return null;
 
+  // #49 — парсим Stream-блок (если есть)
+  const streamMatch = xml.match(/<Stream>([\s\S]*?)<\/Stream>/);
+  const { incidents, sectorBests, trackLimits } = streamMatch
+    ? parseStream(streamMatch[1])
+    : { incidents: [], sectorBests: [], trackLimits: [] };
+
   return {
     venue,
     course,
@@ -187,6 +373,27 @@ export function parseRaceResults(xml: string): ParsedSession | null {
     trackLengthM: Number.isFinite(trackLengthM as number) ? (trackLengthM as number) : null,
     gameVersion,
     dateTimeIso,
+    dateTimeUnix,
+    setting,
+    raceLaps,
+    raceTimeMin,
+    mechFailRate,
+    damageMult,
+    fuelMult,
+    tireMult,
+    vehiclesAllowed,
+    parcFerme,
+    fixedSetups,
+    freeSettings,
+    fixedUpgrades,
+    tireWarmers,
+    dedicated,
+    sessionDurationMin,
+    sessionMaxLaps,
+    mostLapsCompleted,
     drivers,
+    incidents,
+    sectorBests,
+    trackLimits,
   };
 }
