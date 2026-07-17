@@ -336,6 +336,7 @@ async function runImport(job: ImportJobPayload): Promise<ImportResult> {
           const ltS2 = normalized.sector2Ms ?? 0;
           const ltS3 = normalized.sector3Ms ?? Math.max(0, normalized.lapTimeMs - ltS1 - ltS2);
 
+          // fix(#63): conditions и tyre берём из данных круга, а не хардкодим
           lapTimeRows.push({
             trackId: track.id,
             driverId: driver.id,
@@ -345,8 +346,8 @@ async function runImport(job: ImportJobPayload): Promise<ImportResult> {
             sector1Ms: ltS1,
             sector2Ms: ltS2,
             sector3Ms: ltS3,
-            conditions: "Сухо",
-            tyre: "Medium",
+            conditions: lap.conditions ?? "Сухо",
+            tyre: lap.frontCompound ?? "Medium",
             date: dateOnly,
             source: "import",
             sessionId: session.id,
