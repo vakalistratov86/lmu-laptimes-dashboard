@@ -1,6 +1,8 @@
 // Парсер логов результатов rFactor 2 / Le Mans Ultimate (<rFactorXML><RaceResults>)
 // Формат хорошо структурирован; используем лёгкий разбор без внешних XML-зависимостей.
 
+import { detectLogVersion, assertSupportedVersion, type LogVersion } from '@shared/parserContracts';
+
 export interface ParsedLap {
   num: number;
   lapMs: number | null; // null для незачтённых (пит, out-lap)
@@ -70,6 +72,7 @@ export interface ParsedSession {
   gameVersion: string | null;
   dateTimeIso: string;          // ISO 8601
   dateTimeUnix: number | null;  // #48 — DateTime (Unix секунды)
+  logFormatVersion: LogVersion; // #7 — детектированная версия формата
   // #48 — настройки сессии
   setting: string | null;
   raceLaps: number | null;
@@ -206,8 +209,6 @@ function parseStream(
   const trackLimits: ParsedTrackLimit[] = [];
 
   // --- Incidents ---
-  // <Incident et="..." severity="..."><Name>DriverName</Name>...<Name>TargetName</Name></Incident>
-  // or <Incident et="..." severity="..."><Name>DriverName</Name>...<Immovable>...</Immovable></Incident>
   const incidentRe = /<Incident\b([^>]*)>([\s\S]*?)<\/Incident>/g;
   let im: RegExpExecArray | null;
   while ((im = incidentRe.exec(streamXml)) !== null) {
@@ -228,7 +229,6 @@ function parseStream(
   }
 
   // --- SectorBests ---
-  // <Sector et="..." lap="..." s="1"><Name>...</Name><CarClass>...</CarClass></Sector>
   const sectorRe = /<Sector\b([^>]*)>([\s\S]*?)<\/Sector>/g;
   let sm: RegExpExecArray | null;
   while ((sm = sectorRe.exec(streamXml)) !== null) {
@@ -243,7 +243,6 @@ function parseStream(
   }
 
   // --- TrackLimits ---
-  // <TrackLimits et="..." lap="..."><Name>...</Name>...<WarningPoints>...</WarningPoints>...<Decision>...</Decision></TrackLimits>
   const tlRe = /<TrackLimits\b([^>]*)>([\s\S]*?)<\/TrackLimits>/g;
   let tm: RegExpExecArray | null;
   while ((tm = tlRe.exec(streamXml)) !== null) {
@@ -296,7 +295,9 @@ function detectSessionType(xml: string): { type: string; block: string } {
 }
 
 export function parseRaceResults(xml: string): ParsedSession | null {
-  if (!xml.includes("<RaceResults>") && !xml.includes("rFactorXML")) return null;
+  // #7 — Детекция версии формата перед парсингом
+  const detectedVersion = detectLogVersion(xml);
+  const logFormatVersion = assertSupportedVersion(detectedVersion, xml);
 
   const venue = tagValue(xml, "TrackVenue") ?? tagValue(xml, "TrackCourse") ?? "Неизвестная трасса";
   const course = tagValue(xml, "TrackCourse");  // null если тег отсутствует
@@ -340,9 +341,7 @@ export function parseRaceResults(xml: string): ParsedSession | null {
   const fixedUpgrades = toInt(tagValue(xml, "FixedUpgrades"));
   const tireWarmers = toInt(tagValue(xml, "TireWarmers"));
   const dedicated = toInt(tagValue(xml, "Dedicated"));
-  // sessionDurationMin: из тега <Minutes> (для Practice/Qualify)
   const sessionDurationMin = toInt(tagValue(xml, "Minutes"));
-  // sessionMaxLaps: из тега <Laps> (для Practice)
   const sessionMaxLaps = toInt(tagValue(xml, "Laps"));
   const mostLapsCompleted = toInt(tagValue(xml, "MostLapsCompleted"));
 
@@ -374,6 +373,7 @@ export function parseRaceResults(xml: string): ParsedSession | null {
     gameVersion,
     dateTimeIso,
     dateTimeUnix,
+    logFormatVersion, // #7
     setting,
     raceLaps,
     raceTimeMin,
