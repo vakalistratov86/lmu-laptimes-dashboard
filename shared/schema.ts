@@ -9,7 +9,7 @@ export const tracks = sqliteTable("tracks", {
   country: text("country").notNull(),
   lengthKm: real("length_km").notNull(),
   turns: integer("turns").notNull(),
-  layout: text("layout").notNull(), // например "Full", "GP", "National"
+  layout: text("layout").notNull(),
 });
 
 // Пилоты
@@ -25,52 +25,64 @@ export const lapTimes = sqliteTable("lap_times", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   trackId: integer("track_id").notNull(),
   driverId: integer("driver_id").notNull(),
-  carClass: text("car_class").notNull(), // Hypercar, LMP2, GTE, GT3
+  carClass: text("car_class").notNull(),
   car: text("car").notNull(),
-  lapMs: integer("lap_ms").notNull(), // время круга в миллисекундах
+  lapMs: integer("lap_ms").notNull(),
   sector1Ms: integer("sector1_ms").notNull(),
   sector2Ms: integer("sector2_ms").notNull(),
   sector3Ms: integer("sector3_ms").notNull(),
-  conditions: text("conditions").notNull(), // Сухо / Дождь / Смешанно
-  tyre: text("tyre").notNull(), // Soft / Medium / Hard / Wet
-  date: text("date").notNull(), // ISO дата заезда
-  source: text("source").notNull().default("demo"), // demo | import
-  sessionId: integer("session_id"), // ссылка на импортированную сессию (для source=import)
+  conditions: text("conditions").notNull(),
+  tyre: text("tyre").notNull(),
+  date: text("date").notNull(),
+  source: text("source").notNull().default("demo"),
+  sessionId: integer("session_id"),
 });
 
 // Импортированные сессии из логов игры (rFactor/LMU XML)
 export const sessions = sqliteTable("sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   trackId: integer("track_id").notNull(),
-  event: text("event").notNull(),           // TrackEvent, напр. "Rolex 6 Hours Of Sao Paulo"
-  sessionType: text("session_type").notNull(), // Practice / Qualify / Race / Practice1 и т.д.
-  venue: text("venue").notNull(),           // TrackVenue
-  course: text("course"),                   // TrackCourse (может отличаться от venue)
-  trackLengthM: real("track_length_m"),     // TrackLength в метрах
+  event: text("event").notNull(),
+  sessionType: text("session_type").notNull(),
+  venue: text("venue").notNull(),
+  course: text("course"),
+  trackLengthM: real("track_length_m"),
   gameVersion: text("game_version"),
-  dateTime: text("date_time").notNull(),    // ISO дата/время сессии
-  dateTimeUnix: integer("date_time_unix"),  // Unix timestamp (DateTime из XML)
-  fileName: text("file_name").notNull(),    // имя загруженного файла
-  setting: text("setting"),                 // Setting из XML, напр. "Race Weekend"
+  dateTime: text("date_time").notNull(),
+  dateTimeUnix: integer("date_time_unix"),
+  fileName: text("file_name").notNull(),
+  setting: text("setting"),
   driverCount: integer("driver_count").notNull(),
-  lapCount: integer("lap_count").notNull(), // всего засчитанных кругов во всех результатах
-  // Настройки сессии из XML
-  raceLaps: integer("race_laps"),           // RaceLaps (0 = не ограничено кругами)
-  raceTimeMin: integer("race_time_min"),    // RaceTime в минутах
-  mechFailRate: integer("mech_fail_rate"),  // MechFailRate
-  damageMult: integer("damage_mult"),       // DamageMult (75 = 75%)
-  fuelMult: real("fuel_mult"),              // FuelMult
-  tireMult: real("tire_mult"),              // TireMult
-  vehiclesAllowed: text("vehicles_allowed"), // VehiclesAllowed (список классов/моделей)
-  parcFerme: integer("parc_ferme"),         // ParcFerme
-  fixedSetups: integer("fixed_setups"),     // FixedSetups
-  freeSettings: integer("free_settings"),   // FreeSettings
-  fixedUpgrades: integer("fixed_upgrades"), // FixedUpgrades
-  tireWarmers: integer("tire_warmers"),     // TireWarmers
-  dedicated: integer("dedicated"),          // Dedicated server flag
-  sessionDurationMin: integer("session_duration_min"), // Minutes (для Practice/Qualify)
-  sessionMaxLaps: integer("session_max_laps"),          // Laps (для Practice)
-  mostLapsCompleted: integer("most_laps_completed"),    // MostLapsCompleted
+  lapCount: integer("lap_count").notNull(),
+  raceLaps: integer("race_laps"),
+  raceTimeMin: integer("race_time_min"),
+  mechFailRate: integer("mech_fail_rate"),
+  damageMult: integer("damage_mult"),
+  fuelMult: real("fuel_mult"),
+  tireMult: real("tire_mult"),
+  vehiclesAllowed: text("vehicles_allowed"),
+  parcFerme: integer("parc_ferme"),
+  fixedSetups: integer("fixed_setups"),
+  freeSettings: integer("free_settings"),
+  fixedUpgrades: integer("fixed_upgrades"),
+  tireWarmers: integer("tire_warmers"),
+  dedicated: integer("dedicated"),
+  sessionDurationMin: integer("session_duration_min"),
+  sessionMaxLaps: integer("session_max_laps"),
+  mostLapsCompleted: integer("most_laps_completed"),
+});
+
+// Задания импорта — idempotency + async status (#5, #6)
+export const importJobs = sqliteTable("import_jobs", {
+  id: text("id").primaryKey(),                       // nanoid
+  fileHash: text("file_hash").notNull().unique(),    // SHA-256 файла — UNIQUE для idempotency
+  fileName: text("file_name").notNull(),
+  status: text("status").notNull().default("queued"), // queued | processing | completed | failed
+  sessionId: integer("session_id"),                  // заполняется после успешного импорта
+  totalLaps: integer("total_laps"),
+  error: text("error"),                              // сообщение об ошибке при failed
+  createdAt: integer("created_at").notNull(),        // Unix ms
+  finishedAt: integer("finished_at"),                // Unix ms
 });
 
 // Результат конкретного пилота в сессии
@@ -78,90 +90,90 @@ export const sessionResults = sqliteTable("session_results", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   sessionId: integer("session_id").notNull(),
   driverId: integer("driver_id").notNull(),
-  isPlayer: integer("is_player").notNull().default(0), // 1 = игрок
+  isPlayer: integer("is_player").notNull().default(0),
   position: integer("position").notNull(),
   classPosition: integer("class_position").notNull(),
-  lapRankIncludingDiscos: integer("lap_rank_including_discos"), // LapRankIncludingDiscos
+  lapRankIncludingDiscos: integer("lap_rank_including_discos"),
   carClass: text("car_class").notNull(),
   car: text("car").notNull(),
-  carType: text("car_type"),                // CarType (полное название модели)
+  carType: text("car_type"),
   team: text("team").notNull(),
   carNumber: text("car_number"),
-  vehFile: text("veh_file"),               // VehFile (имя .VEH файла)
-  vehName: text("veh_name"),               // VehName (отображаемое имя машины)
-  category: text("category"),              // Category (напр. "WEC 2026, GT3, Porsche 911 GT3 R LMGT3")
+  vehFile: text("veh_file"),
+  vehName: text("veh_name"),
+  category: text("category"),
   laps: integer("laps").notNull(),
   pitstops: integer("pitstops").notNull(),
-  bestLapMs: integer("best_lap_ms"),       // лучший круг, мс
-  finishStatus: text("finish_status"),     // FinishStatus
-  controlAndAids: text("control_and_aids"), // строка управления, напр. "PlayerControl,TC=2,Clutch,AutoBlip"
-  connected: integer("connected"),         // Connected (1/0)
+  bestLapMs: integer("best_lap_ms"),
+  finishStatus: text("finish_status"),
+  controlAndAids: text("control_and_aids"),
+  connected: integer("connected"),
 });
 
 // Детальные данные по каждому кругу конкретного пилота в сессии
 export const sessionLaps = sqliteTable("session_laps", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  sessionResultId: integer("session_result_id").notNull(), // → session_results.id
+  sessionResultId: integer("session_result_id").notNull(),
   sessionId: integer("session_id").notNull(),
   driverId: integer("driver_id").notNull(),
-  lapNum: integer("lap_num").notNull(),             // Lap num=
-  position: integer("position"),                    // p= (позиция на момент круга)
-  lapTimeMs: real("lap_time_ms"),                   // текст Lap (null если "--.----")
-  elapsedTimeSec: real("elapsed_time_sec"),          // et= (суммарное время от старта)
-  sector1Ms: real("sector1_ms"),                    // s1=
-  sector2Ms: real("sector2_ms"),                    // s2=
-  sector3Ms: real("sector3_ms"),                    // s3=
-  topSpeedKph: real("top_speed_kph"),               // topspeed=
-  fuelLevel: real("fuel_level"),                    // fuel= (0..1, доля бака)
-  fuelUsed: real("fuel_used"),                      // fuelUsed= (может быть отрицательным = пит)
-  vehicleCondition: real("vehicle_condition"),       // ve= (0..1, состояние машины)
-  vehicleConditionUsed: real("vehicle_condition_used"), // veUsed=
-  tyreFLCondition: real("tyre_fl_condition"),        // twfl=
-  tyreFRCondition: real("tyre_fr_condition"),        // twfr=
-  tyreRLCondition: real("tyre_rl_condition"),        // twrl=
-  tyreRRCondition: real("tyre_rr_condition"),        // twrr=
-  frontCompound: text("front_compound"),             // fcompound= напр. "0,Medium"
-  rearCompound: text("rear_compound"),              // rcompound=
-  tyreFL: text("tyre_fl"),                          // FL= напр. "0,Medium"
-  tyreFR: text("tyre_fr"),                          // FR=
-  tyreRL: text("tyre_rl"),                          // RL=
-  tyreRR: text("tyre_rr"),                          // RR=
-  isPitLap: integer("is_pit_lap").notNull().default(0), // pit="1" в атрибуте
+  lapNum: integer("lap_num").notNull(),
+  position: integer("position"),
+  lapTimeMs: real("lap_time_ms"),
+  elapsedTimeSec: real("elapsed_time_sec"),
+  sector1Ms: real("sector1_ms"),
+  sector2Ms: real("sector2_ms"),
+  sector3Ms: real("sector3_ms"),
+  topSpeedKph: real("top_speed_kph"),
+  fuelLevel: real("fuel_level"),
+  fuelUsed: real("fuel_used"),
+  vehicleCondition: real("vehicle_condition"),
+  vehicleConditionUsed: real("vehicle_condition_used"),
+  tyreFLCondition: real("tyre_fl_condition"),
+  tyreFRCondition: real("tyre_fr_condition"),
+  tyreRLCondition: real("tyre_rl_condition"),
+  tyreRRCondition: real("tyre_rr_condition"),
+  frontCompound: text("front_compound"),
+  rearCompound: text("rear_compound"),
+  tyreFL: text("tyre_fl"),
+  tyreFR: text("tyre_fr"),
+  tyreRL: text("tyre_rl"),
+  tyreRR: text("tyre_rr"),
+  isPitLap: integer("is_pit_lap").notNull().default(0),
 });
 
 // Инциденты из Stream сессии
 export const sessionIncidents = sqliteTable("session_incidents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   sessionId: integer("session_id").notNull(),
-  driverId: integer("driver_id").notNull(),      // виновник инцидента
-  targetDriverId: integer("target_driver_id"),   // null если контакт с неподвижным объектом
-  elapsedTimeSec: real("elapsed_time_sec").notNull(), // et=
-  severity: real("severity").notNull(),          // число в скобках (сила удара)
-  isImmovable: integer("is_immovable").notNull().default(0), // контакт с "Immovable"
+  driverId: integer("driver_id").notNull(),
+  targetDriverId: integer("target_driver_id"),
+  elapsedTimeSec: real("elapsed_time_sec").notNull(),
+  severity: real("severity").notNull(),
+  isImmovable: integer("is_immovable").notNull().default(0),
 });
 
-// Лучшие времена по секторам (Stream → Sector)
+// Лучшие времена по секторам
 export const sessionSectorBests = sqliteTable("session_sector_bests", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   sessionId: integer("session_id").notNull(),
   driverId: integer("driver_id").notNull(),
   carClass: text("car_class").notNull(),
-  sector: integer("sector").notNull(),           // 1, 2 или 3
-  elapsedTimeSec: real("elapsed_time_sec").notNull(), // et= момента установки рекорда
-  lapNum: integer("lap_num"),                    // lap= из атрибута Sector
+  sector: integer("sector").notNull(),
+  elapsedTimeSec: real("elapsed_time_sec").notNull(),
+  lapNum: integer("lap_num"),
 });
 
-// Нарушения трассы (TrackLimits)
+// Нарушения трассы
 export const sessionTrackLimits = sqliteTable("session_track_limits", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   sessionId: integer("session_id").notNull(),
   driverId: integer("driver_id").notNull(),
   lapNum: integer("lap_num").notNull(),
-  elapsedTimeSec: real("elapsed_time_sec").notNull(), // et=
-  warningPoints: integer("warning_points"),      // WarningPoints=
-  currentPoints: integer("current_points"),      // CurrentPoints=
-  resolution: integer("resolution"),             // Resolution=
-  decision: text("decision"),                    // текст элемента, напр. "No Further Action"
+  elapsedTimeSec: real("elapsed_time_sec").notNull(),
+  warningPoints: integer("warning_points"),
+  currentPoints: integer("current_points"),
+  resolution: integer("resolution"),
+  decision: text("decision"),
 });
 
 export const insertTrackSchema = createInsertSchema(tracks).omit({ id: true });
@@ -173,6 +185,7 @@ export const insertSessionLapSchema = createInsertSchema(sessionLaps).omit({ id:
 export const insertSessionIncidentSchema = createInsertSchema(sessionIncidents).omit({ id: true });
 export const insertSessionSectorBestSchema = createInsertSchema(sessionSectorBests).omit({ id: true });
 export const insertSessionTrackLimitsSchema = createInsertSchema(sessionTrackLimits).omit({ id: true });
+export const insertImportJobSchema = createInsertSchema(importJobs).omit({ id: true });
 
 export type InsertTrack = z.infer<typeof insertTrackSchema>;
 export type Track = typeof tracks.$inferSelect;
@@ -192,34 +205,26 @@ export type InsertSessionSectorBest = z.infer<typeof insertSessionSectorBestSche
 export type SessionSectorBest = typeof sessionSectorBests.$inferSelect;
 export type InsertSessionTrackLimits = z.infer<typeof insertSessionTrackLimitsSchema>;
 export type SessionTrackLimits = typeof sessionTrackLimits.$inferSelect;
+export type InsertImportJob = z.infer<typeof insertImportJobSchema>;
+export type ImportJob = typeof importJobs.$inferSelect;
 
-// Обогащённый пилот: добавляет флаг isPlayer
-// 1 = реальный игрок (хотя бы в одной сессии), 0 = только ИИ, null = нет данных сессий (demo)
 export type DriverEnriched = Driver & {
   isPlayer: number | null;
 };
 
-// Обогащённая запись времени с данными трассы и пилота (для API)
 export type LapTimeEnriched = LapTime & {
   trackName: string;
   driverName: string;
   team: string;
-  /** 1 = живой игрок, 0 = ИИ. null для кругов demo (нет session_results). */
   isPlayer: number | null;
-  /**
-   * Конфигурация трассы из сессии (sessions.course).
-   * null для кругов demo (source=demo, нет связанной сессии).
-   */
   sessionCourse: string | null;
 };
 
-// Сессия с трассой и результатами (для API)
 export type SessionEnriched = Session & {
   trackName: string;
   results: (SessionResult & { driverName: string })[];
 };
 
-// Полный результат сессии с кругами, инцидентами, секторами и нарушениями трассы
 export type SessionFull = SessionEnriched & {
   laps: SessionLap[];
   incidents: SessionIncident[];

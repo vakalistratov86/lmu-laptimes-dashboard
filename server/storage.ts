@@ -13,10 +13,25 @@ import type {
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { eq, and, desc } from "drizzle-orm";
-import { parseRaceResults, type ParsedSession } from "./logParser";
 
 const sqlite = new Database("data.db");
 sqlite.pragma("journal_mode = WAL");
+
+// Создаём таблицу import_jobs если её ещё нет (миграция без drizzle-kit)
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS import_jobs (
+    id TEXT PRIMARY KEY,
+    file_hash TEXT NOT NULL UNIQUE,
+    file_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    session_id INTEGER,
+    total_laps INTEGER,
+    error TEXT,
+    created_at INTEGER NOT NULL,
+    finished_at INTEGER
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS import_jobs_file_hash_idx ON import_jobs(file_hash);
+`);
 
 export const db = drizzle(sqlite);
 
@@ -25,7 +40,7 @@ export interface LapFilter {
   driverId?: number;
   carClass?: string;
   conditions?: string;
-  source?: string; // demo | import
+  source?: string;
   sessionId?: number;
   sessionCourse?: string;
 }
@@ -50,7 +65,6 @@ export interface IStorage {
   getLaps(filter?: LapFilter): Promise<LapTimeEnriched[]>;
   getSessions(): Promise<SessionEnriched[]>;
   getSession(id: number): Promise<SessionEnriched | undefined>;
-  importLog(fileName: string, xml: string): Promise<ImportResult>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -86,7 +100,6 @@ export class DatabaseStorage implements IStorage {
     if (filter.conditions) conditions.push(eq(lapTimes.conditions, filter.conditions));
     if (filter.source) conditions.push(eq(lapTimes.source, filter.source));
     if (filter.sessionId) conditions.push(eq(lapTimes.sessionId, filter.sessionId));
-    // #54 — фильтр по sessionCourse переносим в SQL WHERE, а не в post-process
     if (filter.sessionCourse) conditions.push(eq(sessions.course, filter.sessionCourse));
 
     const rows = conditions.length
@@ -149,316 +162,9 @@ export class DatabaseStorage implements IStorage {
         .sort((a, b) => a.position - b.position),
     };
   }
-
-  async importLog(fileName: string, xml: string): Promise<ImportResult> {
-    let parsed: ParsedSession | null;
-    try {
-      parsed = parseRaceResults(xml);
-    } catch (e) {
-      return { fileName, ok: false, message: `Ошибка разбора: ${(e as Error).message}` };
-    }
-    if (!parsed) {
-      return { fileName, ok: false, message: "Не похоже на лог результатов LMU/rFactor (нет RaceResults)" };
-    }
-
-    const dup = db.select().from(sessions).where(eq(sessions.fileName, fileName)).get();
-    if (dup) {
-      return { fileName, ok: false, message: "Уже импортировано (тот же файл)", sessionId: dup.id };
-    }
-
-    const track = this.findOrCreateTrack(parsed);
-    const dateOnly = parsed.dateTimeIso.slice(0, 10);
-
-    // #48 + #50 — записываем все поля сессии
-    let totalLaps = 0;
-    const session = db.insert(sessions).values({
-      trackId: track.id,
-      event: parsed.event,
-      sessionType: parsed.sessionType,
-      venue: parsed.venue,
-      course: parsed.course ?? null,
-      trackLengthM: parsed.trackLengthM ?? null,          // #50
-      gameVersion: parsed.gameVersion ?? null,
-      dateTime: parsed.dateTimeIso,
-      dateTimeUnix: parsed.dateTimeUnix ?? null,           // #48
-      fileName,
-      setting: parsed.setting ?? null,                    // #48
-      driverCount: parsed.drivers.length,
-      lapCount: 0,
-      raceLaps: parsed.raceLaps ?? null,                  // #48
-      raceTimeMin: parsed.raceTimeMin ?? null,             // #48
-      mechFailRate: parsed.mechFailRate ?? null,           // #48
-      damageMult: parsed.damageMult ?? null,               // #48
-      fuelMult: parsed.fuelMult ?? null,                   // #48
-      tireMult: parsed.tireMult ?? null,                   // #48
-      vehiclesAllowed: parsed.vehiclesAllowed ?? null,     // #48
-      parcFerme: parsed.parcFerme ?? null,                 // #48
-      fixedSetups: parsed.fixedSetups ?? null,             // #48
-      freeSettings: parsed.freeSettings ?? null,           // #48
-      fixedUpgrades: parsed.fixedUpgrades ?? null,         // #48
-      tireWarmers: parsed.tireWarmers ?? null,             // #48
-      dedicated: parsed.dedicated ?? null,                 // #48
-      sessionDurationMin: parsed.sessionDurationMin ?? null, // #48
-      sessionMaxLaps: parsed.sessionMaxLaps ?? null,       // #48
-      mostLapsCompleted: parsed.mostLapsCompleted ?? null, // #48
-    }).returning().get();
-
-    // Строим map имя пилота → driverId для Stream-ссылок (#49)
-    const driverIdByName = new Map<string, number>();
-
-    for (const d of parsed.drivers) {
-      const driver = this.findOrCreateDriver(d.name, d.teamName);
-      driverIdByName.set(d.name.toLowerCase(), driver.id);
-      const cls = normalizeClass(d.carClass);
-
-      // #48 — записываем все поля session_results
-      const sr = db.insert(sessionResults).values({
-        sessionId: session.id,
-        driverId: driver.id,
-        isPlayer: d.isPlayer ? 1 : 0,
-        position: d.position,
-        classPosition: d.classPosition,
-        lapRankIncludingDiscos: d.lapRankIncludingDiscos ?? null, // #48
-        carClass: cls,
-        car: d.carType,
-        carType: d.carType,                                       // #48
-        team: d.teamName,
-        carNumber: d.carNumber ?? null,
-        vehFile: d.vehFile ?? null,                               // #48
-        vehName: d.vehName ?? null,                               // #48
-        category: d.category ?? null,                             // #48
-        laps: d.laps,
-        pitstops: d.pitstops,
-        bestLapMs: d.bestLapMs ?? null,
-        finishStatus: d.finishStatus ?? null,
-        controlAndAids: d.controlAndAids ?? null,                 // #48
-        connected: d.connected ?? null,                           // #48
-      }).returning().get();
-
-      // #49 — записываем детальные круги в session_laps
-      for (const lap of d.lapList) {
-        // #51 — null-safe сектора: если S1/S2 null, не заполняем S3 вычисленным значением
-        const s1 = lap.s1Ms;                                      // null если отсутствует
-        const s2 = lap.s2Ms;                                      // null если отсутствует
-        // S3 вычисляем только если есть все три компонента (#51)
-        const s3 = lap.s3Ms != null
-          ? lap.s3Ms
-          : (s1 != null && s2 != null && lap.lapMs != null)
-            ? Math.max(0, lap.lapMs - s1 - s2)
-            : null;
-
-        db.insert(sessionLaps).values({
-          sessionResultId: sr.id,
-          sessionId: session.id,
-          driverId: driver.id,
-          lapNum: lap.num,
-          lapTimeMs: lap.lapMs,
-          sector1Ms: s1,
-          sector2Ms: s2,
-          sector3Ms: s3,
-          isPitLap: lap.isPit ? 1 : 0,
-        }).run();
-
-        // lap_times — только зачтённые не-пит круги
-        if (lap.lapMs != null && !lap.isPit) {
-          // Для lap_times используем 0-safe значения для обратной совместимости,
-          // но только когда хоть один сектор известен (#51)
-          const ltS1 = s1 ?? 0;
-          const ltS2 = s2 ?? 0;
-          const ltS3 = s3 ?? Math.max(0, lap.lapMs - ltS1 - ltS2);
-          db.insert(lapTimes).values({
-            trackId: track.id,
-            driverId: driver.id,
-            carClass: cls,
-            car: d.carType,
-            lapMs: lap.lapMs,
-            sector1Ms: ltS1,
-            sector2Ms: ltS2,
-            sector3Ms: ltS3,
-            conditions: "Сухо",
-            tyre: "Medium",
-            date: dateOnly,
-            source: "import",
-            sessionId: session.id,
-          }).run();
-          totalLaps++;
-        }
-      }
-    }
-
-    // #49 — Инциденты
-    for (const inc of parsed.incidents) {
-      const driverId = driverIdByName.get(inc.driverName.toLowerCase());
-      if (driverId == null) continue;
-      const targetDriverId = inc.targetDriverName
-        ? (driverIdByName.get(inc.targetDriverName.toLowerCase()) ?? null)
-        : null;
-      db.insert(sessionIncidents).values({
-        sessionId: session.id,
-        driverId,
-        targetDriverId,
-        elapsedTimeSec: inc.elapsedTimeSec,
-        severity: inc.severity,
-        isImmovable: inc.isImmovable ? 1 : 0,
-      }).run();
-    }
-
-    // #49 — Лучшие времена секторов
-    for (const sb of parsed.sectorBests) {
-      const driverId = driverIdByName.get(sb.driverName.toLowerCase());
-      if (driverId == null) continue;
-      db.insert(sessionSectorBests).values({
-        sessionId: session.id,
-        driverId,
-        carClass: normalizeClass(sb.carClass),
-        sector: sb.sector,
-        elapsedTimeSec: sb.elapsedTimeSec,
-        lapNum: sb.lapNum ?? null,
-      }).run();
-    }
-
-    // #49 — Нарушения трассы
-    for (const tl of parsed.trackLimits) {
-      const driverId = driverIdByName.get(tl.driverName.toLowerCase());
-      if (driverId == null) continue;
-      db.insert(sessionTrackLimits).values({
-        sessionId: session.id,
-        driverId,
-        lapNum: tl.lapNum,
-        elapsedTimeSec: tl.elapsedTimeSec,
-        warningPoints: tl.warningPoints ?? null,
-        currentPoints: tl.currentPoints ?? null,
-        resolution: tl.resolution ?? null,
-        decision: tl.decision ?? null,
-      }).run();
-    }
-
-    db.update(sessions).set({ lapCount: totalLaps }).where(eq(sessions.id, session.id)).run();
-
-    return {
-      fileName,
-      ok: true,
-      message: "Импортировано",
-      sessionId: session.id,
-      event: parsed.event,
-      venue: parsed.venue,
-      course: parsed.course ?? null,
-      laps: totalLaps,
-      drivers: parsed.drivers.length,
-    };
-  }
-
-  private findOrCreateTrack(parsed: ParsedSession): Track {
-    const all = db.select().from(tracks).all();
-    const course = parsed.course;
-
-    const canonicalName = canonicalTrackName(parsed.venue).name.toLowerCase();
-    const parsedCourseNorm = (course ?? "").toLowerCase();
-
-    const exactMatch = all.find((t) => {
-      const dbNameLower = t.name.toLowerCase();
-      const layoutNorm = (t.layout ?? "").toLowerCase();
-
-      if (course) {
-        return dbNameLower === canonicalName && layoutNorm === parsedCourseNorm;
-      }
-      return dbNameLower === canonicalName;
-    });
-
-    if (exactMatch) return exactMatch;
-
-    const canonical = canonicalTrackName(parsed.venue);
-    const lengthKm = parsed.trackLengthM ? +(parsed.trackLengthM / 1000).toFixed(3) : 0;
-    return db.insert(tracks).values({
-      name: canonical.name,
-      country: canonical.country,
-      lengthKm,
-      turns: canonical.turns,
-      layout: course ?? "Импорт",
-    }).returning().get();
-  }
-
-  private findOrCreateDriver(name: string, team: string): Driver {
-    const all = db.select().from(drivers).all();
-    const found = all.find((d) => d.name.toLowerCase() === name.toLowerCase());
-    if (found) return found;
-    return db.insert(drivers).values({
-      name,
-      team: team || "—",
-      country: guessCountry(name),
-    }).returning().get();
-  }
 }
 
 export const storage = new DatabaseStorage();
-
-function normalizeClass(raw: string): string {
-  const r = (raw || "").trim();
-  if (!r || r === "—") return "GT3";
-  return r;
-}
-
-function canonicalTrackName(venue: string): { name: string; country: string; turns: number } {
-  const v = venue.toLowerCase();
-  if (v.includes("carlos pace") || v.includes("interlagos")) return { name: "Interlagos", country: "Бразилия", turns: 15 };
-  if (v.includes("le mans")) return { name: "Le Mans", country: "Франция", turns: 38 };
-  if (v.includes("spa")) return { name: "Spa-Francorchamps", country: "Бельгия", turns: 20 };
-  if (v.includes("monza")) return { name: "Monza", country: "Италия", turns: 11 };
-  if (v.includes("fuji")) return { name: "Fuji Speedway", country: "Япония", turns: 16 };
-  if (v.includes("sebring")) return { name: "Sebring", country: "США", turns: 17 };
-  if (v.includes("bahrain") || v.includes("sakhir")) return { name: "Bahrain", country: "Бахрейн", turns: 15 };
-  if (v.includes("imola")) return { name: "Imola", country: "Италия", turns: 19 };
-  if (v.includes("portim") || v.includes("algarve")) return { name: "Portimão", country: "Португалия", turns: 15 };
-  if (v.includes("cota") || v.includes("americas")) return { name: "COTA", country: "США", turns: 20 };
-  if (v.includes("qatar") || v.includes("losail")) return { name: "Losail", country: "Катар", turns: 16 };
-  return { name: venue, country: "—", turns: 0 };
-}
-
-// #55 — эвристика страны: сначала по команде, потом по суффиксу фамилии
-function guessCountry(name: string): string {
-  // Кириллическое имя → Россия/СНГ по умолчанию
-  if (/[а-яёА-ЯЁ]/.test(name)) return "RU";
-
-  const lower = name.toLowerCase();
-
-  // Типичные японские фамилии / имена
-  const jpSuffixes = ["moto", "hiko", "yuki", "taro", "suke", "nori", "hide", "kazu"];
-  const jpNames = ["tanaka", "suzuki", "yamamoto", "nakamura", "kobayashi", "sato", "ito",
-                   "kato", "watanabe", "yamada", "hayashi", "matsumoto", "inoue", "kimura",
-                   "ogawa", "fujita", "hashimoto", "ishikawa", "nakanishi", "okamoto"];
-  if (jpNames.some((n) => lower.includes(n))) return "JP";
-  if (jpSuffixes.some((s) => lower.endsWith(s))) return "JP";
-
-  // Типичные немецкие фамилии
-  const deSuffixes = ["mann", "ner", "ger", "berger", "schneider", "bauer", "müller", "muller",
-                      "wagner", "hoffmann", "schulz", "schwarz", "braun", "koch", "richter"];
-  if (deSuffixes.some((s) => lower.includes(s))) return "DE";
-
-  // Французские фамилии
-  const frNames = ["blanc", "dupont", "martin", "bernard", "thomas", "petit", "robert",
-                   "richard", "durand", "moreau", "leroy", "simon", "laurent", "michel",
-                   "garcia", "david", "fontaine", "rousseau", "vincent", "fournier"];
-  if (frNames.some((n) => lower.includes(n))) return "FR";
-
-  // Итальянские
-  const itSuffixes = ["rossi", "russo", "ferrari", "bianchi", "ricci", "romano", "marino",
-                      "colombo", "conti", "esposito", "de luca", "de santis", "fontana",
-                      "mancini", "rinaldi", "lombardi", "barbieri", "cattaneo"];
-  if (itSuffixes.some((s) => lower.includes(s))) return "IT";
-
-  // Испанские / португальские
-  const esSuffixes = ["rodriguez", "garcia", "martinez", "fernandez", "lopez", "gonzalez",
-                      "perez", "sanchez", "ramirez", "torres", "flores", "diaz", "reyes",
-                      "morales", "gutierrez", "vargas", "castillo"];
-  if (esSuffixes.some((s) => lower.includes(s))) return "ES";
-
-  // Британские / англоязычные по именам
-  const gbNames = ["smith", "jones", "williams", "brown", "wilson", "taylor", "davies",
-                   "evans", "thomas", "johnson", "white", "martin", "carter", "walker"];
-  if (gbNames.some((n) => lower.includes(n))) return "GB";
-
-  return "—";
-}
 
 // ---- Seeding ----
 export function seedIfEmpty() {
