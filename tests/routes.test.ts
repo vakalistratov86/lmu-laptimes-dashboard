@@ -8,21 +8,32 @@ import { registerRoutes } from '../server/routes';
 // ---------------------------------------------------------------------------
 vi.mock('../server/storage', () => ({
   storage: {
-    getTracks: vi.fn().mockResolvedValue([]),
-    getTrack: vi.fn(),
+    getTracks:  vi.fn().mockResolvedValue([]),
+    getTrack:   vi.fn(),
     getDrivers: vi.fn().mockResolvedValue([]),
-    getDriver: vi.fn(),
-    getLaps: vi.fn().mockResolvedValue([]),
+    getDriver:  vi.fn(),
+    getLaps:    vi.fn().mockResolvedValue([]),
     getSessions: vi.fn().mockResolvedValue([]),
-    getSession: vi.fn(),
-    importLog: vi.fn(),
+    getSession:  vi.fn(),
   },
   db: {
-    delete: vi.fn(() => ({ where: vi.fn(() => ({ run: vi.fn() })), run: vi.fn() })),
-    select: vi.fn(() => ({ from: vi.fn(() => ({ all: vi.fn(() => []) })) })),
+    delete:  vi.fn(() => ({ where: vi.fn(() => ({ run: vi.fn() })), run: vi.fn() })),
+    select:  vi.fn(() => ({ from: vi.fn(() => ({ all: vi.fn(() => []) })) })),
   },
 }));
 
+// ---------------------------------------------------------------------------
+// Мок importWorker (async-import, #5)
+// ---------------------------------------------------------------------------
+vi.mock('../server/importWorker', () => ({
+  enqueueImport: vi.fn().mockReturnValue('mock-job-id'),
+  getJobStatus:  vi.fn(),
+  getJobErrors:  vi.fn().mockReturnValue([]),
+}));
+
+// ---------------------------------------------------------------------------
+// Мок eventsParser
+// ---------------------------------------------------------------------------
 vi.mock('../server/eventsParser', () => ({
   getSpecialEvents: vi.fn().mockResolvedValue({
     events: [],
@@ -80,15 +91,15 @@ function makeRequest(
 describe('API Routes', () => {
   let app: Express;
   let server: http.Server;
-  // FIX: тип для замоканного storage
   let storage: Awaited<typeof import('../server/storage')>['storage'];
+  let importWorker: typeof import('../server/importWorker');
 
   beforeEach(async () => {
     const result = await buildTestApp();
     app = result.app;
     server = result.server;
-    // FIX: получаем замоканный модуль внутри beforeEach, а не на верхнем уровне
     storage = (await import('../server/storage')).storage;
+    importWorker = await import('../server/importWorker');
   });
 
   afterEach(() => {
@@ -111,8 +122,8 @@ describe('API Routes', () => {
 
     it('возвращает трассы из хранилища', async () => {
       const mockTracks = [
-        { id: 1, name: 'Le Mans', country: 'FR', lengthKm: 13.6, turns: 38, layout: 'Full' },
-        { id: 2, name: 'Spa',     country: 'BE', lengthKm: 7.0,  turns: 19, layout: 'Full' },
+        { id: 1, name: 'Le Mans',  country: 'FR', lengthKm: 13.6, turns: 38, layout: 'Full' },
+        { id: 2, name: 'Spa',      country: 'BE', lengthKm: 7.0,  turns: 19, layout: 'Full' },
       ];
       (storage.getTracks as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockTracks);
       const res = await makeRequest(app, 'GET', '/api/tracks');
@@ -153,9 +164,7 @@ describe('API Routes', () => {
     });
 
     it('возвращает пилотов из хранилища', async () => {
-      const mockDrivers = [
-        { id: 1, name: 'Пилот А', team: 'Toyota', country: 'JP' },
-      ];
+      const mockDrivers = [{ id: 1, name: 'Пилот А', team: 'Toyota', country: 'JP' }];
       (storage.getDrivers as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockDrivers);
       const res = await makeRequest(app, 'GET', '/api/drivers');
       expect((res.body as typeof mockDrivers)[0].name).toBe('Пилот А');
@@ -247,7 +256,9 @@ describe('API Routes', () => {
     });
   });
 
-  // ── POST /api/import ─────────────────────────────────────────────────────
+  // ── POST /api/import ──────────────────────────────────────────────────────
+  // Async-import (#5): роут ставит задачу в очередь и возвращает 202 + importId
+  // ---------------------------------------------------------------------------
   describe('POST /api/import', () => {
     it('возвращает 400 если files не передан', async () => {
       const res = await makeRequest(app, 'POST', '/api/import', {});
@@ -259,65 +270,206 @@ describe('API Routes', () => {
       expect(res.status).toBe(400);
     });
 
-    it('возвращает статистику импорта при корректном вызове', async () => {
-      (storage.importLog as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: true, fileName: 'test.xml', laps: 42,
-      });
+    it('возвращает 202 и queued=1 при корректном файле', async () => {
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'test.xml', content: '<rFactorXML>valid</rFactorXML>' }],
       });
-      expect(res.status).toBe(200);
-      const body = res.body as { imported: number; totalLaps: number; skipped: number };
-      expect(body).toHaveProperty('imported');
-      expect(body).toHaveProperty('totalLaps');
-      expect(body).toHaveProperty('skipped');
+      expect(res.status).toBe(202);
+      const body = res.body as { queued: number; total: number; results: unknown[] };
+      expect(body.queued).toBe(1);
+      expect(body.total).toBe(1);
+      expect(Array.isArray(body.results)).toBe(true);
     });
 
-    it('totalLaps суммируется по всем файлам', async () => {
-      (storage.importLog as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ ok: true, fileName: 'a.xml', laps: 10 })
-        .mockResolvedValueOnce({ ok: true, fileName: 'b.xml', laps: 20 });
+    it('результат содержит importId для поставленного в очередь файла', async () => {
       const res = await makeRequest(app, 'POST', '/api/import', {
-        files: [
-          { fileName: 'a.xml', content: '<rFactorXML>a</rFactorXML>' },
-          { fileName: 'b.xml', content: '<rFactorXML>b</rFactorXML>' },
-        ],
+        files: [{ fileName: 'test.xml', content: '<rFactorXML>valid</rFactorXML>' }],
       });
-      const body = res.body as { totalLaps: number };
-      expect(body.totalLaps).toBe(30);
+      const results = (res.body as { results: { importId: string; ok: boolean }[] }).results;
+      expect(results[0].ok).toBe(true);
+      expect(results[0].importId).toBe('mock-job-id');
     });
 
-    it('файл с пустым content пишется в results как ok=false', async () => {
+    it('пустой content возвращает ok=false и status=409', async () => {
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'empty.xml', content: '' }],
       });
-      const body = res.body as { results: { ok: boolean }[] };
-      expect(body.results[0].ok).toBe(false);
+      const results = (res.body as { results: { ok: boolean; status: number }[] }).results;
+      expect(results[0].ok).toBe(false);
+      expect(results[0].status).toBe(409);
     });
 
-    it('ошибка в importLog пишется в results как ok=false', async () => {
-      (storage.importLog as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new Error('parse failed'),
-      );
+    it('дублирующий файл (DUPLICATE_FILE) возвращает ok=false и status=409', async () => {
+      const dupErr = new Error('Файл уже был импортирован') as any;
+      dupErr.code = 'DUPLICATE_FILE';
+      dupErr.importId = 'existing-id';
+      dupErr.status = 'completed';
+      (importWorker.enqueueImport as ReturnType<typeof vi.fn>).mockImplementationOnce(() => { throw dupErr; });
+
+      const res = await makeRequest(app, 'POST', '/api/import', {
+        files: [{ fileName: 'dup.xml', content: '<rFactorXML>dup</rFactorXML>' }],
+      });
+      const results = (res.body as { results: { ok: boolean; status: number; importId: string }[] }).results;
+      expect(results[0].ok).toBe(false);
+      expect(results[0].status).toBe(409);
+      expect(results[0].importId).toBe('existing-id');
+    });
+
+    it('произвольная ошибка enqueueImport возвращает ok=false и status=500', async () => {
+      (importWorker.enqueueImport as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+        throw new Error('internal error');
+      });
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'bad.xml', content: '<rFactorXML>bad</rFactorXML>' }],
       });
-      const body = res.body as { results: { ok: boolean; message: string }[] };
-      expect(body.results[0].ok).toBe(false);
-      expect(body.results[0].message).toBe('parse failed');
+      const results = (res.body as { results: { ok: boolean; status: number; message: string }[] }).results;
+      expect(results[0].ok).toBe(false);
+      expect(results[0].status).toBe(500);
+      expect(results[0].message).toBe('internal error');
     });
 
-    it('imported = 0 если все файлы упали', async () => {
-      (storage.importLog as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('err'));
+    it('queued=0 если все файлы упали с ошибкой', async () => {
+      (importWorker.enqueueImport as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        throw new Error('err');
+      });
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'x.xml', content: '<rFactorXML>x</rFactorXML>' }],
       });
-      const body = res.body as { imported: number };
-      expect(body.imported).toBe(0);
+      const body = res.body as { queued: number };
+      expect(body.queued).toBe(0);
+    });
+
+    it('вызывает enqueueImport с правильными аргументами', async () => {
+      await makeRequest(app, 'POST', '/api/import', {
+        files: [{ fileName: 'race.xml', content: '<rFactorXML>data</rFactorXML>' }],
+      });
+      expect(importWorker.enqueueImport).toHaveBeenCalledWith(
+        'race.xml',
+        '<rFactorXML>data</rFactorXML>',
+      );
     });
   });
 
-  // ── GET /api/special-events ──────────────────────────────────────────────
+  // ── GET /api/import/:id/status ────────────────────────────────────────────
+  // Polling статуса задачи (#5)
+  // ---------------------------------------------------------------------------
+  describe('GET /api/import/:id/status', () => {
+    it('возвращает 404 если задача не найдена', async () => {
+      (importWorker.getJobStatus as ReturnType<typeof vi.fn>).mockReturnValueOnce(undefined);
+      const res = await makeRequest(app, 'GET', '/api/import/nonexistent/status');
+      expect(res.status).toBe(404);
+    });
+
+    it('возвращает статус задачи', async () => {
+      const mockJob = {
+        id: 'abc123',
+        fileName: 'race.xml',
+        status: 'completed',
+        sessionId: 1,
+        totalLaps: 42,
+        validLaps: 40,
+        errorLaps: 2,
+        error: null,
+        createdAt: Date.now(),
+        finishedAt: Date.now(),
+      };
+      (importWorker.getJobStatus as ReturnType<typeof vi.fn>).mockReturnValueOnce(mockJob);
+      const res = await makeRequest(app, 'GET', '/api/import/abc123/status');
+      expect(res.status).toBe(200);
+      const body = res.body as typeof mockJob;
+      expect(body.importId).toBe('abc123');
+      expect(body.status).toBe('completed');
+      expect(body.totalLaps).toBe(42);
+    });
+
+    it('ответ содержит все обязательные поля', async () => {
+      const mockJob = {
+        id: 'job1',
+        fileName: 'f.xml',
+        status: 'queued',
+        sessionId: null,
+        totalLaps: null,
+        validLaps: null,
+        errorLaps: null,
+        error: null,
+        createdAt: Date.now(),
+        finishedAt: null,
+      };
+      (importWorker.getJobStatus as ReturnType<typeof vi.fn>).mockReturnValueOnce(mockJob);
+      const res = await makeRequest(app, 'GET', '/api/import/job1/status');
+      const body = res.body as Record<string, unknown>;
+      expect(body).toHaveProperty('importId');
+      expect(body).toHaveProperty('fileName');
+      expect(body).toHaveProperty('status');
+      expect(body).toHaveProperty('sessionId');
+      expect(body).toHaveProperty('totalLaps');
+      expect(body).toHaveProperty('error');
+      expect(body).toHaveProperty('createdAt');
+      expect(body).toHaveProperty('finishedAt');
+    });
+  });
+
+  // ── GET /api/import/:id/errors ────────────────────────────────────────────
+  // DLQ просмотр ошибок импорта (#8)
+  // ---------------------------------------------------------------------------
+  describe('GET /api/import/:id/errors', () => {
+    it('возвращает 404 если задача не найдена', async () => {
+      (importWorker.getJobStatus as ReturnType<typeof vi.fn>).mockReturnValueOnce(undefined);
+      const res = await makeRequest(app, 'GET', '/api/import/nonexistent/errors');
+      expect(res.status).toBe(404);
+    });
+
+    it('возвращает пустой список ошибок если их нет', async () => {
+      const mockJob = { id: 'j1', fileName: 'f.xml', status: 'completed' };
+      (importWorker.getJobStatus as ReturnType<typeof vi.fn>).mockReturnValueOnce(mockJob);
+      (importWorker.getJobErrors as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+      const res = await makeRequest(app, 'GET', '/api/import/j1/errors');
+      expect(res.status).toBe(200);
+      const body = res.body as { totalErrors: number; errors: unknown[] };
+      expect(body.totalErrors).toBe(0);
+      expect(body.errors).toEqual([]);
+    });
+
+    it('возвращает список DLQ ошибок', async () => {
+      const mockJob = { id: 'j2', fileName: 'f.xml', status: 'completed' };
+      const mockErrors = [
+        { id: 1, importJobId: 'j2', rawPayload: '{}', errorCode: 'LAP_TOO_FAST', errorMessage: 'too fast', occurredAt: Date.now() },
+        { id: 2, importJobId: 'j2', rawPayload: '{}', errorCode: 'LAP_TOO_SLOW', errorMessage: 'too slow', occurredAt: Date.now() },
+      ];
+      (importWorker.getJobStatus as ReturnType<typeof vi.fn>).mockReturnValueOnce(mockJob);
+      (importWorker.getJobErrors as ReturnType<typeof vi.fn>).mockReturnValueOnce(mockErrors);
+      const res = await makeRequest(app, 'GET', '/api/import/j2/errors');
+      expect(res.status).toBe(200);
+      const body = res.body as { totalErrors: number; errors: typeof mockErrors };
+      expect(body.totalErrors).toBe(2);
+      expect(body.errors[0].errorCode).toBe('LAP_TOO_FAST');
+    });
+
+    it('ответ содержит importId и fileName', async () => {
+      const mockJob = { id: 'j3', fileName: 'race.xml', status: 'failed' };
+      (importWorker.getJobStatus as ReturnType<typeof vi.fn>).mockReturnValueOnce(mockJob);
+      const res = await makeRequest(app, 'GET', '/api/import/j3/errors');
+      const body = res.body as Record<string, unknown>;
+      expect(body).toHaveProperty('importId', 'j3');
+      expect(body).toHaveProperty('fileName', 'race.xml');
+    });
+  });
+
+  // ── DELETE /api/demo ──────────────────────────────────────────────────────
+  describe('DELETE /api/demo', () => {
+    it('возвращает 200 с ok=true', async () => {
+      const res = await makeRequest(app, 'DELETE', '/api/demo');
+      expect(res.status).toBe(200);
+      expect((res.body as { ok: boolean }).ok).toBe(true);
+    });
+
+    it('ответ содержит message', async () => {
+      const res = await makeRequest(app, 'DELETE', '/api/demo');
+      expect(res.body).toHaveProperty('message');
+    });
+  });
+
+  // ── GET /api/special-events ───────────────────────────────────────────────
   describe('GET /api/special-events', () => {
     it('возвращает 200', async () => {
       const res = await makeRequest(app, 'GET', '/api/special-events');
@@ -335,7 +487,7 @@ describe('API Routes', () => {
     });
   });
 
-  // ── POST /api/special-events/refresh ────────────────────────────────────
+  // ── POST /api/special-events/refresh ─────────────────────────────────────
   describe('POST /api/special-events/refresh', () => {
     it('возвращает 200 с ok=true', async () => {
       const res = await makeRequest(app, 'POST', '/api/special-events/refresh');
