@@ -7,6 +7,7 @@
  *
  * Pipeline: parse → validate (#9) → normalize (#10) → persist / DLQ (#8)
  * Импорт считается успешным, если валидных круга >= VALID_LAP_THRESHOLD_PCT% (#8).
+ * Структурированное логирование JSON через server/logger.ts (#12).
  */
 import crypto from "node:crypto";
 import { db } from "./storage";
@@ -20,6 +21,12 @@ import { parseRaceResults, type ParsedSession } from "./logParser";
 import { validateLapTime } from "@shared/validators";
 import { normalizeLapTime, normalizeDriverNameForStorage, normalizeTrackName, toMilliseconds } from "./normalizer";
 import type { Track, Driver } from "@shared/schema";
+import {
+  logImportStarted,
+  logImportCompleted,
+  logImportFailed,
+  logParseError,
+} from "./logger";
 
 export const CHUNK_SIZE = 500;
 
@@ -111,17 +118,31 @@ async function processNext() {
     .where(eq(importJobs.id, job.id))
     .run();
 
+  const startedAt = Date.now();
+
   try {
     const { sessionId, totalLaps, validLaps, errorLaps } = await runImport(job);
+    const durationMs = Date.now() - startedAt;
     db.update(importJobs)
       .set({ status: "completed", sessionId, totalLaps, validLaps, errorLaps, finishedAt: Date.now() })
       .where(eq(importJobs.id, job.id))
       .run();
+    // #12 — лог завершения импорта
+    logImportCompleted({
+      importJobId: job.id,
+      fileName: job.fileName,
+      totalRows: totalLaps,
+      validRows: validLaps,
+      errorRows: errorLaps,
+      durationMs,
+    });
   } catch (e) {
     db.update(importJobs)
       .set({ status: "failed", error: (e as Error).message, finishedAt: Date.now() })
       .where(eq(importJobs.id, job.id))
       .run();
+    // #12 — лог ошибки импорта
+    logImportFailed(job.id, e as Error);
   }
 
   setImmediate(processNext);
@@ -145,11 +166,23 @@ async function runImport(job: ImportJobPayload): Promise<ImportResult> {
   try {
     parsed = parseRaceResults(job.content);
   } catch (e) {
-    throw new Error(`Ошибка разбора: ${(e as Error).message}`);
+    const err = e as Error;
+    // #7 — ясное сообщение при UNSUPPORTED_LOG_VERSION
+    if ((err as any).code === 'UNSUPPORTED_LOG_VERSION') {
+      throw new Error(`Неподдерживаемый формат лога: ${err.message}`);
+    }
+    throw new Error(`Ошибка разбора: ${err.message}`);
   }
   if (!parsed) {
     throw new Error("Не похоже на лог результатов LMU/rFactor (нет RaceResults)");
   }
+
+  // #12 — лог начала импорта с версией формата (#7)
+  logImportStarted({
+    importJobId: job.id,
+    fileName: job.fileName,
+    logVersion: parsed.logFormatVersion,
+  });
 
   // Проверяем дублирование по имени файла (legacy guard)
   const dup = db.select().from(sessions).where(eq(sessions.fileName, job.fileName)).get();
@@ -269,6 +302,15 @@ async function runImport(job: ImportJobPayload): Promise<ImportResult> {
           const validation = validateLapTime(rawForValidation);
 
           if (!validation.ok) {
+            // #12 — записываем каждую ошибку с контекстом
+            logParseError(
+              {
+                importJobId: job.id,
+                raw: JSON.stringify({ driverName: d.name, lapNum: lap.num, lapMs: lap.lapMs }),
+                code: validation.errorCode,
+              },
+              `Failed to parse lap time: ${validation.errorMessage}`
+            );
             // Записываем в DLQ (#8)
             dlqRows.push({
               importJobId: job.id,
@@ -396,9 +438,9 @@ async function runImport(job: ImportJobPayload): Promise<ImportResult> {
   return result;
 }
 
-// ──────────────────────────────────────────────
+// ───────────────────────────────────────────────
 // Helpers
-// ──────────────────────────────────────────────
+// ───────────────────────────────────────────────
 
 function findOrCreateTrack(tx: any, parsed: ParsedSession): Track {
   const all = tx.select().from(tracks).all();
