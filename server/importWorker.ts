@@ -192,11 +192,10 @@ async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     logVersion: parsed.logFormatVersion,
   });
 
-  // Проверяем дублирование по имени файла (legacy guard)
-  const dup = db.select().from(sessions).where(eq(sessions.fileName, job.fileName)).get();
-  if (dup) {
-    throw new Error(`Сессия с файлом '${job.fileName}' уже существует`);
-  }
+  // fix(#62): legacy-guard по fileName удалён.
+  // Idempotency полностью обеспечивается через file_hash в enqueueImport().
+  // Два разных файла с одинаковым именем (например Race.xml) — типичный
+  // сценарий в LMU — теперь корректно импортируются как отдельные сессии.
 
   // Все операции записи в одной транзакции (#11)
   const result = db.transaction((tx) => {
