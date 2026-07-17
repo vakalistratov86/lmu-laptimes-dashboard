@@ -10,6 +10,8 @@ export interface ParsedLap {
   s2Ms: number | null;
   s3Ms: number | null;
   isPit: boolean;
+  conditions: string | null;      // #63 — из атрибута Lap или Stream
+  frontCompound: string | null;   // #63 — из атрибута Lap (компаунд)
 }
 
 export interface ParsedDriver {
@@ -162,6 +164,9 @@ function parseDriverBlock(block: string): ParsedDriver | null {
     const inner = lm[2];
     const attr = (a: string): string | null => attrValue(attrs, a);
     const num = parseInt(attr("num") ?? "0", 10) || 0;
+    // #63 — читаем conditions и frontCompound из атрибутов тега <Lap>
+    const conditions = attr("wet") === "1" ? "Дождь" : (attr("conditions") ?? null);
+    const frontCompound = attr("frontCompound") ?? attr("compound") ?? null;
     lapList.push({
       num,
       lapMs: secToMs(inner),
@@ -169,6 +174,8 @@ function parseDriverBlock(block: string): ParsedDriver | null {
       s2Ms: secToMs(attr("s2")),
       s3Ms: secToMs(attr("s3")),
       isPit: attr("pit") === "1",
+      conditions,
+      frontCompound,
     });
   }
 
@@ -215,8 +222,8 @@ function parseStream(
     const attrs = im[1];
     const inner = im[2];
     const et = toFloat(attrValue(attrs, "et")) ?? 0;
-    const severityStr = inner.match(/\(([\d.]+)\)/);
-    const severity = severityStr ? parseFloat(severityStr[1]) : 0;
+    // fix(#64): severity — атрибут тега <Incident>, а не текст в скобках
+    const severity = parseFloat(attrValue(attrs, "severity") ?? "0") || 0;
     const names = [...inner.matchAll(/<Name>([\s\S]*?)<\/Name>/g)].map((m) => m[1].trim());
     const isImmovable = inner.includes("<Immovable>") || inner.includes("Immovable");
     incidents.push({
