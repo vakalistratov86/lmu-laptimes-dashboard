@@ -17,22 +17,6 @@ import { eq, and, desc } from "drizzle-orm";
 const sqlite = new Database("data.db");
 sqlite.pragma("journal_mode = WAL");
 
-// Создаём таблицу import_jobs если её ещё нет (миграция без drizzle-kit)
-sqlite.exec(`
-  CREATE TABLE IF NOT EXISTS import_jobs (
-    id TEXT PRIMARY KEY,
-    file_hash TEXT NOT NULL UNIQUE,
-    file_name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'queued',
-    session_id INTEGER,
-    total_laps INTEGER,
-    error TEXT,
-    created_at INTEGER NOT NULL,
-    finished_at INTEGER
-  );
-  CREATE UNIQUE INDEX IF NOT EXISTS import_jobs_file_hash_idx ON import_jobs(file_hash);
-`);
-
 export const db = drizzle(sqlite);
 
 export interface LapFilter {
