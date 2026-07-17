@@ -192,9 +192,10 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     const lap = raw as AnyLap;
     const driver = String(lap.driverName ?? lap.driver ?? 'Unknown');
     const carNumber = lap.carNumber ?? lap.number ?? '';
-    const s1 = Number(lap.sector1 ?? lap.s1 ?? NaN);
-    const s2 = Number(lap.sector2 ?? lap.s2 ?? NaN);
-    const s3 = Number(lap.sector3 ?? lap.s3 ?? NaN);
+    // sector1Ms — основное поле из session_laps; sector1 / s1 — запасные варианты
+    const s1 = Number(lap.sector1Ms ?? lap.sector1 ?? lap.s1 ?? NaN);
+    const s2 = Number(lap.sector2Ms ?? lap.sector2 ?? lap.s2 ?? NaN);
+    const s3 = Number(lap.sector3Ms ?? lap.sector3 ?? lap.s3 ?? NaN);
 
     if (!map.has(driver)) {
       map.set(driver, { carNumber, bestS: [Infinity, Infinity, Infinity] });
@@ -275,9 +276,10 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
       .sort((a, b) => Number(a.lapNumber ?? a.lap ?? 0) - Number(b.lapNumber ?? b.lap ?? 0))
       .map((lap) => {
         const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
-        const s1 = Number(lap.sector1 ?? lap.s1 ?? NaN);
-        const s2 = Number(lap.sector2 ?? lap.s2 ?? NaN);
-        const s3 = Number(lap.sector3 ?? lap.s3 ?? NaN);
+        // sector1Ms — основное поле из session_laps; sector1 / s1 — запасные варианты
+        const s1 = Number(lap.sector1Ms ?? lap.sector1 ?? lap.s1 ?? NaN);
+        const s2 = Number(lap.sector2Ms ?? lap.sector2 ?? lap.s2 ?? NaN);
+        const s3 = Number(lap.sector3Ms ?? lap.sector3 ?? lap.s3 ?? NaN);
 
         return {
           lapNumber: Number(lap.lapNumber ?? lap.lap ?? 0),
