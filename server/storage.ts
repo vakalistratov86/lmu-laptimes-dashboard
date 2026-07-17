@@ -1,4 +1,7 @@
-import { tracks, drivers, lapTimes, sessions, sessionResults } from '@shared/schema';
+import {
+  tracks, drivers, lapTimes, sessions, sessionResults,
+  sessionLaps, sessionIncidents, sessionSectorBests, sessionTrackLimits,
+} from '@shared/schema';
 import type {
   Track, InsertTrack,
   Driver, InsertDriver,
@@ -61,8 +64,6 @@ export class DatabaseStorage implements IStorage {
     const allDrivers = db.select().from(drivers).all();
     const srRows = db.select().from(sessionResults).all();
 
-    // Строим мап: driverId → maxIsPlayer
-    // Если у пилота хотя бы одна запись с isPlayer=1 — он реальный игрок
     const playerMap = new Map<number, number>();
     for (const sr of srRows) {
       const current = playerMap.get(sr.driverId) ?? 0;
@@ -71,7 +72,6 @@ export class DatabaseStorage implements IStorage {
 
     return allDrivers.map((d) => ({
       ...d,
-      // null если у пилота нет ни одной записи в session_results (demo-только)
       isPlayer: playerMap.has(d.id) ? (playerMap.get(d.id) ?? 0) : null,
     }));
   }
@@ -87,22 +87,15 @@ export class DatabaseStorage implements IStorage {
     if (filter.source) conditions.push(eq(lapTimes.source, filter.source));
     if (filter.sessionId) conditions.push(eq(lapTimes.sessionId, filter.sessionId));
 
-    // JOIN с таблицей sessions для получения sessionCourse
     const rows = conditions.length
       ? db
-          .select({
-            lap: lapTimes,
-            sessionCourse: sessions.course,
-          })
+          .select({ lap: lapTimes, sessionCourse: sessions.course })
           .from(lapTimes)
           .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
           .where(and(...conditions))
           .all()
       : db
-          .select({
-            lap: lapTimes,
-            sessionCourse: sessions.course,
-          })
+          .select({ lap: lapTimes, sessionCourse: sessions.course })
           .from(lapTimes)
           .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
           .all();
@@ -110,14 +103,12 @@ export class DatabaseStorage implements IStorage {
     const trackMap = new Map(db.select().from(tracks).all().map((t) => [t.id, t]));
     const driverMap = new Map(db.select().from(drivers).all().map((d) => [d.id, d]));
 
-    // Строим мап: (sessionId, driverId) → isPlayer из session_results
     const srRows = db.select().from(sessionResults).all();
     const isPlayerMap = new Map<string, number>();
     for (const sr of srRows) {
       isPlayerMap.set(`${sr.sessionId}:${sr.driverId}`, sr.isPlayer);
     }
 
-    // Постфильтрация по sessionCourse (если задан)
     const enriched = rows.map(({ lap: r, sessionCourse }) => {
       const isPlayer = r.sessionId != null
         ? (isPlayerMap.get(`${r.sessionId}:${r.driverId}`) ?? null)
@@ -181,6 +172,7 @@ export class DatabaseStorage implements IStorage {
     const track = this.findOrCreateTrack(parsed);
     const dateOnly = parsed.dateTimeIso.slice(0, 10);
 
+    // #48 + #50 — записываем все поля сессии
     let totalLaps = 0;
     const session = db.insert(sessions).values({
       trackId: track.id,
@@ -188,55 +180,160 @@ export class DatabaseStorage implements IStorage {
       sessionType: parsed.sessionType,
       venue: parsed.venue,
       course: parsed.course ?? null,
+      trackLengthM: parsed.trackLengthM ?? null,          // #50
       gameVersion: parsed.gameVersion ?? null,
       dateTime: parsed.dateTimeIso,
+      dateTimeUnix: parsed.dateTimeUnix ?? null,           // #48
       fileName,
+      setting: parsed.setting ?? null,                    // #48
       driverCount: parsed.drivers.length,
       lapCount: 0,
+      raceLaps: parsed.raceLaps ?? null,                  // #48
+      raceTimeMin: parsed.raceTimeMin ?? null,             // #48
+      mechFailRate: parsed.mechFailRate ?? null,           // #48
+      damageMult: parsed.damageMult ?? null,               // #48
+      fuelMult: parsed.fuelMult ?? null,                   // #48
+      tireMult: parsed.tireMult ?? null,                   // #48
+      vehiclesAllowed: parsed.vehiclesAllowed ?? null,     // #48
+      parcFerme: parsed.parcFerme ?? null,                 // #48
+      fixedSetups: parsed.fixedSetups ?? null,             // #48
+      freeSettings: parsed.freeSettings ?? null,           // #48
+      fixedUpgrades: parsed.fixedUpgrades ?? null,         // #48
+      tireWarmers: parsed.tireWarmers ?? null,             // #48
+      dedicated: parsed.dedicated ?? null,                 // #48
+      sessionDurationMin: parsed.sessionDurationMin ?? null, // #48
+      sessionMaxLaps: parsed.sessionMaxLaps ?? null,       // #48
+      mostLapsCompleted: parsed.mostLapsCompleted ?? null, // #48
     }).returning().get();
+
+    // Строим map имя пилота → driverId для Stream-ссылок (#49)
+    const driverIdByName = new Map<string, number>();
 
     for (const d of parsed.drivers) {
       const driver = this.findOrCreateDriver(d.name, d.teamName);
+      driverIdByName.set(d.name.toLowerCase(), driver.id);
       const cls = normalizeClass(d.carClass);
 
-      db.insert(sessionResults).values({
+      // #48 — записываем все поля session_results
+      const sr = db.insert(sessionResults).values({
         sessionId: session.id,
         driverId: driver.id,
         isPlayer: d.isPlayer ? 1 : 0,
         position: d.position,
         classPosition: d.classPosition,
+        lapRankIncludingDiscos: d.lapRankIncludingDiscos ?? null, // #48
         carClass: cls,
         car: d.carType,
+        carType: d.carType,                                       // #48
         team: d.teamName,
         carNumber: d.carNumber ?? null,
+        vehFile: d.vehFile ?? null,                               // #48
+        vehName: d.vehName ?? null,                               // #48
+        category: d.category ?? null,                             // #48
         laps: d.laps,
         pitstops: d.pitstops,
         bestLapMs: d.bestLapMs ?? null,
         finishStatus: d.finishStatus ?? null,
-      }).run();
+        controlAndAids: d.controlAndAids ?? null,                 // #48
+        connected: d.connected ?? null,                           // #48
+      }).returning().get();
 
+      // #49 — записываем детальные круги в session_laps
       for (const lap of d.lapList) {
-        if (lap.lapMs == null || lap.isPit) continue;
-        const s1 = lap.s1Ms ?? 0;
-        const s2 = lap.s2Ms ?? 0;
-        const s3 = lap.s3Ms ?? Math.max(0, lap.lapMs - s1 - s2);
-        db.insert(lapTimes).values({
-          trackId: track.id,
+        // #51 — null-safe сектора: если S1/S2 null, не заполняем S3 вычисленным значением
+        const s1 = lap.s1Ms;                                      // null если отсутствует
+        const s2 = lap.s2Ms;                                      // null если отсутствует
+        // S3 вычисляем только если есть все три компонента (#51)
+        const s3 = lap.s3Ms != null
+          ? lap.s3Ms
+          : (s1 != null && s2 != null && lap.lapMs != null)
+            ? Math.max(0, lap.lapMs - s1 - s2)
+            : null;
+
+        db.insert(sessionLaps).values({
+          sessionResultId: sr.id,
+          sessionId: session.id,
           driverId: driver.id,
-          carClass: cls,
-          car: d.carType,
-          lapMs: lap.lapMs,
+          lapNum: lap.num,
+          lapTimeMs: lap.lapMs,
           sector1Ms: s1,
           sector2Ms: s2,
           sector3Ms: s3,
-          conditions: "Сухо",
-          tyre: "Medium",
-          date: dateOnly,
-          source: "import",
-          sessionId: session.id,
+          isPitLap: lap.isPit ? 1 : 0,
         }).run();
-        totalLaps++;
+
+        // lap_times — только зачтённые не-пит круги
+        if (lap.lapMs != null && !lap.isPit) {
+          // Для lap_times используем 0-safe значения для обратной совместимости,
+          // но только когда хоть один сектор известен (#51)
+          const ltS1 = s1 ?? 0;
+          const ltS2 = s2 ?? 0;
+          const ltS3 = s3 ?? Math.max(0, lap.lapMs - ltS1 - ltS2);
+          db.insert(lapTimes).values({
+            trackId: track.id,
+            driverId: driver.id,
+            carClass: cls,
+            car: d.carType,
+            lapMs: lap.lapMs,
+            sector1Ms: ltS1,
+            sector2Ms: ltS2,
+            sector3Ms: ltS3,
+            conditions: "Сухо",
+            tyre: "Medium",
+            date: dateOnly,
+            source: "import",
+            sessionId: session.id,
+          }).run();
+          totalLaps++;
+        }
       }
+    }
+
+    // #49 — Инциденты
+    for (const inc of parsed.incidents) {
+      const driverId = driverIdByName.get(inc.driverName.toLowerCase());
+      if (driverId == null) continue;
+      const targetDriverId = inc.targetDriverName
+        ? (driverIdByName.get(inc.targetDriverName.toLowerCase()) ?? null)
+        : null;
+      db.insert(sessionIncidents).values({
+        sessionId: session.id,
+        driverId,
+        targetDriverId,
+        elapsedTimeSec: inc.elapsedTimeSec,
+        severity: inc.severity,
+        isImmovable: inc.isImmovable ? 1 : 0,
+      }).run();
+    }
+
+    // #49 — Лучшие времена секторов
+    for (const sb of parsed.sectorBests) {
+      const driverId = driverIdByName.get(sb.driverName.toLowerCase());
+      if (driverId == null) continue;
+      db.insert(sessionSectorBests).values({
+        sessionId: session.id,
+        driverId,
+        carClass: normalizeClass(sb.carClass),
+        sector: sb.sector,
+        elapsedTimeSec: sb.elapsedTimeSec,
+        lapNum: sb.lapNum ?? null,
+      }).run();
+    }
+
+    // #49 — Нарушения трассы
+    for (const tl of parsed.trackLimits) {
+      const driverId = driverIdByName.get(tl.driverName.toLowerCase());
+      if (driverId == null) continue;
+      db.insert(sessionTrackLimits).values({
+        sessionId: session.id,
+        driverId,
+        lapNum: tl.lapNum,
+        elapsedTimeSec: tl.elapsedTimeSec,
+        warningPoints: tl.warningPoints ?? null,
+        currentPoints: tl.currentPoints ?? null,
+        resolution: tl.resolution ?? null,
+        decision: tl.decision ?? null,
+      }).run();
     }
 
     db.update(sessions).set({ lapCount: totalLaps }).where(eq(sessions.id, session.id)).run();
@@ -258,7 +355,6 @@ export class DatabaseStorage implements IStorage {
     const all = db.select().from(tracks).all();
     const course = parsed.course;
 
-    // Нормализуем venue из XML через ту же canonicalTrackName
     const canonicalName = canonicalTrackName(parsed.venue).name.toLowerCase();
     const parsedCourseNorm = (course ?? "").toLowerCase();
 
