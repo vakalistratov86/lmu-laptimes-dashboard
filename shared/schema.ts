@@ -83,6 +83,7 @@ export const importJobs = sqliteTable("import_jobs", {
   validLaps: integer("valid_laps"),                  // #8: кол-во прошедших валидацию кругов
   errorLaps: integer("error_laps"),                  // #8: кол-во записей в DLQ
   error: text("error"),                              // сообщение об ошибке при failed
+  logFormatVersion: text("log_format_version"),      // #7: версия формата лога (1.0 | 1.1 | 2.0)
   createdAt: integer("created_at").notNull(),        // Unix ms
   finishedAt: integer("finished_at"),                // Unix ms
 });
