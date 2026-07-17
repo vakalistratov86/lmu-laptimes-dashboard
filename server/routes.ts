@@ -2,14 +2,14 @@ import type { Express } from "express";
 import type { Server } from 'node:http';
 import { storage, type LapFilter, db } from "./storage";
 import { tracks, drivers, lapTimes, sessions, sessionResults } from '@shared/schema';
-import { eq, notInArray, inArray } from "drizzle-orm";
+import { eq, notInArray } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
+import { enqueueImport, getJobStatus } from "./importWorker";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // seedIfEmpty() удалён — демо-данные больше не создаются автоматически
 
   app.get("/api/tracks", async (_req, res) => {
     res.json(await storage.getTracks());
@@ -52,38 +52,85 @@ export async function registerRoutes(
     res.json(session);
   });
 
-  app.post("/api/import", async (req, res) => {
+  /**
+   * POST /api/import — async ingestion (#5)
+   *
+   * Принимает массив файлов, для каждого:
+   *   - вычисляет SHA-256 хэш (#6)
+   *   - если файл уже импортирован → 409 Conflict
+   *   - иначе ставит задачу в очередь → 202 Accepted { importId, status: 'queued' }
+   *
+   * Парсинг и запись в БД происходят асинхронно в importWorker,
+   * не блокируя HTTP event loop.
+   */
+  app.post("/api/import", (req, res) => {
     const files = req.body?.files;
     if (!Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ message: "Не переданы файлы для импорта" });
     }
-    const results = [];
+
+    const results: any[] = [];
+    let hasDuplicate = false;
+
     for (const f of files) {
       const fileName = String(f?.fileName ?? "без_имени.xml");
       const content = String(f?.content ?? "");
+
       if (!content.trim()) {
-        results.push({ fileName, ok: false, message: "Пустой файл" });
+        results.push({ fileName, ok: false, status: 409, message: "Пустой файл" });
         continue;
       }
+
       try {
-        results.push(await storage.importLog(fileName, content));
-      } catch (e) {
-        results.push({ fileName, ok: false, message: (e as Error).message });
+        const importId = enqueueImport(fileName, content);
+        results.push({ fileName, ok: true, importId, status: "queued" });
+      } catch (e: any) {
+        if (e.code === "DUPLICATE_FILE") {
+          hasDuplicate = true;
+          results.push({
+            fileName,
+            ok: false,
+            status: 409,
+            message: "Файл уже был импортирован",
+            importId: e.importId,
+            importStatus: e.status,
+          });
+        } else {
+          results.push({ fileName, ok: false, status: 500, message: e.message });
+        }
       }
     }
-    const imported = results.filter((r) => r.ok).length;
-    const totalLaps = results.reduce((s, r) => s + (r.laps ?? 0), 0);
-    res.json({ imported, skipped: results.length - imported, totalLaps, results });
+
+    const queued = results.filter((r) => r.ok).length;
+    const httpStatus = queued > 0 ? 202 : (hasDuplicate ? 409 : 400);
+    res.status(httpStatus).json({ queued, total: results.length, results });
+  });
+
+  /**
+   * GET /api/import/:id/status — polling статуса задачи (#5)
+   *
+   * Возвращает текущий статус задачи импорта:
+   *   queued | processing | completed | failed
+   */
+  app.get("/api/import/:id/status", (req, res) => {
+    const job = getJobStatus(req.params.id);
+    if (!job) return res.status(404).json({ message: "Задача не найдена" });
+    res.json({
+      importId: job.id,
+      fileName: job.fileName,
+      status: job.status,
+      sessionId: job.sessionId ?? null,
+      totalLaps: job.totalLaps ?? null,
+      error: job.error ?? null,
+      createdAt: job.createdAt,
+      finishedAt: job.finishedAt ?? null,
+    });
   });
 
   // ── Demo Data ────────────────────────────────────────────────────
-  // DELETE /api/demo — удаляет все записи с source='demo', а также
-  // трассы и пилотов, у которых не осталось ни одного реального круга.
   app.delete("/api/demo", (_req, res) => {
-    // 1. Удаляем демо-круги
     db.delete(lapTimes).where(eq(lapTimes.source, "demo")).run();
 
-    // 2. Трассы без оставшихся кругов и без сессий
     const usedTrackIds = db.select({ id: lapTimes.trackId }).from(lapTimes).all().map((r) => r.id);
     const sessionTrackIds = db.select({ id: sessions.trackId }).from(sessions).all().map((r) => r.id);
     const keepTrackIds = [...new Set([...usedTrackIds, ...sessionTrackIds])];
@@ -93,7 +140,6 @@ export async function registerRoutes(
       db.delete(tracks).run();
     }
 
-    // 3. Пилоты без оставшихся кругов и без результатов сессий
     const usedDriverIds = db.select({ id: lapTimes.driverId }).from(lapTimes).all().map((r) => r.id);
     const sessionDriverIds = db.select({ id: sessionResults.driverId }).from(sessionResults).all().map((r) => r.id);
     const keepDriverIds = [...new Set([...usedDriverIds, ...sessionDriverIds])];
@@ -107,7 +153,6 @@ export async function registerRoutes(
   });
 
   // ── Special Events ──────────────────────────────────────────────
-  // GET /api/special-events — список событий (кэш 6ч, fallback на статику)
   app.get("/api/special-events", async (_req, res) => {
     try {
       const data = await getSpecialEvents();
@@ -117,7 +162,6 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/special-events/refresh — принудительный сброс кэша
   app.post("/api/special-events/refresh", async (_req, res) => {
     invalidateCache();
     try {
