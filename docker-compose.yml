@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  dashboard:
+    image: ghcr.io/vakalistratov86/lmu-laptimes-dashboard:latest
+    container_name: lmu-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
