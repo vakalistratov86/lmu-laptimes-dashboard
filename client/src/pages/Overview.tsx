@@ -3,7 +3,7 @@ import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Timer, Flag, Users, Gauge, Trophy, UserCheck, Bot, RefreshCw } from "lucide-react";
+import { Timer, Flag, Users, Gauge, Trophy, UserCheck, Bot, RefreshCw, Route } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
 } from "recharts";
@@ -28,6 +28,12 @@ function KpiCard({
       </div>
     </Card>
   );
+}
+
+/** Форматирует дистанцию в метрах: < 1000 → «X м», иначе → «X.XX км» */
+function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)} м`;
+  return `${(meters / 1000).toFixed(2)} км`;
 }
 
 export default function Overview() {
@@ -69,6 +75,16 @@ export default function Overview() {
   const totalLapsCompleted = useMemo(() => {
     if (!sessions) return 0;
     return sessions.reduce((sum, s) => sum + (s.lapCount ?? 0), 0);
+  }, [sessions]);
+
+  // Суммарная дистанция по всем сессиям: lapCount * trackLengthM
+  const totalDistanceM = useMemo(() => {
+    if (!sessions) return 0;
+    return sessions.reduce((sum, s) => {
+      const laps = s.lapCount ?? 0;
+      const lengthM = s.trackLengthM ?? 0;
+      return sum + laps * lengthM;
+    }, 0);
   }, [sessions]);
 
   if (isLoading || !laps) {
@@ -115,7 +131,12 @@ export default function Overview() {
 
       {/* Верхний ряд: базовая статистика */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard icon={Timer} label="Заездов" value={String(filteredLaps.length)} sub="в базе данных" />
+        <KpiCard
+          icon={Route}
+          label="Пройдено расстояния"
+          value={formatDistance(totalDistanceM)}
+          sub="во всех сессиях"
+        />
         <KpiCard icon={Flag} label="Трасс" value={String(tracks?.length ?? 0)} sub="активных" />
         <KpiCard icon={Users} label="Пилотов" value={String(filteredDriverCount)} sub={isFiltered ? "выбрано" : "в чемпионате"} />
         <KpiCard
