@@ -125,6 +125,7 @@ export async function registerRoutes(
     const results: any[] = [];
     let imported = 0;
     let skipped = 0;
+    let errors = 0;
     let totalLaps = 0;
 
     for (const f of files) {
@@ -184,14 +185,32 @@ export async function registerRoutes(
         totalLaps += validLaps;
         results.push({ fileName, ok: true, importId: id, sessionId, laps: validLaps, errorLaps });
       } catch (e: any) {
-        await db.update(importJobs)
-          .set({ status: "failed", error: e.message, finishedAt: Date.now() })
-          .where(eq(importJobs.id, id));
-        results.push({ fileName, ok: false, status: 500, message: e.message, importId: id });
+        if (e.code === "ZERO_LAPS") {
+          // Файл валидный, но кругов нет — считаем пропуском, не ошибкой
+          await db.update(importJobs)
+            .set({ status: "skipped", error: e.message, finishedAt: Date.now() })
+            .where(eq(importJobs.id, id));
+          skipped++;
+          results.push({
+            fileName,
+            ok: true,
+            skipped: true,
+            status: 200,
+            message: "Файл пропущен: 0 кругов",
+            importId: id,
+          });
+        } else {
+          await db.update(importJobs)
+            .set({ status: "failed", error: e.message, finishedAt: Date.now() })
+            .where(eq(importJobs.id, id));
+          errors++;
+          results.push({ fileName, ok: false, status: 500, message: e.message, importId: id });
+        }
       }
     }
 
-    const httpStatus = imported > 0 ? 200 : (skipped > 0 ? 409 : 400);
+    // 200 если есть хоть один успешный импорт или все «неуспехи» — только пропуски
+    const httpStatus = imported > 0 || errors === 0 ? 200 : 400;
     res.status(httpStatus).json({ imported, skipped, totalLaps, total: results.length, results });
   }));
 
