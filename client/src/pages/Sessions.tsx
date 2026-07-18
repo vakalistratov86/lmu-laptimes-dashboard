@@ -91,7 +91,7 @@ function SessionsTableSkeleton() {
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="border-b border-border bg-secondary/30 px-4 py-3">
         <div className="flex gap-6">
-          {["w-16", "w-28", "w-24", "w-20"].map((w, i) => (
+          {["w-16", "w-28", "w-24", "w-16", "w-20"].map((w, i) => (
             <Skeleton key={i} className={`h-3 ${w}`} />
           ))}
         </div>
@@ -101,6 +101,7 @@ function SessionsTableSkeleton() {
           <Skeleton className="h-5 w-20 rounded-full" />
           <Skeleton className="h-4 w-36" />
           <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-12" />
           <Skeleton className="h-4 w-16" />
         </div>
       ))}
@@ -261,12 +262,13 @@ export default function Sessions() {
           {/* Table header */}
           <div
             className="grid border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            style={{ gridTemplateColumns: "160px 1fr 140px 110px 24px" }}
+            style={{ gridTemplateColumns: "160px 1fr 140px 80px 110px 24px" }}
             role="row"
           >
             <div role="columnheader">Тип</div>
             <div role="columnheader">Трек</div>
             <div role="columnheader" className="text-right">Лучший круг</div>
+            <div role="columnheader" className="text-right">Кругов</div>
             <div role="columnheader" className="text-right">Дата</div>
             <div role="columnheader" />
           </div>
@@ -287,7 +289,7 @@ export default function Sessions() {
                 href={href}
                 data-testid={`row-session-${session.id}`}
                 className="grid cursor-pointer items-center border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                style={{ gridTemplateColumns: "160px 1fr 140px 110px 24px" }}
+                style={{ gridTemplateColumns: "160px 1fr 140px 80px 110px 24px" }}
                 role="row"
                 aria-label={`${meta.label} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime)}`}
               >
@@ -310,6 +312,11 @@ export default function Sessions() {
                 {/* Best lap */}
                 <div className="text-right font-data tabular-nums text-sm text-muted-foreground" role="cell">
                   {bestLap ? formatLap(bestLap) : "—"}
+                </div>
+
+                {/* Lap count */}
+                <div className="text-right font-data tabular-nums text-sm text-muted-foreground" role="cell">
+                  {session.lapCount ?? "—"}
                 </div>
 
                 {/* Date */}
