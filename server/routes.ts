@@ -66,15 +66,11 @@ export async function registerRoutes(
   /**
    * POST /api/import — synchronous ingestion.
    *
-   * SQLite transactions for typical LMU files (~5 000 rows) complete in
+   * PostgreSQL transactions for typical LMU files (~5 000 rows) complete in
    * well under 500 ms, so there is no benefit to an async queue here.
-   * The previous enqueueImport() approach returned 202 immediately and
-   * the frontend never received the real `imported`/`totalLaps` values
-   * because the worker finished after the response was already sent.
-   *
    * runImport() is called directly and awaited; the response is sent
    * only after all files are persisted. Duplicate-file detection is
-   * preserved via SHA-256 hash (same logic as enqueueImport).
+   * preserved via SHA-256 hash.
    */
   app.post("/api/import", asyncRoute(async (req, res) => {
     const files = req.body?.files;
@@ -99,11 +95,11 @@ export async function registerRoutes(
 
       // Idempotency check (#6): SHA-256 hash
       const fileHash = computeFileHash(content);
-      const existing = db
+      const existingRows = await db
         .select()
         .from(importJobs)
-        .where(eq(importJobs.fileHash, fileHash))
-        .get();
+        .where(eq(importJobs.fileHash, fileHash));
+      const existing = existingRows[0];
 
       if (existing) {
         skipped++;
@@ -120,13 +116,13 @@ export async function registerRoutes(
 
       // Создаём запись задачи со статусом processing до запуска импорта
       const id = generateId();
-      db.insert(importJobs).values({
+      await db.insert(importJobs).values({
         id,
         fileHash,
         fileName,
         status: "processing",
         createdAt: Date.now(),
-      }).run();
+      });
 
       try {
         const { sessionId, totalLaps: laps, validLaps, errorLaps } = await runImport({
@@ -136,19 +132,17 @@ export async function registerRoutes(
           content,
         });
 
-        db.update(importJobs)
+        await db.update(importJobs)
           .set({ status: "completed", sessionId, totalLaps: laps, validLaps, errorLaps, finishedAt: Date.now() })
-          .where(eq(importJobs.id, id))
-          .run();
+          .where(eq(importJobs.id, id));
 
         imported++;
         totalLaps += validLaps;
         results.push({ fileName, ok: true, importId: id, sessionId, laps: validLaps, errorLaps });
       } catch (e: any) {
-        db.update(importJobs)
+        await db.update(importJobs)
           .set({ status: "failed", error: e.message, finishedAt: Date.now() })
-          .where(eq(importJobs.id, id))
-          .run();
+          .where(eq(importJobs.id, id));
         results.push({ fileName, ok: false, status: 500, message: e.message, importId: id });
       }
     }
@@ -160,8 +154,8 @@ export async function registerRoutes(
   /**
    * GET /api/import/:id/status — статус задачи (#5)
    */
-  app.get("/api/import/:id/status", (req, res) => {
-    const job = getJobStatus(req.params.id);
+  app.get("/api/import/:id/status", asyncRoute(async (req, res) => {
+    const job = await getJobStatus(req.params.id);
     if (!job) return res.status(404).json({ message: "Задача не найдена" });
     res.json({
       importId: job.id,
@@ -175,18 +169,15 @@ export async function registerRoutes(
       createdAt: job.createdAt,
       finishedAt: job.finishedAt ?? null,
     });
-  });
+  }));
 
   /**
    * GET /api/import/:id/errors — просмотр DLQ ошибок импорта (#8)
-   *
-   * Возвращает список невалидных записей для данного задания:
-   *   id, importJobId, rawPayload, errorCode, errorMessage, occurredAt
    */
-  app.get("/api/import/:id/errors", (req, res) => {
-    const job = getJobStatus(req.params.id);
+  app.get("/api/import/:id/errors", asyncRoute(async (req, res) => {
+    const job = await getJobStatus(req.params.id);
     if (!job) return res.status(404).json({ message: "Задача не найдена" });
-    const errors = getJobErrors(req.params.id);
+    const errors = await getJobErrors(req.params.id);
     res.json({
       importId: job.id,
       fileName: job.fileName,
@@ -194,32 +185,38 @@ export async function registerRoutes(
       totalErrors: errors.length,
       errors,
     });
-  });
+  }));
 
   // ── Demo Data ────────────────────────────────────────────────────
-  app.delete("/api/demo", (_req, res) => {
-    db.delete(lapTimes).where(eq(lapTimes.source, "demo")).run();
+  app.delete("/api/demo", asyncRoute(async (_req, res) => {
+    await db.delete(lapTimes).where(eq(lapTimes.source, "demo"));
 
-    const usedTrackIds = db.select({ id: lapTimes.trackId }).from(lapTimes).all().map((r) => r.id);
-    const sessionTrackIds = db.select({ id: sessions.trackId }).from(sessions).all().map((r) => r.id);
-    const keepTrackIds = [...new Set([...usedTrackIds, ...sessionTrackIds])];
+    const usedTrackRows = await db.select({ id: lapTimes.trackId }).from(lapTimes);
+    const sessionTrackRows = await db.select({ id: sessions.trackId }).from(sessions);
+    const keepTrackIds = [...new Set([
+      ...usedTrackRows.map((r) => r.id),
+      ...sessionTrackRows.map((r) => r.id),
+    ])];
     if (keepTrackIds.length > 0) {
-      db.delete(tracks).where(notInArray(tracks.id, keepTrackIds)).run();
+      await db.delete(tracks).where(notInArray(tracks.id, keepTrackIds));
     } else {
-      db.delete(tracks).run();
+      await db.delete(tracks);
     }
 
-    const usedDriverIds = db.select({ id: lapTimes.driverId }).from(lapTimes).all().map((r) => r.id);
-    const sessionDriverIds = db.select({ id: sessionResults.driverId }).from(sessionResults).all().map((r) => r.id);
-    const keepDriverIds = [...new Set([...usedDriverIds, ...sessionDriverIds])];
+    const usedDriverRows = await db.select({ id: lapTimes.driverId }).from(lapTimes);
+    const sessionDriverRows = await db.select({ id: sessionResults.driverId }).from(sessionResults);
+    const keepDriverIds = [...new Set([
+      ...usedDriverRows.map((r) => r.id),
+      ...sessionDriverRows.map((r) => r.id),
+    ])];
     if (keepDriverIds.length > 0) {
-      db.delete(drivers).where(notInArray(drivers.id, keepDriverIds)).run();
+      await db.delete(drivers).where(notInArray(drivers.id, keepDriverIds));
     } else {
-      db.delete(drivers).run();
+      await db.delete(drivers);
     }
 
     res.json({ ok: true, message: "Демо-данные удалены" });
-  });
+  }));
 
   // ── Special Events ──────────────────────────────────────────────
   app.get("/api/special-events", asyncRoute(async (_req, res) => {
