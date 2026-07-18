@@ -33,7 +33,7 @@ export function DriverLapTable({ laps }: DriverLapTableProps) {
             <tr
               key={lap.lapNumber}
               className={`border-b border-border/50 last:border-0 hover:bg-muted/40 ${
-                lap.isPersonalBest ? 'bg-primary/5' : ''
+                lap.isPersonalBest ? 'bg-green-500/5' : ''
               }`}
             >
               <td className="px-4 py-2 font-data tabular-nums text-muted-foreground">
@@ -54,9 +54,9 @@ export function DriverLapTable({ laps }: DriverLapTableProps) {
               <td
                 className={`px-4 py-2 text-right font-data tabular-nums ${
                   lap.isOverallBest
-                    ? 'font-bold text-primary'
+                    ? 'font-bold text-green-500'
                     : lap.isPersonalBest
-                    ? 'font-semibold text-primary/80'
+                    ? 'font-semibold text-green-500/80'
                     : ''
                 }`}
               >

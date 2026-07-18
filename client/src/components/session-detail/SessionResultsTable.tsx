@@ -81,7 +81,7 @@ export function SessionResultsRow({ row, isFastest, isPlayer }: SessionResultsRo
       <td className="px-4 py-2.5 text-right">
         <span
           className={`font-data tabular-nums ${
-            isFastest ? 'font-bold text-primary' : ''
+            isFastest ? 'font-bold text-green-500' : ''
           }`}
         >
           {row.bestLapTime}
