@@ -48,7 +48,7 @@ export async function runMigrations(): Promise<void> {
         track_length_m        REAL,
         game_version          TEXT,
         date_time             TEXT NOT NULL,
-        date_time_unix        INTEGER,
+        date_time_unix        BIGINT,
         file_name             TEXT NOT NULL,
         setting               TEXT,
         driver_count          INTEGER NOT NULL,
@@ -103,8 +103,8 @@ export async function runMigrations(): Promise<void> {
         error_laps          INTEGER,
         error               TEXT,
         log_format_version  TEXT,
-        created_at          INTEGER NOT NULL,
-        finished_at         INTEGER
+        created_at          BIGINT NOT NULL,
+        finished_at         BIGINT
       )
     `;
 
@@ -115,7 +115,7 @@ export async function runMigrations(): Promise<void> {
         raw_payload     TEXT NOT NULL,
         error_code      TEXT NOT NULL,
         error_message   TEXT NOT NULL,
-        occurred_at     INTEGER NOT NULL
+        occurred_at     BIGINT NOT NULL
       )
     `;
 
