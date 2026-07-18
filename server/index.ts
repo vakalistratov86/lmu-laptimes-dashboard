@@ -4,6 +4,8 @@ import type { Request } from 'express';
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
+import { runMigrations } from "./migrate";
+import { seedIfEmpty } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -63,6 +65,10 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Run DB migrations before starting the server
+  await runMigrations();
+  await seedIfEmpty();
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
@@ -78,9 +84,6 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
