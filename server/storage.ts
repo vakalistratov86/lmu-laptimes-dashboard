@@ -1,23 +1,20 @@
 import {
   tracks, drivers, lapTimes, sessions, sessionResults,
-  sessionLaps, sessionIncidents, sessionSectorBests, sessionTrackLimits,
 } from '@shared/schema';
 import type {
   Track, InsertTrack,
   Driver, InsertDriver,
   DriverEnriched,
-  LapTime, InsertLapTime,
+  InsertLapTime,
   LapTimeEnriched,
-  Session, SessionResult, SessionEnriched,
+  Session, SessionEnriched,
 } from '@shared/schema';
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { eq, and, desc } from "drizzle-orm";
 
-const sqlite = new Database("data.db");
-sqlite.pragma("journal_mode = WAL");
-
-export const db = drizzle(sqlite);
+const sql = postgres(process.env.DATABASE_URL!);
+export const db = drizzle(sql);
 
 export interface LapFilter {
   trackId?: number;
@@ -53,14 +50,17 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async getTracks(): Promise<Track[]> {
-    return db.select().from(tracks).all();
+    return await db.select().from(tracks);
   }
+
   async getTrack(id: number): Promise<Track | undefined> {
-    return db.select().from(tracks).where(eq(tracks.id, id)).get();
+    const rows = await db.select().from(tracks).where(eq(tracks.id, id));
+    return rows[0];
   }
+
   async getDrivers(): Promise<DriverEnriched[]> {
-    const allDrivers = db.select().from(drivers).all();
-    const srRows = db.select().from(sessionResults).all();
+    const allDrivers = await db.select().from(drivers);
+    const srRows = await db.select().from(sessionResults);
 
     const playerMap = new Map<number, number>();
     for (const sr of srRows) {
@@ -73,37 +73,37 @@ export class DatabaseStorage implements IStorage {
       isPlayer: playerMap.has(d.id) ? (playerMap.get(d.id) ?? 0) : null,
     }));
   }
+
   async getDriver(id: number): Promise<Driver | undefined> {
-    return db.select().from(drivers).where(eq(drivers.id, id)).get();
+    const rows = await db.select().from(drivers).where(eq(drivers.id, id));
+    return rows[0];
   }
+
   async getLaps(filter: LapFilter = {}): Promise<LapTimeEnriched[]> {
     const conditions = [];
-    // fix(#73): use != null to correctly handle numeric IDs equal to 0
-    if (filter.trackId   != null) conditions.push(eq(lapTimes.trackId,   filter.trackId));
-    if (filter.driverId  != null) conditions.push(eq(lapTimes.driverId,  filter.driverId));
-    if (filter.carClass)          conditions.push(eq(lapTimes.carClass,  filter.carClass));
-    if (filter.conditions)        conditions.push(eq(lapTimes.conditions, filter.conditions));
-    if (filter.source)            conditions.push(eq(lapTimes.source,    filter.source));
+    if (filter.trackId != null) conditions.push(eq(lapTimes.trackId, filter.trackId));
+    if (filter.driverId != null) conditions.push(eq(lapTimes.driverId, filter.driverId));
+    if (filter.carClass) conditions.push(eq(lapTimes.carClass, filter.carClass));
+    if (filter.conditions) conditions.push(eq(lapTimes.conditions, filter.conditions));
+    if (filter.source) conditions.push(eq(lapTimes.source, filter.source));
     if (filter.sessionId != null) conditions.push(eq(lapTimes.sessionId, filter.sessionId));
-    if (filter.sessionCourse)     conditions.push(eq(sessions.course,    filter.sessionCourse));
+    if (filter.sessionCourse) conditions.push(eq(sessions.course, filter.sessionCourse));
 
     const rows = conditions.length
-      ? db
+      ? await db
           .select({ lap: lapTimes, sessionCourse: sessions.course })
           .from(lapTimes)
           .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
           .where(and(...conditions))
-          .all()
-      : db
+      : await db
           .select({ lap: lapTimes, sessionCourse: sessions.course })
           .from(lapTimes)
-          .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
-          .all();
+          .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id));
 
-    const trackMap = new Map(db.select().from(tracks).all().map((t) => [t.id, t]));
-    const driverMap = new Map(db.select().from(drivers).all().map((d) => [d.id, d]));
+    const trackMap = new Map((await db.select().from(tracks)).map((t) => [t.id, t]));
+    const driverMap = new Map((await db.select().from(drivers)).map((d) => [d.id, d]));
+    const srRows = await db.select().from(sessionResults);
 
-    const srRows = db.select().from(sessionResults).all();
     const isPlayerMap = new Map<string, number>();
     for (const sr of srRows) {
       isPlayerMap.set(`${sr.sessionId}:${sr.driverId}`, sr.isPlayer);
@@ -113,6 +113,7 @@ export class DatabaseStorage implements IStorage {
       const isPlayer = r.sessionId != null
         ? (isPlayerMap.get(`${r.sessionId}:${r.driverId}`) ?? null)
         : null;
+
       return {
         ...r,
         trackName: trackMap.get(r.trackId)?.name ?? "—",
@@ -125,20 +126,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSessions(): Promise<SessionEnriched[]> {
-    const rows = db.select().from(sessions).orderBy(desc(sessions.dateTime)).all();
-    return rows.map((s) => this.enrichSession(s));
+    const rows = await db.select().from(sessions).orderBy(desc(sessions.dateTime));
+    return await Promise.all(rows.map((s) => this.enrichSession(s)));
   }
 
   async getSession(id: number): Promise<SessionEnriched | undefined> {
-    const s = db.select().from(sessions).where(eq(sessions.id, id)).get();
+    const rows = await db.select().from(sessions).where(eq(sessions.id, id));
+    const s = rows[0];
     if (!s) return undefined;
-    return this.enrichSession(s);
+    return await this.enrichSession(s);
   }
 
-  private enrichSession(s: Session): SessionEnriched {
-    const track = db.select().from(tracks).where(eq(tracks.id, s.trackId)).get();
-    const results = db.select().from(sessionResults).where(eq(sessionResults.sessionId, s.id)).all();
-    const driverMap = new Map(db.select().from(drivers).all().map((d) => [d.id, d]));
+  private async enrichSession(s: Session): Promise<SessionEnriched> {
+    const trackRows = await db.select().from(tracks).where(eq(tracks.id, s.trackId));
+    const track = trackRows[0];
+
+    const results = await db
+      .select()
+      .from(sessionResults)
+      .where(eq(sessionResults.sessionId, s.id));
+
+    const driverMap = new Map((await db.select().from(drivers)).map((d) => [d.id, d]));
+
     return {
       ...s,
       trackName: track?.name ?? s.venue,
@@ -151,9 +160,8 @@ export class DatabaseStorage implements IStorage {
 
 export const storage = new DatabaseStorage();
 
-// ---- Seeding ----
-export function seedIfEmpty() {
-  const existing = db.select().from(tracks).all();
+export async function seedIfEmpty() {
+  const existing = await db.select().from(tracks);
   if (existing.length > 0) return;
 
   const trackData: InsertTrack[] = [
@@ -166,7 +174,12 @@ export function seedIfEmpty() {
     { name: "Imola", country: "Италия", lengthKm: 4.909, turns: 19, layout: "GP" },
     { name: "Portimão", country: "Португалия", lengthKm: 4.653, turns: 15, layout: "GP" },
   ];
-  const insertedTracks = trackData.map((t) => db.insert(tracks).values(t).returning().get());
+
+  const insertedTracks: Track[] = [];
+  for (const t of trackData) {
+    const inserted = await db.insert(tracks).values(t).returning();
+    insertedTracks.push(inserted[0]);
+  }
 
   const driverData: InsertDriver[] = [
     { name: "Алекс Волков", team: "Toyota Gazoo Racing", country: "RU" },
@@ -178,7 +191,12 @@ export function seedIfEmpty() {
     { name: "Sofia Blanc", team: "Alpine Endurance", country: "FR" },
     { name: "Tom Wagner", team: "BMW M Team", country: "DE" },
   ];
-  const insertedDrivers = driverData.map((d) => db.insert(drivers).values(d).returning().get());
+
+  const insertedDrivers: Driver[] = [];
+  for (const d of driverData) {
+    const inserted = await db.insert(drivers).values(d).returning();
+    insertedDrivers.push(inserted[0]);
+  }
 
   const classes = ["Hypercar", "LMP2", "GTE"];
   const carByClass: Record<string, string[]> = {
@@ -225,6 +243,7 @@ export function seedIfEmpty() {
         const month = 4 + Math.floor(rand() * 3);
         const tyre = cond === "Дождь" ? "Wet" : tyres[Math.floor(rand() * 3)];
         const cars = carByClass[carClass];
+
         lapRows.push({
           trackId: track.id,
           driverId: driver.id,
@@ -243,5 +262,8 @@ export function seedIfEmpty() {
       }
     }
   }
-  for (const row of lapRows) db.insert(lapTimes).values(row).run();
+
+  if (lapRows.length > 0) {
+    await db.insert(lapTimes).values(lapRows);
+  }
 }

@@ -46,7 +46,6 @@ export interface ImportJobPayload {
 }
 
 // Простая in-process очередь задач
-
 const queue: ImportJobPayload[] = [];
 let running = false;
 
@@ -65,15 +64,15 @@ export function computeFileHash(content: string): string {
  * Возвращает importId.
  * Если файл уже импортирован — выбрасывает DuplicateFileError.
  */
-export function enqueueImport(fileName: string, content: string): string {
+export async function enqueueImport(fileName: string, content: string): Promise<string> {
   const fileHash = computeFileHash(content);
 
   // Idempotency check (#6): проверяем UNIQUE file_hash
-  const existing = db
+  const existingRows = await db
     .select()
     .from(importJobs)
-    .where(eq(importJobs.fileHash, fileHash))
-    .get();
+    .where(eq(importJobs.fileHash, fileHash));
+  const existing = existingRows[0];
 
   if (existing) {
     const err = new Error("Файл уже был импортирован");
@@ -84,13 +83,13 @@ export function enqueueImport(fileName: string, content: string): string {
   }
 
   const id = generateId();
-  db.insert(importJobs).values({
+  await db.insert(importJobs).values({
     id,
     fileHash,
     fileName,
     status: "queued",
     createdAt: Date.now(),
-  }).run();
+  });
 
   queue.push({ id, fileHash, fileName, content });
   scheduleWorker();
@@ -98,13 +97,14 @@ export function enqueueImport(fileName: string, content: string): string {
 }
 
 /** Получить статус задачи */
-export function getJobStatus(id: string) {
-  return db.select().from(importJobs).where(eq(importJobs.id, id)).get();
+export async function getJobStatus(id: string) {
+  const rows = await db.select().from(importJobs).where(eq(importJobs.id, id));
+  return rows[0];
 }
 
 /** Получить ошибки DLQ для задачи (#8) */
-export function getJobErrors(jobId: string) {
-  return db.select().from(importErrors).where(eq(importErrors.importJobId, jobId)).all();
+export async function getJobErrors(jobId: string) {
+  return await db.select().from(importErrors).where(eq(importErrors.importJobId, jobId));
 }
 
 function scheduleWorker() {
@@ -117,21 +117,18 @@ async function processNext() {
   if (!job) { running = false; return; }
 
   running = true;
-  db.update(importJobs)
+  await db.update(importJobs)
     .set({ status: "processing" })
-    .where(eq(importJobs.id, job.id))
-    .run();
+    .where(eq(importJobs.id, job.id));
 
   const startedAt = Date.now();
 
   try {
     const { sessionId, totalLaps, validLaps, errorLaps } = await runImport(job);
     const durationMs = Date.now() - startedAt;
-    db.update(importJobs)
+    await db.update(importJobs)
       .set({ status: "completed", sessionId, totalLaps, validLaps, errorLaps, finishedAt: Date.now() })
-      .where(eq(importJobs.id, job.id))
-      .run();
-    // #12 — лог завершения импорта
+      .where(eq(importJobs.id, job.id));
     logImportCompleted({
       importJobId: job.id,
       fileName: job.fileName,
@@ -141,21 +138,15 @@ async function processNext() {
       durationMs,
     });
   } catch (e) {
-    // fix(#60): обёртываем db.update в try/catch, чтобы сбой записи статуса
-    // не оставлял running=true навсегда и не вешал всю очередь
     try {
-      db.update(importJobs)
+      await db.update(importJobs)
         .set({ status: "failed", error: (e as Error).message, finishedAt: Date.now() })
-        .where(eq(importJobs.id, job.id))
-        .run();
+        .where(eq(importJobs.id, job.id));
     } catch (dbErr) {
       console.error("[importWorker] Failed to update job status to failed:", dbErr);
     }
-    // #12 — лог ошибки импорта
     logImportFailed(job.id, e as Error);
   } finally {
-    // fix(#60): setImmediate перенесён в finally — очередь продолжает работу
-    // при любом исходе (успех, ошибка импорта или ошибка записи статуса)
     setImmediate(processNext);
   }
 }
@@ -181,7 +172,6 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     parsed = parseRaceResults(job.content);
   } catch (e) {
     const err = e as Error;
-    // #7 — ясное сообщение при UNSUPPORTED_LOG_VERSION
     if ((err as any).code === 'UNSUPPORTED_LOG_VERSION') {
       throw new Error(`Неподдерживаемый формат лога: ${err.message}`);
     }
@@ -191,24 +181,17 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     throw new Error("Не похоже на лог результатов LMU/rFactor (нет RaceResults)");
   }
 
-  // #12 — лог начала импорта с версией формата (#7)
   logImportStarted({
     importJobId: job.id,
     fileName: job.fileName,
     logVersion: parsed.logFormatVersion,
   });
 
-  // fix(#62): legacy-guard по fileName удалён.
-  // Idempotency полностью обеспечивается через file_hash в enqueueImport().
-  // Два разных файла с одинаковым именем (например Race.xml) — типичный
-  // сценарий в LMU — теперь корректно импортируются как отдельные сессии.
-
-  // Все операции записи в одной транзакции (#11)
-  const result = db.transaction((tx) => {
-    const track = findOrCreateTrack(tx, parsed!);
+  const result = await db.transaction(async (tx) => {
+    const track = await findOrCreateTrack(tx, parsed!);
     const dateOnly = parsed!.dateTimeIso.slice(0, 10);
 
-    const session = tx.insert(sessions).values({
+    const sessionRows = await tx.insert(sessions).values({
       trackId: track.id,
       event: parsed!.event,
       sessionType: parsed!.sessionType,
@@ -238,7 +221,8 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       sessionDurationMin: parsed!.sessionDurationMin ?? null,
       sessionMaxLaps: parsed!.sessionMaxLaps ?? null,
       mostLapsCompleted: parsed!.mostLapsCompleted ?? null,
-    }).returning().get();
+    }).returning();
+    const session = sessionRows[0];
 
     const driverIdByName = new Map<string, number>();
     const lapTimeRows: any[] = [];
@@ -249,11 +233,11 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
     for (const d of parsed!.drivers) {
       const normalizedName = normalizeDriverNameForStorage(d.name);
-      const driver = findOrCreateDriver(tx, normalizedName, d.teamName);
+      const driver = await findOrCreateDriver(tx, normalizedName, d.teamName);
       driverIdByName.set(normalizedName.toLowerCase(), driver.id);
       const cls = normalizeClass(d.carClass);
 
-      const sr = tx.insert(sessionResults).values({
+      const srRows = await tx.insert(sessionResults).values({
         sessionId: session.id,
         driverId: driver.id,
         isPlayer: d.isPlayer ? 1 : 0,
@@ -274,7 +258,8 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
         finishStatus: d.finishStatus ?? null,
         controlAndAids: d.controlAndAids ?? null,
         connected: d.connected ?? null,
-      }).returning().get();
+      }).returning();
+      const sr = srRows[0];
 
       for (const lap of d.lapList) {
         totalLapsCount++;
@@ -299,7 +284,6 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
           isPitLap: lap.isPit ? 1 : 0,
         });
 
-        // Validation + Normalization pipeline (#8, #9, #10)
         if (lap.lapMs != null && !lap.isPit) {
           const rawForValidation = {
             driverName: d.name,
@@ -315,7 +299,6 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
           const validation = validateLapTime(rawForValidation);
 
           if (!validation.ok) {
-            // #12 — записываем каждую ошибку с контекстом
             logParseError(
               {
                 importJobId: job.id,
@@ -324,7 +307,6 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
               },
               `Failed to parse lap time: ${validation.errorMessage}`
             );
-            // Записываем в DLQ (#8)
             dlqRows.push({
               importJobId: job.id,
               rawPayload: JSON.stringify({ driverName: d.name, lapNum: lap.num, lapMs: lap.lapMs }),
@@ -335,14 +317,8 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
             continue;
           }
 
-          // Нормализация (#10)
           const normalized = normalizeLapTime(validation.data);
 
-          // fix(#74): используем null вместо 0 для отсутствующих секторов.
-          // Предыдущий код: `normalized.sector1Ms ?? 0` подставлял 0 вместо null,
-          // из-за чего sector3Ms поглощал всё время круга (ltS3 = lapTimeMs).
-          // Теперь сектор остаётся null, если исходные данные отсутствуют —
-          // аналогично логике, уже применённой выше для sessionLapRows.
           const ltS1 = normalized.sector1Ms ?? null;
           const ltS2 = normalized.sector2Ms ?? null;
           const ltS3 = normalized.sector3Ms
@@ -350,7 +326,6 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
                 ? Math.max(0, normalized.lapTimeMs - ltS1 - ltS2)
                 : null);
 
-          // fix(#63): conditions и tyre берём из данных круга, а не хардкодим
           lapTimeRows.push({
             trackId: track.id,
             driverId: driver.id,
@@ -373,17 +348,17 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
     // Batch insert session_laps чанками по CHUNK_SIZE (#11)
     for (let i = 0; i < sessionLapRows.length; i += CHUNK_SIZE) {
-      tx.insert(sessionLaps).values(sessionLapRows.slice(i, i + CHUNK_SIZE)).run();
+      await tx.insert(sessionLaps).values(sessionLapRows.slice(i, i + CHUNK_SIZE));
     }
 
     // Batch insert lap_times чанками по CHUNK_SIZE (#11)
     for (let i = 0; i < lapTimeRows.length; i += CHUNK_SIZE) {
-      tx.insert(lapTimes).values(lapTimeRows.slice(i, i + CHUNK_SIZE)).run();
+      await tx.insert(lapTimes).values(lapTimeRows.slice(i, i + CHUNK_SIZE));
     }
 
     // Batch insert DLQ записей (#8)
     for (let i = 0; i < dlqRows.length; i += CHUNK_SIZE) {
-      tx.insert(importErrors).values(dlqRows.slice(i, i + CHUNK_SIZE)).run();
+      await tx.insert(importErrors).values(dlqRows.slice(i, i + CHUNK_SIZE));
     }
 
     // Проверяем порог валидных кругов (#8)
@@ -406,14 +381,14 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       const targetDriverId = inc.targetDriverName
         ? (driverIdByName.get(inc.targetDriverName.trim().toLowerCase()) ?? null)
         : null;
-      tx.insert(sessionIncidents).values({
+      await tx.insert(sessionIncidents).values({
         sessionId: session.id,
         driverId,
         targetDriverId,
         elapsedTimeSec: inc.elapsedTimeSec,
         severity: inc.severity,
         isImmovable: inc.isImmovable ? 1 : 0,
-      }).run();
+      });
     }
 
     // Лучшие времена секторов
@@ -421,14 +396,14 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       const normalizedSbDriver = sb.driverName.trim().toLowerCase();
       const driverId = driverIdByName.get(normalizedSbDriver);
       if (driverId == null) continue;
-      tx.insert(sessionSectorBests).values({
+      await tx.insert(sessionSectorBests).values({
         sessionId: session.id,
         driverId,
         carClass: normalizeClass(sb.carClass),
         sector: sb.sector,
         elapsedTimeSec: sb.elapsedTimeSec,
         lapNum: sb.lapNum ?? null,
-      }).run();
+      });
     }
 
     // Нарушения трассы
@@ -436,7 +411,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       const normalizedTlDriver = tl.driverName.trim().toLowerCase();
       const driverId = driverIdByName.get(normalizedTlDriver);
       if (driverId == null) continue;
-      tx.insert(sessionTrackLimits).values({
+      await tx.insert(sessionTrackLimits).values({
         sessionId: session.id,
         driverId,
         lapNum: tl.lapNum,
@@ -445,14 +420,13 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
         currentPoints: tl.currentPoints ?? null,
         resolution: tl.resolution ?? null,
         decision: tl.decision ?? null,
-      }).run();
+      });
     }
 
     // Атомарное обновление lapCount внутри транзакции (#11)
-    tx.update(sessions)
+    await tx.update(sessions)
       .set({ lapCount: validLapsCount })
-      .where(eq(sessions.id, session.id))
-      .run();
+      .where(eq(sessions.id, session.id));
 
     return { sessionId: session.id, totalLaps: totalLapsCount, validLaps: validLapsCount, errorLaps: dlqRows.length };
   });
@@ -464,8 +438,8 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 // Helpers
 // ────────────────────────────────────────────────
 
-function findOrCreateTrack(tx: any, parsed: ParsedSession): Track {
-  const all = tx.select().from(tracks).all();
+async function findOrCreateTrack(tx: any, parsed: ParsedSession): Promise<Track> {
+  const all = await tx.select().from(tracks);
   const course = parsed.course;
   const canonicalName = canonicalTrackName(parsed.venue).name.toLowerCase();
   const parsedCourseNorm = (course ?? "").toLowerCase();
@@ -480,24 +454,26 @@ function findOrCreateTrack(tx: any, parsed: ParsedSession): Track {
 
   const canonical = canonicalTrackName(parsed.venue);
   const lengthKm = parsed.trackLengthM ? +(parsed.trackLengthM / 1000).toFixed(3) : 0;
-  return tx.insert(tracks).values({
+  const rows = await tx.insert(tracks).values({
     name: canonical.name,
     country: canonical.country,
     lengthKm,
     turns: canonical.turns,
     layout: course ?? "Импорт",
-  }).returning().get();
+  }).returning();
+  return rows[0];
 }
 
-function findOrCreateDriver(tx: any, name: string, team: string): Driver {
-  const all = tx.select().from(drivers).all();
+async function findOrCreateDriver(tx: any, name: string, team: string): Promise<Driver> {
+  const all = await tx.select().from(drivers);
   const found = all.find((d: Driver) => d.name.toLowerCase() === name.toLowerCase());
   if (found) return found;
-  return tx.insert(drivers).values({
+  const rows = await tx.insert(drivers).values({
     name,
     team: team || "—",
     country: guessCountry(name),
-  }).returning().get();
+  }).returning();
+  return rows[0];
 }
 
 function normalizeClass(raw: string): string {

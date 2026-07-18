@@ -1,10 +1,10 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer, real, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Трассы игры LMU
-export const tracks = sqliteTable("tracks", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const tracks = pgTable("tracks", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   country: text("country").notNull(),
   lengthKm: real("length_km").notNull(),
@@ -13,16 +13,16 @@ export const tracks = sqliteTable("tracks", {
 });
 
 // Пилоты
-export const drivers = sqliteTable("drivers", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const drivers = pgTable("drivers", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   team: text("team").notNull(),
   country: text("country").notNull(),
 });
 
 // Времена кругов (заезды)
-export const lapTimes = sqliteTable("lap_times", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const lapTimes = pgTable("lap_times", {
+  id: serial("id").primaryKey(),
   trackId: integer("track_id").notNull(),
   driverId: integer("driver_id").notNull(),
   carClass: text("car_class").notNull(),
@@ -39,8 +39,8 @@ export const lapTimes = sqliteTable("lap_times", {
 });
 
 // Импортированные сессии из логов игры (rFactor/LMU XML)
-export const sessions = sqliteTable("sessions", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const sessions = pgTable("sessions", {
+  id: serial("id").primaryKey(),
   trackId: integer("track_id").notNull(),
   event: text("event").notNull(),
   sessionType: text("session_type").notNull(),
@@ -73,7 +73,7 @@ export const sessions = sqliteTable("sessions", {
 });
 
 // Задания импорта — idempotency + async status (#5, #6)
-export const importJobs = sqliteTable("import_jobs", {
+export const importJobs = pgTable("import_jobs", {
   id: text("id").primaryKey(),                       // nanoid
   fileHash: text("file_hash").notNull().unique(),    // SHA-256 файла — UNIQUE для idempotency
   fileName: text("file_name").notNull(),
@@ -89,8 +89,8 @@ export const importJobs = sqliteTable("import_jobs", {
 });
 
 // Dead Letter Queue — битые/невалидные записи импорта (#8)
-export const importErrors = sqliteTable("import_errors", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const importErrors = pgTable("import_errors", {
+  id: serial("id").primaryKey(),
   importJobId: text("import_job_id").notNull(),
   rawPayload: text("raw_payload").notNull(),          // исходная строка/запись (JSON)
   errorCode: text("error_code").notNull(),            // VALIDATION_ERROR | PARSE_ERROR | SEMANTIC_ERROR
@@ -99,8 +99,8 @@ export const importErrors = sqliteTable("import_errors", {
 });
 
 // Результат конкретного пилота в сессии
-export const sessionResults = sqliteTable("session_results", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const sessionResults = pgTable("session_results", {
+  id: serial("id").primaryKey(),
   sessionId: integer("session_id").notNull(),
   driverId: integer("driver_id").notNull(),
   isPlayer: integer("is_player").notNull().default(0),
@@ -124,8 +124,8 @@ export const sessionResults = sqliteTable("session_results", {
 });
 
 // Детальные данные по каждому кругу конкретного пилота в сессии
-export const sessionLaps = sqliteTable("session_laps", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const sessionLaps = pgTable("session_laps", {
+  id: serial("id").primaryKey(),
   sessionResultId: integer("session_result_id").notNull(),
   sessionId: integer("session_id").notNull(),
   driverId: integer("driver_id").notNull(),
@@ -155,8 +155,8 @@ export const sessionLaps = sqliteTable("session_laps", {
 });
 
 // Инциденты из Stream сессии
-export const sessionIncidents = sqliteTable("session_incidents", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const sessionIncidents = pgTable("session_incidents", {
+  id: serial("id").primaryKey(),
   sessionId: integer("session_id").notNull(),
   driverId: integer("driver_id").notNull(),
   targetDriverId: integer("target_driver_id"),
@@ -166,8 +166,8 @@ export const sessionIncidents = sqliteTable("session_incidents", {
 });
 
 // Лучшие времена по секторам
-export const sessionSectorBests = sqliteTable("session_sector_bests", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const sessionSectorBests = pgTable("session_sector_bests", {
+  id: serial("id").primaryKey(),
   sessionId: integer("session_id").notNull(),
   driverId: integer("driver_id").notNull(),
   carClass: text("car_class").notNull(),
@@ -177,8 +177,8 @@ export const sessionSectorBests = sqliteTable("session_sector_bests", {
 });
 
 // Нарушения трассы
-export const sessionTrackLimits = sqliteTable("session_track_limits", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const sessionTrackLimits = pgTable("session_track_limits", {
+  id: serial("id").primaryKey(),
   sessionId: integer("session_id").notNull(),
   driverId: integer("driver_id").notNull(),
   lapNum: integer("lap_num").notNull(),
