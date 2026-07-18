@@ -5,10 +5,11 @@
 ![React](https://img.shields.io/badge/React-18-61dafb)
 ![Vite](https://img.shields.io/badge/Vite-7-646cff)
 ![Vitest](https://img.shields.io/badge/Vitest-2-6E9F18)
+![Database](https://img.shields.io/badge/DB-PostgreSQL-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Deploy](https://img.shields.io/badge/autodeploy-✅_tested-brightgreen)
 
-Дашборд для мониторинга и анализа времён прохождения трасс в симуляторе **Le Mans Ultimate (LMU)**. Тёмный геймерский интерфейс в рейсинг-эстетике с поддержкой светлой темы. Данные импортируются из XML-логов rFactor2/LMU через встроенный парсер.
+Дашборд для мониторинга и анализа времён прохождения трасс в симуляторе **Le Mans Ultimate (LMU)**. Тёмный геймерский интерфейс в рейсинг-эстетике с поддержкой светлой темы. Данные импортируются из XML-логов rFactor2/LMU через встроенный парсер и сохраняются в PostgreSQL.
 
 > 🚀 **Автодеплой:** обновление README от 18.07.2026 — проверка CI/CD пайплайна.
 
@@ -52,7 +53,7 @@
 |------|------------|
 | **Frontend** | React 18, Vite 7, TypeScript 5.6, Tailwind CSS 3, shadcn/ui, wouter, TanStack Query, Recharts, Framer Motion |
 | **Backend** | Express 5 (TypeScript), WebSocket (ws) |
-| **База данных** | SQLite (better-sqlite3) + Drizzle ORM / опционально Supabase |
+| **База данных** | PostgreSQL (drizzle-orm + postgres-js), миграции drizzle-kit |
 | **Тестирование** | Vitest 2 + coverage-v8 |
 
 ---
@@ -72,8 +73,9 @@
 │                        #   sessionDetail.ts, sessionDetailSelectors.ts
 ├── server/              # Backend (Express)
 │   ├── index.ts         # Точка входа, инициализация Express + WebSocket
-│   ├── routes.ts        # REST API маршруты
-│   ├── storage.ts       # Слой работы с БД (Drizzle ORM + сидинг)
+│   ├── routes.ts        # REST API маршруты (async, PostgreSQL)
+│   ├── storage.ts       # Слой работы с БД (Drizzle ORM + postgres-js)
+│   ├── migrate.ts       # Авто-миграции БД при старте
 │   ├── logParser.ts     # Парсер XML-логов rFactor2/LMU
 │   ├── importWorker.ts  # Фоновый воркер импорта с прогресс-стримингом
 │   ├── normalizer.ts    # Нормализация и валидация распознанных данных
@@ -85,7 +87,9 @@
 ├── script/              # Скрипты сборки (build.ts)
 ├── tests/               # Тесты (Vitest): routes, schema, eventsParser
 ├── docs/                # Дополнительная документация
-├── drizzle.config.ts    # Конфигурация Drizzle ORM
+├── drizzle.config.ts    # Конфигурация Drizzle ORM (PostgreSQL)
+├── docker-compose.yml   # PostgreSQL + приложение, порты 3000→5000
+├── Dockerfile           # Образ приложения с генерацией миграций
 ├── vite.config.ts       # Конфигурация Vite
 ├── tailwind.config.ts   # Конфигурация Tailwind CSS
 └── tsconfig.json        # Конфигурация TypeScript
@@ -104,13 +108,19 @@
 
 ## Быстрый старт
 
-Требуется **Node.js 18+**.
+Требуется **Node.js 18+** и **PostgreSQL**.
+
+Создайте `.env` в корне:
+
+```env
+DATABASE_URL=postgres://lmu:lmu_password@localhost:5432/lmu_laptimes
+```
 
 ```bash
 # Установить зависимости
 npm install
 
-# Создать таблицы базы данных
+# Применить схему базы данных (PostgreSQL)
 npm run db:push
 
 # Запустить в режиме разработки (Express + Vite на порту 5000)
@@ -119,7 +129,21 @@ npm run dev
 
 Приложение будет доступно на `http://localhost:5000`.
 
-При первом запуске база автоматически заполняется демо‑данными: 8 трасс, 8 пилотов и заезды сезона 2026 (файл `data.db` в `.gitignore` и не коммитится).
+При первом запуске база автоматически заполняется демо‑данными: 8 трасс, 8 пилотов и заезды сезона 2026.
+
+---
+
+## Запуск через Docker
+
+```bash
+docker compose up --build
+```
+
+- Поднимает контейнер PostgreSQL.
+- Собирает образ приложения, запускает миграции и сервер.
+- Пробрасывает порт 3000 (хост) → 5000 (контейнер).
+
+Приложение будет доступно на `http://localhost:3000`.
 
 ---
 
@@ -131,7 +155,7 @@ npm run dev
 | `npm run build` | Сборка для продакшена |
 | `npm start` | Запуск продакшен-сборки |
 | `npm run check` | Проверка типов TypeScript |
-| `npm run db:push` | Применение схемы Drizzle к БД |
+| `npm run db:push` | Применение схемы Drizzle к БД (PostgreSQL) |
 | `npm test` | Запуск тестов (Vitest) |
 | `npm run test:watch` | Запуск тестов в watch-режиме |
 | `npm run test:coverage` | Отчёт о покрытии кода тестами |
@@ -149,11 +173,10 @@ NODE_ENV=production npm start
 
 ## Переменные окружения
 
-По умолчанию приложение работает на локальной SQLite-базе. Для подключения к Supabase создайте файл `.env` в корне проекта:
+Приложение требует подключения к PostgreSQL через переменную `DATABASE_URL`:
 
 ```env
-SUPABASE_URL=https://<your-project>.supabase.co
-SUPABASE_ANON_KEY=<your-anon-key>
+DATABASE_URL=postgres://lmu:lmu_password@localhost:5432/lmu_laptimes
 ```
 
 ---

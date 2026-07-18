@@ -52,6 +52,15 @@
 - Общий модуль `classStyles.ts` для стилей классов машин (вынесен из Leaderboards и Laps)
 - Стили бейджей LMP3, GT3, GT4 в Laps.tsx
 
+### Changed
+- Migrated primary storage from SQLite (better-sqlite3) to PostgreSQL с использованием drizzle-orm + postgres-js.
+- Обновлён `server/storage.ts` под асинхронные операции PostgreSQL.
+- `server/routes.ts` переведён на async/await и работу с PostgreSQL.
+- Добавлен `server/migrate.ts` и авто-запуск миграций при старте сервера.
+- Обновлён `drizzle.config.ts` под PostgreSQL.
+- Обновлён `docker-compose.yml`: сервис PostgreSQL, healthcheck и проброс портов 3000→5000.
+- Доработан `Dockerfile`: генерация миграций drizzle-kit на этапе сборки, использование `app.listen` и привязка к `0.0.0.0`.
+
 ### Fixed
 - Унификация стилей badge класса машины в `SessionDetail` и `TrackDetail` через `getClassBadgeClass` (#14)
 - `SessionDetail.tsx`: захардкоженный GTE-цвет заменён на динамический `getClassBadgeClass` (#14)
@@ -60,6 +69,9 @@
 - `formatDate` — убрано время из `toLocaleString`, т.к. дата хранится без временной зоны
 - Синтаксические ошибки в тестах (`routes.test.ts`, `schema.test.ts`, `eventsParser.test.ts`)
 - Добавлены недостающие тесты для schema и eventsParser
+- Исправлено переполнение PostgreSQL integer (22003) для Unix timestamp в миллисекундах: поля `created_at` и `finished_at` таблицы `import_jobs` мигрированы на тип `BIGINT`.
+- Упрощена генерация `.env` в CI: использование `printf` вместо heredoc.
+- Добавлены проверки docker-compose-конфига и уборка контейнеров в CI.
 
 ### Refactored
 - `SessionDetail.tsx` разбит на компонентную архитектуру с view-model слоем (SD-11, #42)
@@ -70,6 +82,8 @@
 - README: добавлены бейджи, описание тестов, секция Supabase, полный список скриптов
 - README: добавлено примечание об ограничениях LMU Daily Races API
 - README: все примечания перемещены в конец документа
+- README: обновлён стек БД на PostgreSQL, добавлены секции Docker и DATABASE_URL
+- CHANGELOG: задокументирована миграция на PostgreSQL, BIGINT-фикс, CI/Docker изменения
 
 ---
 
