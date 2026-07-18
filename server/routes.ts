@@ -64,6 +64,50 @@ export async function registerRoutes(
   }));
 
   /**
+   * GET /api/sessions/:id/laps — детальные данные по кругам сессии.
+   * Возвращает записи из таблицы session_laps, обогащённые именем пилота.
+   * Используется вкладками «Круги», «Секторы» и «Прогресс» на странице SessionDetail.
+   */
+  app.get("/api/sessions/:id/laps", asyncRoute(async (req, res) => {
+    const sessionId = Number(req.params.id);
+    if (!Number.isFinite(sessionId)) {
+      return res.status(400).json({ message: "Некорректный id сессии" });
+    }
+
+    const lapsRows = await db
+      .select()
+      .from(sessionLaps)
+      .where(eq(sessionLaps.sessionId, sessionId));
+
+    const allDrivers = await db.select().from(drivers);
+    const driverMap = new Map(allDrivers.map((d) => [d.id, d]));
+
+    // Получаем isPlayer из sessionResults для каждого пилота
+    const srRows = await db
+      .select()
+      .from(sessionResults)
+      .where(eq(sessionResults.sessionId, sessionId));
+    const isPlayerMap = new Map(srRows.map((r) => [r.driverId, r.isPlayer]));
+    const carNumberMap = new Map(srRows.map((r) => [r.driverId, r.carNumber ?? null]));
+
+    const enriched = lapsRows.map((lap) => ({
+      ...lap,
+      // Поля для совместимости с sessionDetailSelectors (buildDriverLapGroups / buildLapProgressSeries)
+      lapNumber: lap.lapNum,
+      lapTimeSeconds: lap.lapTimeMs != null ? lap.lapTimeMs / 1000 : null,
+      sector1: lap.sector1Ms != null ? lap.sector1Ms / 1000 : null,
+      sector2: lap.sector2Ms != null ? lap.sector2Ms / 1000 : null,
+      sector3: lap.sector3Ms != null ? lap.sector3Ms / 1000 : null,
+      isPitLap: lap.isPitLap === 1,
+      driverName: driverMap.get(lap.driverId)?.name ?? "—",
+      carNumber: carNumberMap.get(lap.driverId) ?? null,
+      isPlayer: isPlayerMap.get(lap.driverId) ?? 0,
+    }));
+
+    res.json(enriched);
+  }));
+
+  /**
    * POST /api/import — synchronous ingestion.
    *
    * PostgreSQL transactions for typical LMU files (~5 000 rows) complete in

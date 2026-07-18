@@ -142,6 +142,9 @@ export function buildHeroStats(session: unknown): SessionHeroStatItem[] {
 /**
  * Трансформирует сырой массив результатов сессии в массив строк таблицы.
  * Пробрасывает isPlayer напрямую из данных, без сравнения имён.
+ *
+ * fix: поля в БД называются r.laps, r.pitstops, r.team — добавлены явные
+ * алиасы для корректного маппинга; пустые строки нормализуются в null.
  */
 export function buildResultRows(session: unknown): SessionResultRowView[] {
   const s = session as AnySession;
@@ -189,23 +192,42 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       }
     }
 
+    // fix: в схеме БД поле называется r.pitstops (не r.pitStops)
     const pitStops: number | null =
       typeof r.pitStops === 'number' ? r.pitStops :
       typeof r.pitstops === 'number' ? r.pitstops :
+      null;
+
+    // fix: в схеме БД поле называется r.laps (не r.totalLaps)
+    const totalLaps: number | null =
+      typeof r.totalLaps === 'number' ? r.totalLaps :
+      typeof r.laps === 'number' ? r.laps :
+      null;
+
+    // fix: teamName передаётся через enrichSession; пустая строка нормализуется в null
+    const teamName: string | null =
+      (r.teamName && r.teamName !== '—') ? r.teamName :
+      (r.team && r.team !== '—') ? r.team :
+      null;
+
+    // fix: finishStatus — пустая строка нормализуется в null
+    const finishStatus: string | null =
+      (r.finishStatus && r.finishStatus.trim()) ? r.finishStatus.trim() :
+      (r.status && r.status.trim()) ? r.status.trim() :
       null;
 
     return {
       position: r.position ?? idx + 1,
       driverName: String(r.driverName ?? r.driver ?? '—'),
       carNumber: r.carNumber ?? r.number ?? '',
-      teamName: r.teamName ?? r.team ?? null,
+      teamName,
       carModel: r.carModel ?? r.car ?? null,
       bestLapTime,
       gap: gapFormatted,
       interval: intervalFormatted,
       pitStops,
-      totalLaps: r.totalLaps ?? r.laps ?? null,
-      finishStatus: r.finishStatus ?? r.status ?? null,
+      totalLaps,
+      finishStatus,
       isPlayer: r.isPlayer ?? null,
     };
   });
@@ -223,7 +245,7 @@ export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
     const lap = raw as AnyLap;
     const driver = String(lap.driverName ?? lap.driver ?? 'Unknown');
     const carNumber = lap.carNumber ?? lap.number ?? '';
-    const lapNum = Number(lap.lapNumber ?? lap.lap ?? 0);
+    const lapNum = Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0);
     const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? 0);
 
     if (!Number.isFinite(timeSeconds) || timeSeconds <= 0) continue;
@@ -313,6 +335,7 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
 /**
  * Группирует все круги по пилотам и определяет personal / overall best.
  * Пробрасывает isPlayer напрямую из данных первого круга пилота.
+ * fix: добавлена поддержка поля lapNum (имя поля в session_laps) наряду с lapNumber.
  */
 export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   const map = new Map<
@@ -351,7 +374,8 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
     }
 
     const lapRows: DriverLapRowView[] = rawLaps
-      .sort((a, b) => Number(a.lapNumber ?? a.lap ?? 0) - Number(b.lapNumber ?? b.lap ?? 0))
+      // fix: поддержка lapNum (session_laps) и lapNumber (legacy)
+      .sort((a, b) => Number(a.lapNumber ?? a.lapNum ?? a.lap ?? 0) - Number(b.lapNumber ?? b.lapNum ?? b.lap ?? 0))
       .map((lap) => {
         const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
         // Используем parseSectorSeconds для корректной обработки Ms-полей
@@ -360,7 +384,8 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
         const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
 
         return {
-          lapNumber: Number(lap.lapNumber ?? lap.lap ?? 0),
+          // fix: поддержка lapNum (session_laps) и lapNumber (legacy)
+          lapNumber: Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0),
           lapTime: Number.isFinite(timeSeconds) ? formatLapTime(timeSeconds) : '—',
           isPersonalBest:
             Number.isFinite(timeSeconds) && timeSeconds === personalBestSeconds,

@@ -152,7 +152,12 @@ export class DatabaseStorage implements IStorage {
       ...s,
       trackName: track?.name ?? s.venue,
       results: results
-        .map((r) => ({ ...r, driverName: driverMap.get(r.driverId)?.name ?? "—" }))
+        .map((r) => ({
+          ...r,
+          driverName: driverMap.get(r.driverId)?.name ?? "—",
+          // Нормализация: гарантируем что teamName не пустая строка
+          teamName: r.team && r.team !== "—" ? r.team : null,
+        }))
         .sort((a, b) => a.position - b.position),
     };
   }
@@ -224,7 +229,7 @@ export async function seedIfEmpty() {
     return seed / 233280;
   };
 
-  const lapRows: InsertLapTime[] = [];
+  const lapRows: any[] = [];
   for (const track of insertedTracks) {
     const base = baseLapByTrack[track.name] ?? 90000;
     for (const driver of insertedDrivers) {

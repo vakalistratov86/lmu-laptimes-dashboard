@@ -42,12 +42,19 @@ export function useSessions() {
   return useQuery<SessionEnriched[]>({ queryKey: ["/api/sessions"] });
 }
 
+/**
+ * Возвращает детальные данные по кругам сессии из таблицы session_laps.
+ * Используется вкладками «Круги», «Секторы» и «Прогресс» на странице SessionDetail.
+ * Ранее хук обращался к /api/laps?sessionId=X (таблица lap_times), что давало
+ * пустой массив для сессий импортированных из XML, т.к. валидные круги там
+ * сохраняются только в session_laps.
+ */
 export function useSessionLaps(sessionId: number | undefined) {
-  return useQuery<LapTimeEnriched[]>({
-    queryKey: ["/api/laps", "session", sessionId],
+  return useQuery<any[]>({
+    queryKey: ["/api/sessions", sessionId, "laps"],
     enabled: sessionId != null && !Number.isNaN(sessionId),
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/laps?sessionId=${sessionId}`);
+      const res = await apiRequest("GET", `/api/sessions/${sessionId}/laps`);
       return res.json();
     },
   });
