@@ -108,6 +108,35 @@ export async function runMigrations(): Promise<void> {
       )
     `;
 
+    // Fix: migrate created_at and finished_at from INTEGER to BIGINT for existing databases.
+    // INTEGER (int4) max is ~2.1B, but Date.now() returns Unix ms timestamps (~1.78T in 2026),
+    // causing "value out of range for type integer" (PostgreSQL error code 22003).
+    await migrationClient`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'import_jobs'
+            AND column_name = 'created_at'
+            AND data_type = 'integer'
+        ) THEN
+          ALTER TABLE import_jobs ALTER COLUMN created_at TYPE BIGINT;
+          RAISE NOTICE '[migrate] import_jobs.created_at migrated from INTEGER to BIGINT';
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'import_jobs'
+            AND column_name = 'finished_at'
+            AND data_type = 'integer'
+        ) THEN
+          ALTER TABLE import_jobs ALTER COLUMN finished_at TYPE BIGINT;
+          RAISE NOTICE '[migrate] import_jobs.finished_at migrated from INTEGER to BIGINT';
+        END IF;
+      END
+      $$;
+    `;
+
     await migrationClient`
       CREATE TABLE IF NOT EXISTS import_errors (
         id              SERIAL PRIMARY KEY,
