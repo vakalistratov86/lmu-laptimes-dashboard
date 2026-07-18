@@ -46,6 +46,8 @@ export interface SessionResultRowView {
   totalLaps?: number | null;
   /** Признак флага финиша (DNS / DNF / DSQ…). */
   finishStatus?: string | null;
+  /** 1 — живой игрок, 0 / null — ИИ. */
+  isPlayer?: number | null;
 }
 
 // ── Круги по пилотам ─────────────────────────────────────────────────────────
@@ -70,6 +72,8 @@ export interface DriverLapsGroupView {
   carNumber: string | number;
   bestLapTime: string;
   laps: DriverLapRowView[];
+  /** 1 — живой игрок, 0 / null — ИИ. */
+  isPlayer?: number | null;
 }
 
 // ── Секторы ──────────────────────────────────────────────────────────────────
