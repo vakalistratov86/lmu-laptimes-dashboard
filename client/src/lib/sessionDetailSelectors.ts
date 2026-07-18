@@ -14,9 +14,9 @@ import type {
 } from '@/components/session-detail/types';
 import type { NormalizedSessionType } from './sessionDetail.types';
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 // Вспомогательные утилиты
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
 /** Форматирует миллисекунды (integer) в строку «M:SS.mmm». */
 export function formatLapMs(ms: number): string {
@@ -43,9 +43,9 @@ export function formatGap(seconds: number): string {
   return `+${seconds.toFixed(3)}`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 // normalizeSessionType
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
 const SESSION_TYPE_MAP: Record<string, NormalizedSessionType> = {
   race: 'race',
@@ -71,9 +71,9 @@ export function normalizeSessionType(raw: string): NormalizedSessionType {
   return SESSION_TYPE_MAP[key] ?? 'practice';
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 // buildHeroStats
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySession = Record<string, any>;
@@ -116,25 +116,18 @@ export function buildHeroStats(session: unknown): SessionHeroStatItem[] {
   return stats;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 // buildResultRows
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
 /**
  * Трансформирует сырой массив результатов сессии в массив строк таблицы.
- *
- * Исправления (fix):
- *  - bestLapMs (integer, мс) — основное поле из session_results через Drizzle.
- *    Код ранее искал несуществующие bestLapTime / bestLapTimeSeconds → всегда «—».
- *  - pitstops (строчная s) — поле из Drizzle; код ранее искал pitStops → null.
- *  - gap / interval — отсутствуют в session_results; вычисляются по разнице bestLapMs
- *    между пилотом и лидером / предыдущим участником.
+ * Пробрасывает isPlayer напрямую из данных, без сравнения имён.
  */
 export function buildResultRows(session: unknown): SessionResultRowView[] {
   const s = session as AnySession;
   const rawResults: AnyLap[] = Array.isArray(s?.results) ? s.results : [];
 
-  // Лучший bestLapMs среди всех пилотов — база для расчёта gap / interval
   let minBestLapMs: number | null = null;
   for (const r of rawResults) {
     const ms = typeof r.bestLapMs === 'number' ? r.bestLapMs : null;
@@ -144,8 +137,6 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
   }
 
   return rawResults.map((r, idx) => {
-    // ── Лучший круг ──────────────────────────────────────────────────────────
-    // Приоритет: bestLapMs (мс) → bestLapTime (строка) → bestLapTimeSeconds (сек)
     const bestLapMs = typeof r.bestLapMs === 'number' && r.bestLapMs > 0
       ? r.bestLapMs
       : null;
@@ -158,8 +149,6 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
           ? formatLapTime(r.bestLapTimeSeconds)
           : '—';
 
-    // ── Gap (отставание от лидера) ────────────────────────────────────────────
-    // Приоритет: поле gap из API → вычисление по bestLapMs
     let gapFormatted: string | null = null;
     if (r.gap != null) {
       const gapVal = Number(r.gap);
@@ -168,8 +157,6 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       gapFormatted = formatGap((bestLapMs - minBestLapMs) / 1000);
     }
 
-    // ── Interval (разрыв с предыдущим участником) ─────────────────────────────
-    // Приоритет: поле interval из API → вычисление по bestLapMs предыдущего
     let intervalFormatted: string | null = null;
     if (r.interval != null) {
       const intervalVal = Number(r.interval);
@@ -183,8 +170,6 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       }
     }
 
-    // ── Пит-стопы ─────────────────────────────────────────────────────────────
-    // Drizzle возвращает поле как `pitstops` (строчная s), а не `pitStops`
     const pitStops: number | null =
       typeof r.pitStops === 'number' ? r.pitStops :
       typeof r.pitstops === 'number' ? r.pitstops :
@@ -202,13 +187,14 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       pitStops,
       totalLaps: r.totalLaps ?? r.laps ?? null,
       finishStatus: r.finishStatus ?? r.status ?? null,
+      isPlayer: r.isPlayer ?? null,
     };
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 // buildLapProgressSeries
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
 /** Строит серии для графика прогресса по кругам, группируя по пилотам. */
 export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
@@ -240,11 +226,11 @@ export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
   }));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 // buildSectorSummary
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
-/** Вычисляет лучшие секторы и теоретически лучший круг для каждого пилота. */
+/** Вычисляет лучшие сектора и теоретически лучший круг для каждого пилота. */
 export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
   const map = new Map<
     string,
@@ -254,14 +240,12 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     }
   >();
 
-  // Абсолютные лучшие секторы в сессии
   const absoluteBest: [number, number, number] = [Infinity, Infinity, Infinity];
 
   for (const raw of laps) {
     const lap = raw as AnyLap;
     const driver = String(lap.driverName ?? lap.driver ?? 'Unknown');
     const carNumber = lap.carNumber ?? lap.number ?? '';
-    // sector1Ms — основное поле из session_laps; sector1 / s1 — запасные варианты
     const s1 = Number(lap.sector1Ms ?? lap.sector1 ?? lap.s1 ?? NaN);
     const s2 = Number(lap.sector2Ms ?? lap.sector2 ?? lap.s2 ?? NaN);
     const s3 = Number(lap.sector3Ms ?? lap.sector3 ?? lap.s3 ?? NaN);
@@ -301,16 +285,20 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 // buildDriverLapGroups
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
-/** Группирует все круги по пилотам и определяет personal / overall best. */
+/**
+ * Группирует все круги по пилотам и определяет personal / overall best.
+ * Пробрасывает isPlayer напрямую из данных первого круга пилота.
+ */
 export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   const map = new Map<
     string,
     {
       carNumber: string | number;
+      isPlayer: number | null;
       rawLaps: AnyLap[];
     }
   >();
@@ -319,11 +307,11 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
     const lap = raw as AnyLap;
     const driver = String(lap.driverName ?? lap.driver ?? 'Unknown');
     const carNumber = lap.carNumber ?? lap.number ?? '';
-    if (!map.has(driver)) map.set(driver, { carNumber, rawLaps: [] });
+    const isPlayer: number | null = lap.isPlayer ?? null;
+    if (!map.has(driver)) map.set(driver, { carNumber, isPlayer, rawLaps: [] });
     map.get(driver)!.rawLaps.push(lap);
   }
 
-  // Абсолютный лучший круг сессии
   let overallBestSeconds = Infinity;
   for (const { rawLaps } of map.values()) {
     for (const lap of rawLaps) {
@@ -334,7 +322,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 
   const groups: DriverLapsGroupView[] = [];
 
-  for (const [driverName, { carNumber, rawLaps }] of map.entries()) {
+  for (const [driverName, { carNumber, isPlayer, rawLaps }] of map.entries()) {
     let personalBestSeconds = Infinity;
     for (const lap of rawLaps) {
       const t = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
@@ -345,7 +333,6 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
       .sort((a, b) => Number(a.lapNumber ?? a.lap ?? 0) - Number(b.lapNumber ?? b.lap ?? 0))
       .map((lap) => {
         const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
-        // sector1Ms — основное поле из session_laps; sector1 / s1 — запасные варианты
         const s1 = Number(lap.sector1Ms ?? lap.sector1 ?? lap.s1 ?? NaN);
         const s2 = Number(lap.sector2Ms ?? lap.sector2 ?? lap.s2 ?? NaN);
         const s3 = Number(lap.sector3Ms ?? lap.sector3 ?? lap.s3 ?? NaN);
@@ -369,6 +356,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
     groups.push({
       driverName,
       carNumber,
+      isPlayer,
       bestLapTime: Number.isFinite(personalBestSeconds)
         ? formatLapTime(personalBestSeconds)
         : '—',
@@ -379,9 +367,9 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   return groups;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 // buildTabs
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
 /** Формирует список вкладок страницы с учётом наличия данных о кругах. */
 export function buildTabs(hasLapData: boolean): SessionTabItem[] {
