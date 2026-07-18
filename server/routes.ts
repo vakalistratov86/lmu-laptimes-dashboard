@@ -1,10 +1,10 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from 'node:http';
 import { storage, type LapFilter, db } from "./storage";
-import { tracks, drivers, lapTimes, sessions, sessionResults } from '@shared/schema';
+import { importJobs, tracks, drivers, lapTimes, sessions, sessionResults } from '@shared/schema';
 import { eq, notInArray } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
-import { enqueueImport, getJobStatus, getJobErrors } from "./importWorker";
+import { computeFileHash, generateId, getJobStatus, getJobErrors, runImport } from "./importWorker";
 
 /**
  * Wraps an async route handler so that any rejected Promise is forwarded
@@ -64,16 +64,28 @@ export async function registerRoutes(
   }));
 
   /**
-   * POST /api/import — async ingestion (#5)
+   * POST /api/import — synchronous ingestion.
+   *
+   * SQLite transactions for typical LMU files (~5 000 rows) complete in
+   * well under 500 ms, so there is no benefit to an async queue here.
+   * The previous enqueueImport() approach returned 202 immediately and
+   * the frontend never received the real `imported`/`totalLaps` values
+   * because the worker finished after the response was already sent.
+   *
+   * runImport() is called directly and awaited; the response is sent
+   * only after all files are persisted. Duplicate-file detection is
+   * preserved via SHA-256 hash (same logic as enqueueImport).
    */
-  app.post("/api/import", (req, res) => {
+  app.post("/api/import", asyncRoute(async (req, res) => {
     const files = req.body?.files;
     if (!Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ message: "Не переданы файлы для импорта" });
     }
 
     const results: any[] = [];
-    let hasDuplicate = false;
+    let imported = 0;
+    let skipped = 0;
+    let totalLaps = 0;
 
     for (const f of files) {
       const fileName = String(f?.fileName ?? "без_имени.xml");
@@ -81,36 +93,72 @@ export async function registerRoutes(
 
       if (!content.trim()) {
         results.push({ fileName, ok: false, status: 409, message: "Пустой файл" });
+        skipped++;
         continue;
       }
 
+      // Idempotency check (#6): SHA-256 hash
+      const fileHash = computeFileHash(content);
+      const existing = db
+        .select()
+        .from(importJobs)
+        .where(eq(importJobs.fileHash, fileHash))
+        .get();
+
+      if (existing) {
+        skipped++;
+        results.push({
+          fileName,
+          ok: false,
+          status: 409,
+          message: "Файл уже был импортирован",
+          importId: existing.id,
+          importStatus: existing.status,
+        });
+        continue;
+      }
+
+      // Создаём запись задачи со статусом processing до запуска импорта
+      const id = generateId();
+      db.insert(importJobs).values({
+        id,
+        fileHash,
+        fileName,
+        status: "processing",
+        createdAt: Date.now(),
+      }).run();
+
       try {
-        const importId = enqueueImport(fileName, content);
-        results.push({ fileName, ok: true, importId, status: "queued" });
+        const { sessionId, totalLaps: laps, validLaps, errorLaps } = await runImport({
+          id,
+          fileHash,
+          fileName,
+          content,
+        });
+
+        db.update(importJobs)
+          .set({ status: "completed", sessionId, totalLaps: laps, validLaps, errorLaps, finishedAt: Date.now() })
+          .where(eq(importJobs.id, id))
+          .run();
+
+        imported++;
+        totalLaps += validLaps;
+        results.push({ fileName, ok: true, importId: id, sessionId, laps: validLaps, errorLaps });
       } catch (e: any) {
-        if (e.code === "DUPLICATE_FILE") {
-          hasDuplicate = true;
-          results.push({
-            fileName,
-            ok: false,
-            status: 409,
-            message: "Файл уже был импортирован",
-            importId: e.importId,
-            importStatus: e.status,
-          });
-        } else {
-          results.push({ fileName, ok: false, status: 500, message: e.message });
-        }
+        db.update(importJobs)
+          .set({ status: "failed", error: e.message, finishedAt: Date.now() })
+          .where(eq(importJobs.id, id))
+          .run();
+        results.push({ fileName, ok: false, status: 500, message: e.message, importId: id });
       }
     }
 
-    const queued = results.filter((r) => r.ok).length;
-    const httpStatus = queued > 0 ? 202 : (hasDuplicate ? 409 : 400);
-    res.status(httpStatus).json({ queued, total: results.length, results });
-  });
+    const httpStatus = imported > 0 ? 200 : (skipped > 0 ? 409 : 400);
+    res.status(httpStatus).json({ imported, skipped, totalLaps, total: results.length, results });
+  }));
 
   /**
-   * GET /api/import/:id/status — polling статуса задачи (#5)
+   * GET /api/import/:id/status — статус задачи (#5)
    */
   app.get("/api/import/:id/status", (req, res) => {
     const job = getJobStatus(req.params.id);
