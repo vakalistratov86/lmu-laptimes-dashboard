@@ -20,7 +20,7 @@ services:
     container_name: lmu-dashboard
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3000:5000"
     env_file:
       - .env
     environment:
