@@ -40,10 +40,8 @@ const AUTO_INTERVAL_MS = 30_000;
  * Оставляет только первые 300 символов до первого '<' (если есть).
  */
 function trimErrorMessage(msg: string): string {
-  // Если в сообщении нет XML-тегов — возвращаем как есть
   const xmlStart = msg.indexOf("<");
   if (xmlStart === -1) return msg;
-  // Берём часть до XML (суть ошибки) и обрезаем до 300 символов
   const prefix = msg.slice(0, xmlStart).trim();
   return prefix.length > 0 ? prefix : msg.slice(0, 300);
 }
@@ -131,7 +129,6 @@ export default function Import() {
         if (!saved) return;
         setDirHandle(saved);
         setDirName(saved.name);
-        // Проверяем разрешение
         const perm = await (saved as FileSystemDirectoryHandle & {
           queryPermission: (d: { mode: string }) => Promise<PermissionState>;
         }).queryPermission({ mode: "read" });
@@ -213,7 +210,6 @@ export default function Import() {
             addLog("ok", `✓ ${file.name} — ${r.event ?? r.venue ?? ""} · кругов: ${r.laps ?? 0}`);
             setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + data.imported }));
           } else {
-            // Файл уже загружен или пропущен — выводим только суть, без XML
             const skipMsg = trimErrorMessage(r?.message ?? "пропущен");
             addLog("skip", `↷ ${file.name} — ${skipMsg}`);
             setCounters((c) => ({ ...c, queued: c.queued - 1, skipped: c.skipped + 1 }));
@@ -222,14 +218,12 @@ export default function Import() {
           await dbSaveSeenSet(localSeen);
         } catch (e: unknown) {
           const rawMsg = e instanceof Error ? e.message : String(e);
-          // Убираем XML-содержимое из сообщения об ошибке
           const msg = trimErrorMessage(rawMsg);
           addLog("error", `✗ ${file.name} — ${msg}`);
           setCounters((c) => ({ ...c, queued: c.queued - 1, failed: c.failed + 1 }));
         }
       }
 
-      // Инвалидируем кэш
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/laps"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tracks"] });
@@ -242,12 +236,15 @@ export default function Import() {
 
   // ─── Очистка БД ───────────────────────────────────────────────────────────
   const clearDatabase = useCallback(async () => {
-    if (!window.confirm("Удалить все импортированные данные из БД? Это действие необратимо.")) return;
+    if (
+      !window.confirm(
+        "Удалить все импортированные данные из БД? Будут удалены все сессии, круги, трассы и связанные записи. Это действие необратимо."
+      )
+    ) return;
     setClearingDb(true);
     addLog("info", "Очистка БД…");
     try {
       await apiRequest("DELETE", "/api/import/all", undefined);
-      // Сбрасываем список уже виденных файлов в IndexedDB, чтобы они могли быть импортированы снова
       await dbSaveSeenSet(new Set());
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/laps"] });
@@ -331,7 +328,6 @@ export default function Import() {
   function logColor(level: LogLevel) {
     if (level === "ok") return "text-emerald-400";
     if (level === "error") return "text-red-400";
-    // «skip» (файл уже загружен) — жёлтый вместо серого
     if (level === "skip") return "text-yellow-400";
     return "text-card-foreground";
   }
@@ -349,6 +345,32 @@ export default function Import() {
         <p className="mt-1 text-sm text-muted-foreground">
           Подключите папку с логами результатов LMU. Файлы .xml импортируются поочерёдно.
         </p>
+      </div>
+
+      {/* Предупреждение об очистке БД */}
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex gap-3">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-400" />
+            <div className="text-sm">
+              <p className="text-card-foreground font-medium">Очистка базы данных</p>
+              <p className="mt-1 text-muted-foreground">
+                Будут удалены все импортированные данные: сессии, круги, трассы и связанные записи.
+                Действие необратимо. После очистки файлы можно импортировать заново.
+              </p>
+            </div>
+          </div>
+
+          <button
+            data-testid="button-clear-db"
+            onClick={clearDatabase}
+            disabled={clearingDb || mode !== "idle"}
+            className="inline-flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/15 px-4 py-2.5 text-sm font-medium text-red-300 hover:bg-red-500/20 hover:text-red-200 disabled:opacity-40"
+          >
+            {clearingDb ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+            Очистить БД
+          </button>
+        </div>
       </div>
 
       {/* Подсказка */}
@@ -511,16 +533,6 @@ export default function Import() {
           <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground">
             <span>Журнал импорта</span>
             <div className="flex items-center gap-3">
-              {/* Кнопка очистки всех данных из БД */}
-              <button
-                data-testid="button-clear-db"
-                onClick={clearDatabase}
-                disabled={clearingDb || mode !== "idle"}
-                className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 disabled:opacity-40"
-              >
-                {clearingDb ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                Очистить БД
-              </button>
               {/* Кнопка очистки только журнала */}
               <button
                 onClick={() => {
