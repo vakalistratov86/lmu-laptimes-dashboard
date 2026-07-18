@@ -1,11 +1,19 @@
-import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { ImportResponse, ImportFileResult } from "@/lib/api";
+import type { ImportFileResult } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { FolderOpen, FileUp, CheckCircle2, XCircle, Loader2, Info } from "lucide-react";
+import {
+  FolderOpen,
+  FileUp,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Info,
+  RefreshCw,
+  AlertTriangle,
+} from "lucide-react";
 
-// Расширяем типизацию input для выбора папки
+// ─── Расширяем типизацию input для webkitdirectory ───────────────────────────
 declare module "react" {
   interface InputHTMLAttributes<T> {
     webkitdirectory?: string;
@@ -13,225 +21,470 @@ declare module "react" {
   }
 }
 
-type PickedFile = { fileName: string; content: string };
+// ─── Типы ────────────────────────────────────────────────────────────────────
+type LogLevel = "info" | "ok" | "skip" | "error";
+type LogEntry = { ts: number; level: LogLevel; text: string };
+type Counters = { total: number; queued: number; imported: number; skipped: number; failed: number };
+type ImportMode = "idle" | "scanning" | "importing";
 
-const BATCH_SIZE = 20;
+const FSA_SUPPORTED = typeof window !== "undefined" && "showDirectoryPicker" in window;
+const DB_NAME = "lmu-import-db";
+const DB_VERSION = 1;
+const STORE_HANDLE = "dirHandle";
+const STORE_SEEN = "seenFiles";
+const AUTO_INTERVAL_MS = 30_000;
 
+// ─── IndexedDB helpers ───────────────────────────────────────────────────────
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(STORE_HANDLE);
+      req.result.createObjectStore(STORE_SEEN);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbGet<T>(store: string, key: string): Promise<T | undefined> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readonly");
+    const req = tx.objectStore(store).get(key);
+    req.onsuccess = () => resolve(req.result as T);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbPut(store: string, key: string, value: unknown): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readwrite");
+    tx.objectStore(store).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function dbGetSeenSet(): Promise<Set<string>> {
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_SEEN, "readonly");
+    const req = tx.objectStore(STORE_SEEN).get("seen");
+    req.onsuccess = () => resolve(new Set<string>(req.result ?? []));
+    req.onerror = () => resolve(new Set());
+  });
+}
+
+async function dbSaveSeenSet(set: Set<string>): Promise<void> {
+  await dbPut(STORE_SEEN, "seen", Array.from(set));
+}
+
+function fileKey(f: File): string {
+  return `${f.name}|${f.size}|${f.lastModified}`;
+}
+
+// ─── Компонент ───────────────────────────────────────────────────────────────
 export default function Import() {
   const { toast } = useToast();
-  const folderInput = useRef<HTMLInputElement>(null);
-  const filesInput = useRef<HTMLInputElement>(null);
-  const [picked, setPicked] = useState<PickedFile[]>([]);
-  const [scanning, setScanning] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [results, setResults] = useState<ImportFileResult[] | null>(null);
-  const [summary, setSummary] = useState<{ imported: number; skipped: number; totalLaps: number } | null>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const filesInputRef = useRef<HTMLInputElement>(null);
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function handleFiles(fileList: FileList | null) {
-    if (!fileList || fileList.length === 0) return;
-    setScanning(true);
-    setResults(null);
-    setSummary(null);
-    const xmlFiles = Array.from(fileList).filter((f) =>
-      f.name.toLowerCase().endsWith(".xml")
-    );
-    const read: PickedFile[] = [];
-    for (const f of xmlFiles) {
+  // FSA-состояние
+  const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [dirName, setDirName] = useState<string | null>(null);
+  const [dirPerm, setDirPerm] = useState<"granted" | "prompt" | "denied" | null>(null);
+  const [autoImport, setAutoImport] = useState(false);
+
+  // Журнал
+  const [log, setLog] = useState<LogEntry[]>([]);
+  const [counters, setCounters] = useState<Counters>({ total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 });
+  const [mode, setMode] = useState<ImportMode>("idle");
+
+  const addLog = useCallback((level: LogLevel, text: string) => {
+    setLog((prev) => [...prev, { ts: Date.now(), level, text }]);
+  }, []);
+
+  // ─── Восстановить dirHandle из IndexedDB ─────────────────────────────────
+  useEffect(() => {
+    if (!FSA_SUPPORTED) return;
+    (async () => {
       try {
-        const content = await f.text();
-        read.push({ fileName: f.name, content });
+        const saved = await dbGet<FileSystemDirectoryHandle>(STORE_HANDLE, "dir");
+        if (!saved) return;
+        setDirHandle(saved);
+        setDirName(saved.name);
+        // Проверяем разрешение
+        const perm = await (saved as FileSystemDirectoryHandle & {
+          queryPermission: (d: { mode: string }) => Promise<PermissionState>;
+        }).queryPermission({ mode: "read" });
+        setDirPerm(perm);
       } catch {
-        // пропускаем нечитаемые файлы
+        // нет сохранённого handle
       }
-    }
-    setPicked(read);
-    setScanning(false);
-    if (read.length === 0) {
-      toast({
-        title: "Файлы .xml не найдены",
-        description: "В выбранной папке нет логов результатов (.xml).",
-        variant: "destructive",
-      });
+    })();
+  }, []);
+
+  // ─── FSA: выбор папки ─────────────────────────────────────────────────────
+  async function pickFolderFSA() {
+    if (!FSA_SUPPORTED) return;
+    try {
+      const handle = await (window as Window & {
+        showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
+      }).showDirectoryPicker();
+      setDirHandle(handle);
+      setDirName(handle.name);
+      await dbPut(STORE_HANDLE, "dir", handle);
+      const perm = await (handle as FileSystemDirectoryHandle & {
+        queryPermission: (d: { mode: string }) => Promise<PermissionState>;
+      }).queryPermission({ mode: "read" });
+      setDirPerm(perm);
+      addLog("info", `Папка выбрана: ${handle.name}`);
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name !== "AbortError") {
+        addLog("error", `Ошибка выбора папки: ${e.message}`);
+      }
     }
   }
 
-  const importMutation = useMutation({
-    mutationFn: async (files: PickedFile[]) => {
-      const all: ImportFileResult[] = [];
-      let imported = 0;
-      let skipped = 0;
-      let totalLaps = 0;
-      setProgress({ done: 0, total: files.length });
-      for (let i = 0; i < files.length; i += BATCH_SIZE) {
-        const batch = files.slice(i, i + BATCH_SIZE);
-        const res = await apiRequest("POST", "/api/import", { files: batch });
-        const data: ImportResponse = await res.json();
-        all.push(...data.results);
-        imported += data.imported;
-        skipped += data.skipped;
-        totalLaps += data.totalLaps;
-        setProgress({ done: Math.min(i + BATCH_SIZE, files.length), total: files.length });
+  // ─── FSA: запросить разрешение ────────────────────────────────────────────
+  async function requestPermission(): Promise<boolean> {
+    if (!dirHandle) return false;
+    try {
+      const perm = await (dirHandle as FileSystemDirectoryHandle & {
+        requestPermission: (d: { mode: string }) => Promise<PermissionState>;
+      }).requestPermission({ mode: "read" });
+      setDirPerm(perm);
+      return perm === "granted";
+    } catch {
+      return false;
+    }
+  }
+
+  // ─── Стриминговый импорт файлов ──────────────────────────────────────────
+  const importFiles = useCallback(
+    async (files: File[], seenSet?: Set<string>) => {
+      const xmlFiles = files.filter((f) => f.name.toLowerCase().endsWith(".xml"));
+      if (xmlFiles.length === 0) {
+        addLog("info", "Файлов .xml не найдено");
+        return;
       }
-      return { results: all, imported, skipped, totalLaps };
-    },
-    onSuccess: (data) => {
-      setResults(data.results);
-      setSummary({ imported: data.imported, skipped: data.skipped, totalLaps: data.totalLaps });
-      setProgress(null);
-      // Обновляем все связанные данные
+
+      const localSeen = seenSet ?? (await dbGetSeenSet());
+      const newFiles = xmlFiles.filter((f) => !localSeen.has(fileKey(f)));
+
+      if (newFiles.length === 0) {
+        addLog("info", "Новых файлов нет — всё уже импортировано");
+        return;
+      }
+
+      addLog("info", `Обнаружено новых файлов: ${newFiles.length}`);
+      setCounters((c) => ({ ...c, total: c.total + newFiles.length, queued: c.queued + newFiles.length }));
+      setMode("importing");
+
+      for (const file of newFiles) {
+        addLog("info", `Импорт: ${file.name}`);
+        try {
+          const content = await file.text();
+          const res = await apiRequest("POST", "/api/import", {
+            files: [{ fileName: file.name, content }],
+          });
+          const data: { results: ImportFileResult[]; imported: number; skipped: number; totalLaps: number } =
+            await res.json();
+          const r = data.results[0];
+          if (r?.ok) {
+            addLog("ok", `✓ ${file.name} — ${r.event ?? r.venue ?? ""} · кругов: ${r.laps ?? 0}`);
+            setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + data.imported }));
+          } else {
+            addLog("skip", `↷ ${file.name} — ${r?.message ?? "пропущен"}`);
+            setCounters((c) => ({ ...c, queued: c.queued - 1, skipped: c.skipped + 1 }));
+          }
+          localSeen.add(fileKey(file));
+          await dbSaveSeenSet(localSeen);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          addLog("error", `✗ ${file.name} — ${msg}`);
+          setCounters((c) => ({ ...c, queued: c.queued - 1, failed: c.failed + 1 }));
+        }
+      }
+
+      // Инвалидируем кэш
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/laps"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tracks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/drivers"] });
-      toast({
-        title: "Импорт завершён",
-        description: `Загружено сессий: ${data.imported}, кругов: ${data.totalLaps}. Пропущено: ${data.skipped}.`,
-      });
+      setMode("idle");
+      addLog("info", "Импорт завершён");
     },
-    onError: (err: Error) => {
-      setProgress(null);
-      toast({ title: "Ошибка импорта", description: err.message, variant: "destructive" });
-    },
-  });
+    [addLog]
+  );
 
-  const okCount = results?.filter((r) => r.ok).length ?? 0;
-  const failCount = results?.filter((r) => !r.ok).length ?? 0;
+  // ─── Скан FSA-папки ───────────────────────────────────────────────────────
+  const scanFSAFolder = useCallback(async () => {
+    if (!dirHandle) return;
+    addLog("info", `Сканирую папку: ${dirHandle.name}`);
+    setMode("scanning");
+    try {
+      let perm = dirPerm;
+      if (perm !== "granted") {
+        const ok = await requestPermission();
+        if (!ok) {
+          addLog("error", "Нет разрешения на чтение папки. Нажмите «Разрешить доступ».");
+          setMode("idle");
+          return;
+        }
+        perm = "granted";
+      }
+      const files: File[] = [];
+      for await (const [, entry] of (dirHandle as FileSystemDirectoryHandle & {
+        [Symbol.asyncIterator]?: never;
+        entries: () => AsyncIterable<[string, FileSystemHandle]>;
+      }).entries()) {
+        if (entry.kind === "file" && entry.name.toLowerCase().endsWith(".xml")) {
+          const fh = entry as FileSystemFileHandle;
+          files.push(await fh.getFile());
+        }
+      }
+      addLog("info", `Найдено .xml файлов: ${files.length}`);
+      setMode("idle");
+      await importFiles(files);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      addLog("error", `Ошибка сканирования: ${msg}`);
+      setMode("idle");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirHandle, dirPerm, importFiles]);
+
+  // ─── Авто-импорт: таймер ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    if (!autoImport || !dirHandle) return;
+
+    const tick = async () => {
+      if (mode === "idle") await scanFSAFolder();
+      autoTimerRef.current = setTimeout(tick, AUTO_INTERVAL_MS);
+    };
+    autoTimerRef.current = setTimeout(tick, AUTO_INTERVAL_MS);
+    return () => {
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    };
+  }, [autoImport, dirHandle, mode, scanFSAFolder]);
+
+  // ─── Fallback: обычный input ──────────────────────────────────────────────
+  async function handleFileInput(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setMode("scanning");
+    addLog("info", `Выбрано файлов: ${fileList.length}`);
+    const files = Array.from(fileList);
+    setMode("idle");
+    await importFiles(files);
+  }
+
+  // ─── Цвет лога ───────────────────────────────────────────────────────────
+  function logColor(level: LogLevel) {
+    if (level === "ok") return "text-emerald-400";
+    if (level === "error") return "text-red-400";
+    if (level === "skip") return "text-muted-foreground";
+    return "text-card-foreground";
+  }
+
+  const modeLabel =
+    mode === "scanning" ? "Сканирование…" : mode === "importing" ? "Импорт…" : "Ожидание";
 
   return (
     <div className="space-y-6">
+      {/* Заголовок */}
       <div>
         <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-page-title">
           Импорт логов игры
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Подключите папку с логами результатов LMU. Все файлы .xml будут разобраны и добавлены к данным.
+          Подключите папку с логами результатов LMU. Файлы .xml импортируются поочерёдно.
         </p>
       </div>
 
-      {/* Подсказка о расположении логов */}
+      {/* Подсказка */}
       <div className="flex gap-3 rounded-lg border border-border bg-card/50 p-4 text-sm text-muted-foreground">
         <Info size={18} className="mt-0.5 shrink-0 text-primary" />
         <div>
           <p className="text-card-foreground">Где лежат логи результатов</p>
-          <p className="mt-1 font-data text-xs">
-            …\Le Mans Ultimate\UserData\Log\Results\*.xml
-          </p>
+          <p className="mt-1 font-data text-xs">…\Le Mans Ultimate\UserData\Log\Results\*.xml</p>
           <p className="mt-2">
-            Выберите папку целиком — браузер сам подтянет все файлы. Данные обрабатываются локально и
-            добавляются к текущим (демо‑данные сохраняются). Повторная загрузка того же файла пропускается.
+            Выберите папку — браузер подтянет все .xml файлы. Данные импортируются по одному без
+            загрузки всего содержимого в память. Повторная загрузка пропускается.
           </p>
         </div>
       </div>
 
-      {/* Выбор папки / файлов */}
-      <div className="flex flex-wrap gap-3">
-        <input
-          ref={folderInput}
-          type="file"
-          multiple
-          webkitdirectory=""
-          directory=""
-          className="hidden"
-          data-testid="input-folder"
-          onChange={(e) => handleFiles(e.target.files)}
-        />
-        <input
-          ref={filesInput}
-          type="file"
-          multiple
-          accept=".xml"
-          className="hidden"
-          data-testid="input-files"
-          onChange={(e) => handleFiles(e.target.files)}
-        />
-        <button
-          data-testid="button-pick-folder"
-          onClick={() => folderInput.current?.click()}
-          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover-elevate"
-        >
-          <FolderOpen size={16} /> Выбрать папку с логами
-        </button>
-        <button
-          data-testid="button-pick-files"
-          onClick={() => filesInput.current?.click()}
-          className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-card-foreground hover-elevate"
-        >
-          <FileUp size={16} /> Выбрать отдельные файлы
-        </button>
-      </div>
-
-      {/* Статус выбранных файлов */}
-      {scanning && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 size={16} className="animate-spin" /> Читаю файлы…
-        </div>
-      )}
-
-      {!scanning && picked.length > 0 && (
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-card-foreground" data-testid="text-picked-count">
-              Найдено файлов .xml: <span className="font-data font-semibold text-primary">{picked.length}</span>
-            </p>
+      {/* FSA: выбор папки */}
+      {FSA_SUPPORTED ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-3">
             <button
-              data-testid="button-import"
-              disabled={importMutation.isPending}
-              onClick={() => importMutation.mutate(picked)}
-              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover-elevate disabled:opacity-60"
+              data-testid="button-pick-folder-fsa"
+              onClick={pickFolderFSA}
+              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover-elevate"
             >
-              {importMutation.isPending ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  {progress ? `Импорт ${progress.done}/${progress.total}` : "Импорт…"}
-                </>
+              <FolderOpen size={16} /> Выбрать папку с логами
+            </button>
+
+            {dirHandle && (
+              <button
+                data-testid="button-scan-now"
+                onClick={scanFSAFolder}
+                disabled={mode !== "idle"}
+                className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-card-foreground hover-elevate disabled:opacity-50"
+              >
+                <RefreshCw size={16} className={mode !== "idle" ? "animate-spin" : ""} />
+                Сканировать сейчас
+              </button>
+            )}
+
+            <input
+              ref={filesInputRef}
+              type="file"
+              multiple
+              accept=".xml"
+              className="hidden"
+              data-testid="input-files"
+              onChange={(e) => handleFileInput(e.target.files)}
+            />
+            <button
+              data-testid="button-pick-files"
+              onClick={() => filesInputRef.current?.click()}
+              className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-card-foreground hover-elevate"
+            >
+              <FileUp size={16} /> Выбрать файлы вручную
+            </button>
+          </div>
+
+          {/* Статус выбранной папки */}
+          {dirName && (
+            <div className="flex items-center gap-2 rounded-md border border-border bg-card/60 px-3 py-2 text-sm">
+              <FolderOpen size={14} className="shrink-0 text-primary" />
+              <span className="font-data text-xs text-card-foreground truncate">{dirName}</span>
+              {dirPerm === "granted" ? (
+                <CheckCircle2 size={14} className="ml-auto shrink-0 text-emerald-500" />
               ) : (
-                <>
-                  <FileUp size={16} /> Импортировать
-                </>
+                <button
+                  onClick={requestPermission}
+                  className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <AlertTriangle size={13} /> Разрешить доступ
+                </button>
               )}
+            </div>
+          )}
+
+          {/* Авто-импорт */}
+          <label className={`flex items-center gap-3 text-sm ${!dirHandle ? "opacity-40 pointer-events-none" : ""}` }>
+            <input
+              type="checkbox"
+              checked={autoImport}
+              disabled={!dirHandle}
+              onChange={(e) => {
+                setAutoImport(e.target.checked);
+                addLog("info", e.target.checked ? "Автозагрузка включена" : "Автозагрузка выключена");
+              }}
+              className="h-4 w-4 rounded border-border accent-primary"
+              data-testid="toggle-auto-import"
+            />
+            <span className="text-card-foreground">Автозагрузка логов</span>
+            <span className="text-xs text-muted-foreground">(каждые {AUTO_INTERVAL_MS / 1000} с)</span>
+          </label>
+        </div>
+      ) : (
+        // ─── Fallback для браузеров без FSA ──────────────────────────────
+        <div className="space-y-3">
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <p>
+              Автоматическое фоновое сканирование недоступно — требуется браузер на основе Chromium с
+              поддержкой File System Access API. Используйте ручной выбор файлов или папки ниже.
+            </p>
+          </div>
+          <input
+            ref={folderInputRef}
+            type="file"
+            multiple
+            webkitdirectory=""
+            directory=""
+            className="hidden"
+            data-testid="input-folder"
+            onChange={(e) => handleFileInput(e.target.files)}
+          />
+          <input
+            ref={filesInputRef}
+            type="file"
+            multiple
+            accept=".xml"
+            className="hidden"
+            data-testid="input-files"
+            onChange={(e) => handleFileInput(e.target.files)}
+          />
+          <div className="flex flex-wrap gap-3">
+            <button
+              data-testid="button-pick-folder"
+              onClick={() => folderInputRef.current?.click()}
+              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover-elevate"
+            >
+              <FolderOpen size={16} /> Выбрать папку с логами
+            </button>
+            <button
+              data-testid="button-pick-files"
+              onClick={() => filesInputRef.current?.click()}
+              className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-card-foreground hover-elevate"
+            >
+              <FileUp size={16} /> Выбрать отдельные файлы
             </button>
           </div>
         </div>
       )}
 
-      {/* Сводка результатов */}
-      {summary && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatCard label="Загружено сессий" value={summary.imported} tone="ok" />
-          <StatCard label="Кругов добавлено" value={summary.totalLaps} tone="accent" />
-          <StatCard label="Пропущено" value={summary.skipped} tone="muted" />
-        </div>
-      )}
+      {/* Счётчики */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <StatCard label="Обнаружено" value={counters.total} tone="muted" />
+        <StatCard label="В очереди" value={counters.queued} tone="muted" />
+        <StatCard label="Импортировано" value={counters.imported} tone="ok" />
+        <StatCard label="Пропущено" value={counters.skipped} tone="muted" />
+        <StatCard label="Ошибки" value={counters.failed} tone="err" />
+      </div>
 
-      {/* Детальный список результатов */}
-      {results && results.length > 0 && (
+      {/* Статус режима */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        {mode !== "idle" && <Loader2 size={13} className="animate-spin" />}
+        <span>Статус: <span className="text-card-foreground">{modeLabel}</span></span>
+        {autoImport && <span className="ml-2 rounded bg-primary/20 px-1.5 py-0.5 text-primary text-[10px]">AUTO</span>}
+      </div>
+
+      {/* Журнал */}
+      {log.length > 0 && (
         <div className="overflow-hidden rounded-lg border border-border">
-          <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2.5 text-xs uppercase tracking-wider text-muted-foreground">
-            <span>Файл</span>
-            <span>
-              Успешно: {okCount} · Ошибки: {failCount}
-            </span>
+          <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground">
+            <span>Журнал импорта</span>
+            <button
+              onClick={() => {
+                setLog([]);
+                setCounters({ total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 });
+              }}
+              className="text-xs text-muted-foreground hover:text-card-foreground"
+            >
+              Очистить
+            </button>
           </div>
-          <ul className="divide-y divide-border">
-            {results.map((r, i) => (
-              <li
-                key={`${r.fileName}-${i}`}
-                className="flex items-center gap-3 px-4 py-3 text-sm"
-                data-testid={`row-result-${i}`}
-              >
-                {r.ok ? (
-                  <CheckCircle2 size={16} className="shrink-0 text-emerald-500" />
-                ) : (
-                  <XCircle size={16} className="shrink-0 text-muted-foreground" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-data text-xs text-card-foreground">{r.fileName}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {r.ok
-                      ? `${r.event ?? r.venue ?? ""} · пилотов: ${r.drivers ?? 0} · кругов: ${r.laps ?? 0}`
-                      : r.message}
-                  </p>
-                </div>
+          <ul
+            className="max-h-72 divide-y divide-border overflow-y-auto"
+            data-testid="import-log"
+          >
+            {[...log].reverse().map((entry, i) => (
+              <li key={i} className={`flex items-start gap-2 px-4 py-2 text-xs ${logColor(entry.level)}`}>
+                <span className="shrink-0 font-data text-muted-foreground">
+                  {new Date(entry.ts).toLocaleTimeString()}
+                </span>
+                <span>{entry.text}</span>
               </li>
             ))}
           </ul>
@@ -241,13 +494,27 @@ export default function Import() {
   );
 }
 
-function StatCard({ label, value, tone }: { label: string; value: number; tone: "ok" | "accent" | "muted" }) {
+function StatCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "ok" | "accent" | "muted" | "err";
+}) {
   const color =
-    tone === "ok" ? "text-emerald-500" : tone === "accent" ? "text-primary" : "text-muted-foreground";
+    tone === "ok"
+      ? "text-emerald-500"
+      : tone === "accent"
+      ? "text-primary"
+      : tone === "err"
+      ? "text-red-500"
+      : "text-muted-foreground";
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={`mt-1 font-data text-2xl font-bold tabular-nums ${color}`}>{value}</div>
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`mt-1 font-data text-xl font-bold tabular-nums ${color}`}>{value}</div>
     </div>
   );
 }
