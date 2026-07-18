@@ -37,6 +37,25 @@ export function formatLapTime(seconds: number): string {
   return formatLapMs(seconds * 1000);
 }
 
+/**
+ * Универсальный парсинг времени сектора.
+ * Поле «*Ms» хранит значение в миллисекундах, остальные — в секундах.
+ * Возвращает значение в СЕКУНДАХ для дальнейшего использования с formatLapTime.
+ */
+function parseSectorSeconds(
+  msProp: unknown,
+  secProp: unknown,
+  shortProp: unknown,
+): number {
+  // Приоритет: *Ms-поле (миллисекунды) → делим на 1000
+  const ms = Number(msProp);
+  if (Number.isFinite(ms) && ms > 0) return ms / 1000;
+  // Запасные поля: предполагаем секунды
+  const sec = Number(secProp ?? shortProp);
+  if (Number.isFinite(sec) && sec > 0) return sec;
+  return NaN;
+}
+
 /** Форматирует отставание (gap) в секундах в строку «+X.XXX». */
 export function formatGap(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return '—';
@@ -246,9 +265,11 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     const lap = raw as AnyLap;
     const driver = String(lap.driverName ?? lap.driver ?? 'Unknown');
     const carNumber = lap.carNumber ?? lap.number ?? '';
-    const s1 = Number(lap.sector1Ms ?? lap.sector1 ?? lap.s1 ?? NaN);
-    const s2 = Number(lap.sector2Ms ?? lap.sector2 ?? lap.s2 ?? NaN);
-    const s3 = Number(lap.sector3Ms ?? lap.sector3 ?? lap.s3 ?? NaN);
+
+    // parseSectorSeconds корректно обрабатывает и Ms-поля и поля в секундах
+    const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
+    const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
+    const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
 
     if (!map.has(driver)) {
       map.set(driver, { carNumber, bestS: [Infinity, Infinity, Infinity] });
@@ -333,9 +354,10 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
       .sort((a, b) => Number(a.lapNumber ?? a.lap ?? 0) - Number(b.lapNumber ?? b.lap ?? 0))
       .map((lap) => {
         const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
-        const s1 = Number(lap.sector1Ms ?? lap.sector1 ?? lap.s1 ?? NaN);
-        const s2 = Number(lap.sector2Ms ?? lap.sector2 ?? lap.s2 ?? NaN);
-        const s3 = Number(lap.sector3Ms ?? lap.sector3 ?? lap.s3 ?? NaN);
+        // Используем parseSectorSeconds для корректной обработки Ms-полей
+        const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
+        const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
+        const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
 
         return {
           lapNumber: Number(lap.lapNumber ?? lap.lap ?? 0),
