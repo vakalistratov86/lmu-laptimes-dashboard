@@ -35,6 +35,49 @@ const STORE_HANDLE = "dirHandle";
 const STORE_SEEN = "seenFiles";
 const AUTO_INTERVAL_MS = 30_000;
 
+// ─── localStorage ключи для персистентности журнала ──────────────────────────
+const LS_LOG_KEY = "lmu-import-log";
+const LS_COUNTERS_KEY = "lmu-import-counters";
+const MAX_LOG_ENTRIES = 500;
+
+const DEFAULT_COUNTERS: Counters = { total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 };
+
+function loadLog(): LogEntry[] {
+  try {
+    const raw = localStorage.getItem(LS_LOG_KEY);
+    return raw ? (JSON.parse(raw) as LogEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLog(entries: LogEntry[]): void {
+  try {
+    // Храним только последние MAX_LOG_ENTRIES записей
+    const trimmed = entries.slice(-MAX_LOG_ENTRIES);
+    localStorage.setItem(LS_LOG_KEY, JSON.stringify(trimmed));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function loadCounters(): Counters {
+  try {
+    const raw = localStorage.getItem(LS_COUNTERS_KEY);
+    return raw ? (JSON.parse(raw) as Counters) : { ...DEFAULT_COUNTERS };
+  } catch {
+    return { ...DEFAULT_COUNTERS };
+  }
+}
+
+function saveCounters(c: Counters): void {
+  try {
+    localStorage.setItem(LS_COUNTERS_KEY, JSON.stringify(c));
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Убирает из сообщения об ошибке длинный XML-контент.
  * Оставляет только первые 300 символов до первого '<' (если есть).
@@ -110,15 +153,32 @@ export default function Import() {
   const [dirPerm, setDirPerm] = useState<"granted" | "prompt" | "denied" | null>(null);
   const [autoImport, setAutoImport] = useState(false);
 
-  // Журнал
-  const [log, setLog] = useState<LogEntry[]>([]);
-  const [counters, setCounters] = useState<Counters>({ total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 });
+  // Журнал — инициализируем из localStorage
+  const [log, setLogState] = useState<LogEntry[]>(() => loadLog());
+  const [counters, setCountersState] = useState<Counters>(() => loadCounters());
   const [mode, setMode] = useState<ImportMode>("idle");
   const [clearingDb, setClearingDb] = useState(false);
 
+  // Обёртки, которые одновременно обновляют state и localStorage
+  const setLog = useCallback((updater: (prev: LogEntry[]) => LogEntry[]) => {
+    setLogState((prev) => {
+      const next = updater(prev);
+      saveLog(next);
+      return next;
+    });
+  }, []);
+
+  const setCounters = useCallback((updater: (prev: Counters) => Counters) => {
+    setCountersState((prev) => {
+      const next = updater(prev);
+      saveCounters(next);
+      return next;
+    });
+  }, []);
+
   const addLog = useCallback((level: LogLevel, text: string) => {
     setLog((prev) => [...prev, { ts: Date.now(), level, text }]);
-  }, []);
+  }, [setLog]);
 
   // ─── Восстановить dirHandle из IndexedDB ─────────────────────────────────
   useEffect(() => {
@@ -210,6 +270,7 @@ export default function Import() {
             addLog("ok", `✓ ${file.name} — ${r.event ?? r.venue ?? ""} · кругов: ${r.laps ?? 0}`);
             setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + data.imported }));
           } else {
+            // Обрезаем XML из сообщения об ошибке/пропуске — в лог пишем только имя файла и краткую причину
             const skipMsg = trimErrorMessage(r?.message ?? "пропущен");
             addLog("skip", `↷ ${file.name} — ${skipMsg}`);
             setCounters((c) => ({ ...c, queued: c.queued - 1, skipped: c.skipped + 1 }));
@@ -217,6 +278,7 @@ export default function Import() {
           localSeen.add(fileKey(file));
           await dbSaveSeenSet(localSeen);
         } catch (e: unknown) {
+          // Никогда не пишем содержимое XML в лог — только имя файла и краткое сообщение
           const rawMsg = e instanceof Error ? e.message : String(e);
           const msg = trimErrorMessage(rawMsg);
           addLog("error", `✗ ${file.name} — ${msg}`);
@@ -231,7 +293,7 @@ export default function Import() {
       setMode("idle");
       addLog("info", "Импорт завершён");
     },
-    [addLog]
+    [addLog, setCounters]
   );
 
   // ─── Очистка БД ───────────────────────────────────────────────────────────
@@ -250,7 +312,9 @@ export default function Import() {
       queryClient.invalidateQueries({ queryKey: ["/api/laps"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tracks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/drivers"] });
-      setCounters({ total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 });
+      const reset: Counters = { total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 };
+      setCountersState(reset);
+      saveCounters(reset);
       addLog("ok", "✓ БД успешно очищена");
       toast({ title: "БД очищена", description: "Все импортированные данные удалены." });
     } catch (e: unknown) {
@@ -260,7 +324,7 @@ export default function Import() {
     } finally {
       setClearingDb(false);
     }
-  }, [addLog, toast]);
+  }, [addLog, setCountersState, toast]);
 
   // ─── Скан FSA-папки ───────────────────────────────────────────────────────
   const scanFSAFolder = useCallback(async () => {
@@ -531,13 +595,15 @@ export default function Import() {
       {log.length > 0 && (
         <div className="overflow-hidden rounded-lg border border-border">
           <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground">
-            <span>Журнал импорта</span>
+            <span>Журнал импорта ({log.length})</span>
             <div className="flex items-center gap-3">
-              {/* Кнопка очистки только журнала */}
               <button
                 onClick={() => {
-                  setLog([]);
-                  setCounters({ total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 });
+                  setLogState([]);
+                  saveLog([]);
+                  const reset: Counters = { total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 };
+                  setCountersState(reset);
+                  saveCounters(reset);
                 }}
                 className="text-xs text-muted-foreground hover:text-card-foreground"
               >
@@ -546,7 +612,7 @@ export default function Import() {
             </div>
           </div>
           <ul
-            className="max-h-72 divide-y divide-border overflow-y-auto"
+            className="max-h-[36rem] divide-y divide-border overflow-y-auto"
             data-testid="import-log"
           >
             {[...log].reverse().map((entry, i) => (
