@@ -266,7 +266,7 @@ export default function Leaderboards() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className={`font-data text-sm tabular-nums ${i === 0 ? "font-bold text-primary" : ""}`}>
+                          <div className={`font-data text-sm tabular-nums ${i === 0 ? "font-bold text-green-500" : ""}`}>
                             {formatLap(l.lapMs)}
                           </div>
                           {i > 0 && (
