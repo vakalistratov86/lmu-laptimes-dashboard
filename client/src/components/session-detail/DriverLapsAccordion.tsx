@@ -6,9 +6,10 @@
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { DriverName } from '@/components/DriverName';
 import type { DriverLapsGroupView, DriverLapRowView } from './types';
 
-// ─── DriverLapTable ───────────────────────────────────────────────────────────
+// ─── DriverLapTable ───────────────────────────────────────────────────────────────────
 
 interface DriverLapTableProps {
   laps: DriverLapRowView[];
@@ -69,7 +70,7 @@ export function DriverLapTable({ laps }: DriverLapTableProps) {
   );
 }
 
-// ─── DriverLapsAccordion ──────────────────────────────────────────────────────
+// ─── DriverLapsAccordion ─────────────────────────────────────────────────────────────
 
 interface DriverLapsAccordionProps {
   groups: DriverLapsGroupView[];
@@ -115,7 +116,11 @@ export function DriverLapsAccordion({ groups }: DriverLapsAccordionProps) {
                     isOpen ? 'rotate-90' : ''
                   } text-muted-foreground`}
                 />
-                <span className="font-semibold text-sm">{group.driverName}</span>
+                <DriverName
+                  name={group.driverName}
+                  isPlayer={group.isPlayer}
+                  className="font-semibold text-sm"
+                />
                 {group.carNumber ? (
                   <span className="text-xs text-muted-foreground">#{group.carNumber}</span>
                 ) : null}
