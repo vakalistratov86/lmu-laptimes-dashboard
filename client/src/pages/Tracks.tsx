@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
-import { Flag, MapPin, RotateCw, Ruler, ArrowRight, CalendarClock, Timer, Layers, Trophy } from "lucide-react";
+import { MapPin, RotateCw, Ruler, ArrowRight, CalendarClock, Timer, Layers, Trophy } from "lucide-react";
 import { TrackMap, hasTrackMap } from "@/components/TrackMap";
 import { useMemo } from "react";
 import { getClassBadgeClass } from "@/lib/classStyles";
@@ -94,9 +94,6 @@ export default function Tracks() {
 
                   {/* Левая часть: схема трассы */}
                   <div className="flex flex-col items-center justify-center shrink-0 w-24">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary mb-2">
-                      <Flag size={18} />
-                    </div>
                     {hasTrackMap(t.name) ? (
                       <TrackMap name={t.name} className="h-16 w-20 text-primary/70 transition-colors group-hover:text-primary" />
                     ) : (
@@ -143,7 +140,7 @@ export default function Tracks() {
                           <Trophy size={10} /> Рекорд
                         </div>
                         <div className="mt-0.5">
-                          <span className="font-data text-sm font-bold tabular-nums text-primary">
+                          <span className="font-data text-sm font-bold tabular-nums text-green-500">
                             {hasBest ? formatLap(st.bestMs) : "—"}
                           </span>
                           {hasBest && (
