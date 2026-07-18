@@ -72,6 +72,12 @@ export interface ParseErrorContext {
   code: string;
 }
 
+export interface ImportSkippedContext {
+  importJobId: string;
+  fileName: string;
+  reason: string;
+}
+
 export function logImportStarted(ctx: ImportStartedContext): void {
   logger.info(ctx, 'Import started');
 }
@@ -89,4 +95,8 @@ export function logImportFailed(importJobId: string, error: Error): void {
     { importJobId, errorCode: (error as any).code ?? 'UNKNOWN', message: error.message },
     'Import failed'
   );
+}
+
+export function logImportSkipped(ctx: ImportSkippedContext): void {
+  logger.warn(ctx, 'Import skipped');
 }
