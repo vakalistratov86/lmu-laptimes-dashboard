@@ -332,9 +332,17 @@ async function runImport(job: ImportJobPayload): Promise<ImportResult> {
           // Нормализация (#10)
           const normalized = normalizeLapTime(validation.data);
 
-          const ltS1 = normalized.sector1Ms ?? 0;
-          const ltS2 = normalized.sector2Ms ?? 0;
-          const ltS3 = normalized.sector3Ms ?? Math.max(0, normalized.lapTimeMs - ltS1 - ltS2);
+          // fix(#74): используем null вместо 0 для отсутствующих секторов.
+          // Предыдущий код: `normalized.sector1Ms ?? 0` подставлял 0 вместо null,
+          // из-за чего sector3Ms поглощал всё время круга (ltS3 = lapTimeMs).
+          // Теперь сектор остаётся null, если исходные данные отсутствуют —
+          // аналогично логике, уже применённой выше для sessionLapRows.
+          const ltS1 = normalized.sector1Ms ?? null;
+          const ltS2 = normalized.sector2Ms ?? null;
+          const ltS3 = normalized.sector3Ms
+            ?? (ltS1 != null && ltS2 != null
+                ? Math.max(0, normalized.lapTimeMs - ltS1 - ltS2)
+                : null);
 
           // fix(#63): conditions и tyre берём из данных круга, а не хардкодим
           lapTimeRows.push({
