@@ -33,9 +33,7 @@ interface ClassBoard {
 }
 
 interface TrackBoard {
-  /** Уникальный ключ: "trackName|||course" или просто "trackName" */
   boardKey: string;
-  /** Отображаемое название: "trackName · course" или просто "trackName" */
   displayName: string;
   classes: ClassBoard[];
 }
@@ -57,10 +55,6 @@ function formatRecordDate(dateStr?: string): string {
   }
 }
 
-/**
- * Строит борды, группируя по паре trackName + sessionCourse.
- * Для кругов без course (demo) ключ — только trackName.
- */
 function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
   const byBoard = new Map<string, { displayName: string; laps: LapRow[] }>();
   for (const l of laps) {
@@ -156,7 +150,8 @@ export default function Leaderboards() {
   }, [laps, trackId, classFilter, courseFilter, globalFiltered, selectedDriverIds]);
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
+      {/* Фильтры */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-xl font-bold tracking-tight">Лидерборды</h1>
@@ -212,15 +207,18 @@ export default function Leaderboards() {
         </div>
       </div>
 
+      {/* Скелетон загрузки */}
       {isLoading && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-72" />)}
+        <div className="flex flex-col gap-4">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
         </div>
       )}
 
-      <div className={trackId === "all" ? "grid gap-4 md:grid-cols-2" : "space-y-4"}>
+      {/* Карточки трасс — вертикальный стек, каждая на всю ширину */}
+      <div className="flex flex-col gap-4">
         {boards.map((board) => (
-          <Card key={board.boardKey} className="overflow-hidden">
+          <Card key={board.boardKey} className="w-full overflow-hidden">
+            {/* Заголовок карточки */}
             <div className="flex items-center gap-2 border-b border-border bg-secondary/40 px-4 py-3">
               <Trophy size={16} className="text-primary" />
               <h2 className="font-semibold">{board.displayName}</h2>
@@ -229,8 +227,10 @@ export default function Leaderboards() {
               </span>
             </div>
 
+            {/* Таблица для каждого класса */}
             {board.classes.map((cls) => (
               <div key={cls.carClass}>
+                {/* Заголовок класса */}
                 <div
                   className={`flex items-center gap-2 border-l-4 bg-muted/30 px-4 py-1.5 ${getClassAccentClass(cls.carClass)}`}
                 >
@@ -245,45 +245,80 @@ export default function Leaderboards() {
                   </span>
                 </div>
 
-                <ol>
-                  {cls.rows.map((l, i) => {
-                    const best = cls.rows[0].lapMs;
-                    const recordDate = formatRecordDate(l.date);
-                    return (
-                      <li
-                        key={l.id}
-                        data-testid={`lb-row-${board.displayName}-${cls.carClass}-${i}`}
-                        className="flex items-center gap-3 border-t border-border/60 px-4 py-2.5 first:border-t-0 hover:bg-muted/40"
-                      >
-                        <RankBadge rank={i + 1} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">
-                            <DriverName name={l.driverName} isPlayer={l.isPlayer} />
-                          </div>
-                          <div className="truncate text-xs text-muted-foreground">{l.team}</div>
-                          <div className="truncate text-xs text-muted-foreground/80" data-testid={`text-car-${l.id}`}>
-                            {l.car}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className={`font-data text-sm tabular-nums ${i === 0 ? "font-bold text-green-500" : ""}`}>
-                            {formatLap(l.lapMs)}
-                          </div>
-                          {i > 0 && (
-                            <div className="font-data text-[11px] tabular-nums text-muted-foreground">
-                              {formatDelta(l.lapMs, best)}
-                            </div>
-                          )}
-                          {recordDate && (
-                            <div className="font-data text-[10px] tabular-nums text-muted-foreground/60 mt-0.5">
-                              {recordDate}
-                            </div>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
+                {/* Таблица результатов */}
+                <div className="w-full overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border/60 bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <th className="w-10 px-4 py-2 text-center">#</th>
+                        <th className="px-4 py-2 text-left">Пилот</th>
+                        <th className="px-4 py-2 text-left">Команда</th>
+                        <th className="px-4 py-2 text-left">Автомобиль</th>
+                        <th className="px-4 py-2 text-right">Время</th>
+                        <th className="px-4 py-2 text-right">Отставание</th>
+                        <th className="px-4 py-2 text-right">Дата</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cls.rows.map((l, i) => {
+                        const best = cls.rows[0].lapMs;
+                        const recordDate = formatRecordDate(l.date);
+                        return (
+                          <tr
+                            key={l.id}
+                            data-testid={`lb-row-${board.displayName}-${cls.carClass}-${i}`}
+                            className="border-t border-border/60 hover:bg-muted/40"
+                          >
+                            {/* Позиция */}
+                            <td className="px-4 py-2.5 text-center">
+                              <RankBadge rank={i + 1} />
+                            </td>
+                            {/* Пилот */}
+                            <td className="px-4 py-2.5">
+                              <span className="font-medium">
+                                <DriverName name={l.driverName} isPlayer={l.isPlayer} />
+                              </span>
+                            </td>
+                            {/* Команда */}
+                            <td className="px-4 py-2.5 text-muted-foreground">
+                              {l.team || "—"}
+                            </td>
+                            {/* Автомобиль */}
+                            <td className="px-4 py-2.5 text-muted-foreground/80" data-testid={`text-car-${l.id}`}>
+                              {l.car}
+                            </td>
+                            {/* Время круга */}
+                            <td className="px-4 py-2.5 text-right">
+                              <span
+                                className={`font-data tabular-nums ${
+                                  i === 0 ? "font-bold text-green-500" : ""
+                                }`}
+                              >
+                                {formatLap(l.lapMs)}
+                              </span>
+                            </td>
+                            {/* Отставание */}
+                            <td className="px-4 py-2.5 text-right">
+                              {i > 0 ? (
+                                <span className="font-data tabular-nums text-muted-foreground">
+                                  {formatDelta(l.lapMs, best)}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/40">—</span>
+                              )}
+                            </td>
+                            {/* Дата */}
+                            <td className="px-4 py-2.5 text-right">
+                              <span className="font-data text-[11px] tabular-nums text-muted-foreground/60">
+                                {recordDate || "—"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ))}
           </Card>
@@ -299,13 +334,15 @@ export default function Leaderboards() {
 
 function RankBadge({ rank }: { rank: number }) {
   const colors: Record<number, string> = {
-     1: "bg-chart-2/20 text-chart-2",
+    1: "bg-chart-2/20 text-chart-2",
     2: "bg-muted-foreground/15 text-muted-foreground",
     3: "bg-chart-1/20 text-chart-1",
   };
   return (
     <div
-      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-data text-sm font-bold tabular-nums ${colors[rank] ?? "bg-muted/50 text-muted-foreground"}`}
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-data text-sm font-bold tabular-nums ${
+        colors[rank] ?? "bg-muted/50 text-muted-foreground"
+      }`}
     >
       {rank <= 3 ? <Medal size={15} /> : rank}
     </div>
