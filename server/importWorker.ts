@@ -7,6 +7,7 @@
  *
  * Pipeline: parse → validate (#9) → normalize (#10) → persist / DLQ (#8)
  * Импорт считается успешным, если валидных круга >= VALID_LAP_THRESHOLD_PCT% (#8).
+ * Файлы с 0 кругами пропускаются с предупреждением в логе (ZERO_LAPS).
  * Структурированное логирование JSON через server/logger.ts (#12).
  *
  * runImport() экспортирован для прямого вызова из routes.ts (синхронный импорт).
@@ -28,6 +29,7 @@ import {
   logImportStarted,
   logImportCompleted,
   logImportFailed,
+  logImportSkipped,
   logParseError,
 } from "./logger";
 
@@ -46,6 +48,7 @@ export interface ImportJobPayload {
 }
 
 // Простая in-process очередь задач
+
 const queue: ImportJobPayload[] = [];
 let running = false;
 
@@ -163,6 +166,7 @@ export interface ImportResult {
  * Все операции записи обёрнуты в db.transaction() (#11).
  * Batch insert выполняется чанками по CHUNK_SIZE записей (#11).
  * Невалидные круги записываются в import_errors (DLQ) (#8).
+ * Файлы с 0 кругами пропускаются с предупреждением (ZERO_LAPS).
  *
  * Экспортирована для прямого вызова из routes.ts (синхронный импорт).
  */
@@ -179,6 +183,19 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
   }
   if (!parsed) {
     throw new Error("Не похоже на лог результатов LMU/rFactor (нет RaceResults)");
+  }
+
+  // Проверяем наличие кругов во всех водителях
+  const totalParsedLaps = parsed.drivers.reduce((sum, d) => sum + d.lapList.length, 0);
+  if (totalParsedLaps === 0) {
+    logImportSkipped({
+      importJobId: job.id,
+      fileName: job.fileName,
+      reason: 'ZERO_LAPS',
+    });
+    const err = new Error(`Файл пропущен: в логе отсутствуют круги (0 кругов)`);
+    (err as any).code = 'ZERO_LAPS';
+    throw err;
   }
 
   logImportStarted({
