@@ -1,10 +1,9 @@
-import { useLaps, useTracks, useDrivers } from "@/lib/api";
+import { useLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
 import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Link } from "wouter";
-import { Timer, Flag, Users, Gauge, ArrowRight } from "lucide-react";
+import { Timer, Flag, Users, Gauge, Trophy, UserCheck, Bot, RefreshCw } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
 } from "recharts";
@@ -35,6 +34,7 @@ export default function Overview() {
   const { data: laps, isLoading } = useLaps();
   const { data: tracks } = useTracks();
   const { data: drivers } = useDrivers();
+  const { data: sessions } = useSessions();
   const { selectedDriverIds, isFiltered } = useDriverFilter();
 
   const filteredLaps = useMemo(() => {
@@ -43,12 +43,40 @@ export default function Overview() {
     return laps.filter((l) => selectedDriverIds.has(l.driverId));
   }, [laps, selectedDriverIds, isFiltered]);
 
+  // Количество гонок (сессий типа Race)
+  const raceCount = useMemo(() => {
+    if (!sessions) return 0;
+    return sessions.filter((s) => s.sessionType?.toLowerCase() === "race").length;
+  }, [sessions]);
+
+  // Реальные и ИИ игроки из результатов сессий
+  const { realPlayerCount, aiPlayerCount } = useMemo(() => {
+    if (!sessions) return { realPlayerCount: 0, aiPlayerCount: 0 };
+    const realSet = new Set<number>();
+    const aiSet = new Set<number>();
+    for (const session of sessions) {
+      for (const result of session.results ?? []) {
+        if (result.isPlayer === 1) realSet.add(result.driverId);
+        else aiSet.add(result.driverId);
+      }
+    }
+    // Убираем из aiSet тех, кто хоть раз был реальным игроком
+    for (const id of realSet) aiSet.delete(id);
+    return { realPlayerCount: realSet.size, aiPlayerCount: aiSet.size };
+  }, [sessions]);
+
+  // Общее количество пройденных кругов по всем сессиям
+  const totalLapsCompleted = useMemo(() => {
+    if (!sessions) return 0;
+    return sessions.reduce((sum, s) => sum + (s.lapCount ?? 0), 0);
+  }, [sessions]);
+
   if (isLoading || !laps) {
     return (
       <div className="space-y-6">
         <PageTitle />
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+          {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-28" />)}
         </div>
         <Skeleton className="h-80" />
       </div>
@@ -85,6 +113,7 @@ export default function Overview() {
     <div className="space-y-6">
       <PageTitle />
 
+      {/* Верхний ряд: базовая статистика */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KpiCard icon={Timer} label="Заездов" value={String(filteredLaps.length)} sub="в базе данных" />
         <KpiCard icon={Flag} label="Трасс" value={String(tracks?.length ?? 0)} sub="активных" />
@@ -95,6 +124,14 @@ export default function Overview() {
           value={formatLap(bestLap.lapMs)}
           sub={`${bestLap.driverName} · ${bestLap.trackName} · ${bestLap.car}`}
         />
+      </div>
+
+      {/* Нижний ряд: статистика по гонкам и игрокам */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <KpiCard icon={Trophy} label="Гонок" value={String(raceCount)} sub="проведено" />
+        <KpiCard icon={UserCheck} label="Реальных игроков" value={String(realPlayerCount)} sub="уникальных" />
+        <KpiCard icon={Bot} label="ИИ игроков" value={String(aiPlayerCount)} sub="уникальных" />
+        <KpiCard icon={RefreshCw} label="Кругов пройдено" value={String(totalLapsCompleted)} sub="во всех сессиях" />
       </div>
 
       <Card className="p-5">
@@ -129,12 +166,6 @@ export default function Overview() {
           </ResponsiveContainer>
         </div>
       </Card>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <QuickLink href="/laps" title="Таблица времён" desc="Все заезды с фильтрами" />
-        <QuickLink href="/leaderboards" title="Лидерборды" desc="Рекорды по трассам" />
-        <QuickLink href="/reports" title="Конструктор отчётов" desc="Свои графики и агрегации" />
-      </div>
     </div>
   );
 }
@@ -147,19 +178,5 @@ function PageTitle() {
         Сводка по мониторингу времён на трассах LMU
       </p>
     </div>
-  );
-}
-
-function QuickLink({ href, title, desc }: { href: string; title: string; desc: string }) {
-  return (
-    <Link href={href} data-testid={`quicklink-${href}`}>
-      <Card className="group flex items-center justify-between p-4 hover-elevate">
-        <div>
-          <div className="font-medium">{title}</div>
-          <div className="text-xs text-muted-foreground">{desc}</div>
-        </div>
-        <ArrowRight size={18} className="text-muted-foreground transition-transform group-hover:translate-x-1" />
-      </Card>
-    </Link>
   );
 }
