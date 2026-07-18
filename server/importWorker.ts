@@ -8,6 +8,9 @@
  * Pipeline: parse → validate (#9) → normalize (#10) → persist / DLQ (#8)
  * Импорт считается успешным, если валидных круга >= VALID_LAP_THRESHOLD_PCT% (#8).
  * Структурированное логирование JSON через server/logger.ts (#12).
+ *
+ * runImport() экспортирован для прямого вызова из routes.ts (синхронный импорт).
+ * Внутренняя очередь (queue / processNext) остаётся без изменений.
  */
 import crypto from "node:crypto";
 import { db } from "./storage";
@@ -43,6 +46,7 @@ export interface ImportJobPayload {
 }
 
 // Простая in-process очередь задач
+
 const queue: ImportJobPayload[] = [];
 let running = false;
 
@@ -137,7 +141,7 @@ async function processNext() {
       durationMs,
     });
   } catch (e) {
-    // fix(#60): оборачиваем db.update в try/catch, чтобы сбой записи статуса
+    // fix(#60): обёртываем db.update в try/catch, чтобы сбой записи статуса
     // не оставлял running=true навсегда и не вешал всю очередь
     try {
       db.update(importJobs)
@@ -156,7 +160,7 @@ async function processNext() {
   }
 }
 
-interface ImportResult {
+export interface ImportResult {
   sessionId: number;
   totalLaps: number;
   validLaps: number;
@@ -168,8 +172,10 @@ interface ImportResult {
  * Все операции записи обёрнуты в db.transaction() (#11).
  * Batch insert выполняется чанками по CHUNK_SIZE записей (#11).
  * Невалидные круги записываются в import_errors (DLQ) (#8).
+ *
+ * Экспортирована для прямого вызова из routes.ts (синхронный импорт).
  */
-async function runImport(job: ImportJobPayload): Promise<ImportResult> {
+export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
   let parsed: ParsedSession | null;
   try {
     parsed = parseRaceResults(job.content);
@@ -454,9 +460,9 @@ async function runImport(job: ImportJobPayload): Promise<ImportResult> {
   return result;
 }
 
-// ───────────────────────────────────────────────
+// ────────────────────────────────────────────────
 // Helpers
-// ───────────────────────────────────────────────
+// ────────────────────────────────────────────────
 
 function findOrCreateTrack(tx: any, parsed: ParsedSession): Track {
   const all = tx.select().from(tracks).all();
