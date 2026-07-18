@@ -18,16 +18,23 @@ import type { NormalizedSessionType } from './sessionDetail.types';
 // Вспомогательные утилиты
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Форматирует миллисекунды (integer) в строку «M:SS.mmm». */
+export function formatLapMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  const totalSeconds = ms / 1000;
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  const ss = Math.floor(s).toString().padStart(2, '0');
+  const msStr = Math.round((s % 1) * 1000)
+    .toString()
+    .padStart(3, '0');
+  return `${m}:${ss}.${msStr}`;
+}
+
 /** Форматирует секунды (float) в строку «M:SS.mmm». */
 export function formatLapTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return '—';
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  const ss = Math.floor(s).toString().padStart(2, '0');
-  const ms = Math.round((s % 1) * 1000)
-    .toString()
-    .padStart(3, '0');
-  return `${m}:${ss}.${ms}`;
+  return formatLapMs(seconds * 1000);
 }
 
 /** Форматирует отставание (gap) в секундах в строку «+X.XXX». */
@@ -113,28 +120,90 @@ export function buildHeroStats(session: unknown): SessionHeroStatItem[] {
 // buildResultRows
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Трансформирует сырой массив результатов сессии в массив строк таблицы. */
+/**
+ * Трансформирует сырой массив результатов сессии в массив строк таблицы.
+ *
+ * Исправления (fix):
+ *  - bestLapMs (integer, мс) — основное поле из session_results через Drizzle.
+ *    Код ранее искал несуществующие bestLapTime / bestLapTimeSeconds → всегда «—».
+ *  - pitstops (строчная s) — поле из Drizzle; код ранее искал pitStops → null.
+ *  - gap / interval — отсутствуют в session_results; вычисляются по разнице bestLapMs
+ *    между пилотом и лидером / предыдущим участником.
+ */
 export function buildResultRows(session: unknown): SessionResultRowView[] {
   const s = session as AnySession;
   const rawResults: AnyLap[] = Array.isArray(s?.results) ? s.results : [];
 
-  return rawResults.map((r, idx) => ({
-    position: r.position ?? idx + 1,
-    driverName: String(r.driverName ?? r.driver ?? '—'),
-    carNumber: r.carNumber ?? r.number ?? '',
-    teamName: r.teamName ?? r.team ?? null,
-    carModel: r.carModel ?? r.car ?? null,
-    bestLapTime: r.bestLapTime
-      ? String(r.bestLapTime)
-      : typeof r.bestLapTimeSeconds === 'number'
-        ? formatLapTime(r.bestLapTimeSeconds)
-        : '—',
-    gap: r.gap != null ? formatGap(Number(r.gap)) : null,
-    interval: r.interval != null ? formatGap(Number(r.interval)) : null,
-    pitStops: r.pitStops ?? null,
-    totalLaps: r.totalLaps ?? r.laps ?? null,
-    finishStatus: r.finishStatus ?? r.status ?? null,
-  }));
+  // Лучший bestLapMs среди всех пилотов — база для расчёта gap / interval
+  let minBestLapMs: number | null = null;
+  for (const r of rawResults) {
+    const ms = typeof r.bestLapMs === 'number' ? r.bestLapMs : null;
+    if (ms !== null && ms > 0 && (minBestLapMs === null || ms < minBestLapMs)) {
+      minBestLapMs = ms;
+    }
+  }
+
+  return rawResults.map((r, idx) => {
+    // ── Лучший круг ──────────────────────────────────────────────────────────
+    // Приоритет: bestLapMs (мс) → bestLapTime (строка) → bestLapTimeSeconds (сек)
+    const bestLapMs = typeof r.bestLapMs === 'number' && r.bestLapMs > 0
+      ? r.bestLapMs
+      : null;
+
+    const bestLapTime = bestLapMs !== null
+      ? formatLapMs(bestLapMs)
+      : r.bestLapTime
+        ? String(r.bestLapTime)
+        : typeof r.bestLapTimeSeconds === 'number'
+          ? formatLapTime(r.bestLapTimeSeconds)
+          : '—';
+
+    // ── Gap (отставание от лидера) ────────────────────────────────────────────
+    // Приоритет: поле gap из API → вычисление по bestLapMs
+    let gapFormatted: string | null = null;
+    if (r.gap != null) {
+      const gapVal = Number(r.gap);
+      gapFormatted = gapVal > 0 ? formatGap(gapVal) : null;
+    } else if (bestLapMs !== null && minBestLapMs !== null && bestLapMs > minBestLapMs) {
+      gapFormatted = formatGap((bestLapMs - minBestLapMs) / 1000);
+    }
+
+    // ── Interval (разрыв с предыдущим участником) ─────────────────────────────
+    // Приоритет: поле interval из API → вычисление по bestLapMs предыдущего
+    let intervalFormatted: string | null = null;
+    if (r.interval != null) {
+      const intervalVal = Number(r.interval);
+      intervalFormatted = intervalVal > 0 ? formatGap(intervalVal) : null;
+    } else if (idx > 0 && bestLapMs !== null) {
+      const prevMs = typeof rawResults[idx - 1].bestLapMs === 'number' && rawResults[idx - 1].bestLapMs > 0
+        ? rawResults[idx - 1].bestLapMs as number
+        : null;
+      if (prevMs !== null && bestLapMs > prevMs) {
+        intervalFormatted = formatGap((bestLapMs - prevMs) / 1000);
+      }
+    }
+
+    // ── Пит-стопы ─────────────────────────────────────────────────────────────
+    // Drizzle возвращает поле как `pitstops` (строчная s), а не `pitStops`
+    const pitStops: number | null =
+      typeof r.pitStops === 'number' ? r.pitStops :
+      typeof r.pitstops === 'number' ? r.pitstops :
+      null;
+
+    return {
+      position: r.position ?? idx + 1,
+      driverName: String(r.driverName ?? r.driver ?? '—'),
+      carNumber: r.carNumber ?? r.number ?? '',
+      teamName: r.teamName ?? r.team ?? null,
+      carModel: r.carModel ?? r.car ?? null,
+      bestLapTime,
+      gap: gapFormatted,
+      interval: intervalFormatted,
+      pitStops,
+      totalLaps: r.totalLaps ?? r.laps ?? null,
+      finishStatus: r.finishStatus ?? r.status ?? null,
+    };
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
