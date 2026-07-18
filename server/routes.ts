@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from 'node:http';
 import { storage, type LapFilter, db } from "./storage";
-import { importJobs, tracks, drivers, lapTimes, sessions, sessionResults } from '@shared/schema';
+import { importJobs, importErrors, tracks, drivers, lapTimes, sessions, sessionResults, sessionLaps, sessionIncidents, sessionSectorBests, sessionTrackLimits } from '@shared/schema';
 import { eq, notInArray } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
 import { computeFileHash, generateId, getJobStatus, getJobErrors, runImport } from "./importWorker";
@@ -149,6 +149,29 @@ export async function registerRoutes(
 
     const httpStatus = imported > 0 ? 200 : (skipped > 0 ? 409 : 400);
     res.status(httpStatus).json({ imported, skipped, totalLaps, total: results.length, results });
+  }));
+
+  /**
+   * DELETE /api/import/all — полная очистка БД.
+   * Удаляет все импортированные данные: круги, сессии, пилоты, трассы,
+   * задачи импорта и ошибки DLQ. Используется кнопкой "Очистить БД" на
+   * вкладке импорта.
+   */
+  app.delete("/api/import/all", asyncRoute(async (_req, res) => {
+    await db.transaction(async (tx) => {
+      await tx.delete(sessionTrackLimits);
+      await tx.delete(sessionSectorBests);
+      await tx.delete(sessionIncidents);
+      await tx.delete(sessionLaps);
+      await tx.delete(lapTimes);
+      await tx.delete(sessionResults);
+      await tx.delete(sessions);
+      await tx.delete(importErrors);
+      await tx.delete(importJobs);
+      await tx.delete(drivers);
+      await tx.delete(tracks);
+    });
+    res.json({ ok: true, message: "База данных успешно очищена" });
   }));
 
   /**
