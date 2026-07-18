@@ -28,9 +28,10 @@ export const lapTimes = pgTable("lap_times", {
   carClass: text("car_class").notNull(),
   car: text("car").notNull(),
   lapMs: integer("lap_ms").notNull(),
-  sector1Ms: integer("sector1_ms").notNull(),
-  sector2Ms: integer("sector2_ms").notNull(),
-  sector3Ms: integer("sector3_ms").notNull(),
+  // sector times are nullable: LMU may omit them for incomplete laps
+  sector1Ms: integer("sector1_ms"),
+  sector2Ms: integer("sector2_ms"),
+  sector3Ms: integer("sector3_ms"),
   conditions: text("conditions").notNull(),
   tyre: text("tyre").notNull(),
   date: text("date").notNull(),

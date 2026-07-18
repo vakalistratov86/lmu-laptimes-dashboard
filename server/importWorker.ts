@@ -63,6 +63,16 @@ export function computeFileHash(content: string): string {
 }
 
 /**
+ * Safe integer coercion: returns null for empty strings, null/undefined, or non-finite values.
+ * Prevents passing empty strings as SQL integer parameters (PostgreSQL rejects them).
+ */
+function toIntOrNull(v: string | number | null | undefined): number | null {
+  if (v === "" || v == null) return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * Поставить задачу импорта в очередь.
  * Возвращает importId.
  * Если файл уже импортирован — выбрасывает DuplicateFileError.
@@ -350,12 +360,20 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
           const normalized = normalizeLapTime(validation.data);
 
-          const ltS1 = normalized.sector1Ms ?? null;
-          const ltS2 = normalized.sector2Ms ?? null;
-          const ltS3 = normalized.sector3Ms
+          const ltS1 = toIntOrNull(normalized.sector1Ms);
+          const ltS2 = toIntOrNull(normalized.sector2Ms);
+          const ltS3 = toIntOrNull(normalized.sector3Ms)
             ?? (ltS1 != null && ltS2 != null
                 ? Math.max(0, normalized.lapTimeMs - ltS1 - ltS2)
                 : null);
+
+          // Warn about laps with missing sector times so they are easy to spot in logs
+          if (ltS1 == null || ltS2 == null || ltS3 == null) {
+            console.warn(
+              "[importWorker] Lap with missing sector times — will be stored with NULL sectors",
+              { driverName: d.name, lapNum: lap.num, lapMs: lap.lapMs, s1: ltS1, s2: ltS2, s3: ltS3 }
+            );
+          }
 
           lapTimeRows.push({
             trackId: track.id,
