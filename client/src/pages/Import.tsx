@@ -11,6 +11,7 @@ import {
   Info,
   RefreshCw,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 
 // ─── Расширяем типизацию input для webkitdirectory ───────────────────────────
@@ -33,6 +34,19 @@ const DB_VERSION = 1;
 const STORE_HANDLE = "dirHandle";
 const STORE_SEEN = "seenFiles";
 const AUTO_INTERVAL_MS = 30_000;
+
+/**
+ * Убирает из сообщения об ошибке длинный XML-контент.
+ * Оставляет только первые 300 символов до первого '<' (если есть).
+ */
+function trimErrorMessage(msg: string): string {
+  // Если в сообщении нет XML-тегов — возвращаем как есть
+  const xmlStart = msg.indexOf("<");
+  if (xmlStart === -1) return msg;
+  // Берём часть до XML (суть ошибки) и обрезаем до 300 символов
+  const prefix = msg.slice(0, xmlStart).trim();
+  return prefix.length > 0 ? prefix : msg.slice(0, 300);
+}
 
 // ─── IndexedDB helpers ───────────────────────────────────────────────────────
 function openDB(): Promise<IDBDatabase> {
@@ -102,6 +116,7 @@ export default function Import() {
   const [log, setLog] = useState<LogEntry[]>([]);
   const [counters, setCounters] = useState<Counters>({ total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 });
   const [mode, setMode] = useState<ImportMode>("idle");
+  const [clearingDb, setClearingDb] = useState(false);
 
   const addLog = useCallback((level: LogLevel, text: string) => {
     setLog((prev) => [...prev, { ts: Date.now(), level, text }]);
@@ -198,13 +213,17 @@ export default function Import() {
             addLog("ok", `✓ ${file.name} — ${r.event ?? r.venue ?? ""} · кругов: ${r.laps ?? 0}`);
             setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + data.imported }));
           } else {
-            addLog("skip", `↷ ${file.name} — ${r?.message ?? "пропущен"}`);
+            // Файл уже загружен или пропущен — выводим только суть, без XML
+            const skipMsg = trimErrorMessage(r?.message ?? "пропущен");
+            addLog("skip", `↷ ${file.name} — ${skipMsg}`);
             setCounters((c) => ({ ...c, queued: c.queued - 1, skipped: c.skipped + 1 }));
           }
           localSeen.add(fileKey(file));
           await dbSaveSeenSet(localSeen);
         } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
+          const rawMsg = e instanceof Error ? e.message : String(e);
+          // Убираем XML-содержимое из сообщения об ошибке
+          const msg = trimErrorMessage(rawMsg);
           addLog("error", `✗ ${file.name} — ${msg}`);
           setCounters((c) => ({ ...c, queued: c.queued - 1, failed: c.failed + 1 }));
         }
@@ -220,6 +239,31 @@ export default function Import() {
     },
     [addLog]
   );
+
+  // ─── Очистка БД ───────────────────────────────────────────────────────────
+  const clearDatabase = useCallback(async () => {
+    if (!window.confirm("Удалить все импортированные данные из БД? Это действие необратимо.")) return;
+    setClearingDb(true);
+    addLog("info", "Очистка БД…");
+    try {
+      await apiRequest("DELETE", "/api/import/all", undefined);
+      // Сбрасываем список уже виденных файлов в IndexedDB, чтобы они могли быть импортированы снова
+      await dbSaveSeenSet(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laps"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tracks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/drivers"] });
+      setCounters({ total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 });
+      addLog("ok", "✓ БД успешно очищена");
+      toast({ title: "БД очищена", description: "Все импортированные данные удалены." });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? trimErrorMessage(e.message) : String(e);
+      addLog("error", `✗ Ошибка очистки БД: ${msg}`);
+      toast({ title: "Ошибка", description: msg, variant: "destructive" });
+    } finally {
+      setClearingDb(false);
+    }
+  }, [addLog, toast]);
 
   // ─── Скан FSA-папки ───────────────────────────────────────────────────────
   const scanFSAFolder = useCallback(async () => {
@@ -287,7 +331,8 @@ export default function Import() {
   function logColor(level: LogLevel) {
     if (level === "ok") return "text-emerald-400";
     if (level === "error") return "text-red-400";
-    if (level === "skip") return "text-muted-foreground";
+    // «skip» (файл уже загружен) — жёлтый вместо серого
+    if (level === "skip") return "text-yellow-400";
     return "text-card-foreground";
   }
 
@@ -465,15 +510,28 @@ export default function Import() {
         <div className="overflow-hidden rounded-lg border border-border">
           <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground">
             <span>Журнал импорта</span>
-            <button
-              onClick={() => {
-                setLog([]);
-                setCounters({ total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 });
-              }}
-              className="text-xs text-muted-foreground hover:text-card-foreground"
-            >
-              Очистить
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Кнопка очистки всех данных из БД */}
+              <button
+                data-testid="button-clear-db"
+                onClick={clearDatabase}
+                disabled={clearingDb || mode !== "idle"}
+                className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 disabled:opacity-40"
+              >
+                {clearingDb ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                Очистить БД
+              </button>
+              {/* Кнопка очистки только журнала */}
+              <button
+                onClick={() => {
+                  setLog([]);
+                  setCounters({ total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 });
+                }}
+                className="text-xs text-muted-foreground hover:text-card-foreground"
+              >
+                Очистить журнал
+              </button>
+            </div>
           </div>
           <ul
             className="max-h-72 divide-y divide-border overflow-y-auto"
