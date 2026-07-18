@@ -7,7 +7,7 @@
  *
  * Pipeline: parse → validate (#9) → normalize (#10) → persist / DLQ (#8)
  * Импорт считается успешным, если валидных круга >= VALID_LAP_THRESHOLD_PCT% (#8).
- * Файлы с 0 кругами пропускаются с предупреждением в логе (ZERO_LAPS).
+ * Файлы с 0 кругами пропускаются: счётчик skipped++, статус "skipped" (ZERO_LAPS).
  * Структурированное логирование JSON через server/logger.ts (#12).
  *
  * runImport() экспортирован для прямого вызова из routes.ts (синхронный импорт).
@@ -38,7 +38,7 @@ export const CHUNK_SIZE = 500;
 /** Минимальный процент валидных кругов для успешного импорта (#8) */
 export const VALID_LAP_THRESHOLD_PCT = 80;
 
-export type JobStatus = "queued" | "processing" | "completed" | "failed";
+export type JobStatus = "queued" | "processing" | "completed" | "failed" | "skipped";
 
 export interface ImportJobPayload {
   id: string;
@@ -141,14 +141,28 @@ async function processNext() {
       durationMs,
     });
   } catch (e) {
-    try {
-      await db.update(importJobs)
-        .set({ status: "failed", error: (e as Error).message, finishedAt: Date.now() })
-        .where(eq(importJobs.id, job.id));
-    } catch (dbErr) {
-      console.error("[importWorker] Failed to update job status to failed:", dbErr);
+    const err = e as Error & { code?: string };
+
+    // Файл пропущен из-за отсутствия кругов — это не ошибка
+    if (err.code === 'ZERO_LAPS') {
+      try {
+        await db.update(importJobs)
+          .set({ status: "skipped", error: err.message, finishedAt: Date.now() })
+          .where(eq(importJobs.id, job.id));
+      } catch (dbErr) {
+        console.error("[importWorker] Failed to update job status to skipped:", dbErr);
+      }
+      // logImportSkipped уже вызван внутри runImport до броска ошибки
+    } else {
+      try {
+        await db.update(importJobs)
+          .set({ status: "failed", error: err.message, finishedAt: Date.now() })
+          .where(eq(importJobs.id, job.id));
+      } catch (dbErr) {
+        console.error("[importWorker] Failed to update job status to failed:", dbErr);
+      }
+      logImportFailed(job.id, err);
     }
-    logImportFailed(job.id, e as Error);
   } finally {
     setImmediate(processNext);
   }
@@ -166,7 +180,7 @@ export interface ImportResult {
  * Все операции записи обёрнуты в db.transaction() (#11).
  * Batch insert выполняется чанками по CHUNK_SIZE записей (#11).
  * Невалидные круги записываются в import_errors (DLQ) (#8).
- * Файлы с 0 кругами пропускаются с предупреждением (ZERO_LAPS).
+ * Файлы с 0 кругами: статус "skipped", счётчик skipped++, краткое сообщение в лог.
  *
  * Экспортирована для прямого вызова из routes.ts (синхронный импорт).
  */
@@ -193,7 +207,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       fileName: job.fileName,
       reason: 'ZERO_LAPS',
     });
-    const err = new Error(`Файл пропущен: в логе отсутствуют круги (0 кругов)`);
+    const err = new Error(`Файл пропущен: 0 кругов`);
     (err as any).code = 'ZERO_LAPS';
     throw err;
   }
