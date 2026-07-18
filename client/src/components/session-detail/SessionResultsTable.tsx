@@ -10,7 +10,7 @@ import { DriverName } from '@/components/DriverName';
 import { getClassBadgeClass } from '@/lib/classStyles';
 import type { SessionResultRowView } from './types';
 
-// ─── Row ──────────────────────────────────────────────────────────────────────
+// ─── Row ───────────────────────────────────────────────────────────────────────────────
 
 interface SessionResultsRowProps {
   row: SessionResultRowView;
@@ -43,7 +43,7 @@ export function SessionResultsRow({ row, isFastest, isPlayer }: SessionResultsRo
           {isPlayer && <User size={13} className="text-primary" />}
           <DriverName
             name={row.driverName}
-            isPlayer={isPlayer ? 1 : 0}
+            isPlayer={row.isPlayer}
             className={isPlayer ? 'font-medium text-primary' : 'font-medium'}
           />
         </div>
@@ -96,20 +96,19 @@ export function SessionResultsRow({ row, isFastest, isPlayer }: SessionResultsRo
   );
 }
 
-// ─── Table ────────────────────────────────────────────────────────────────────
+// ─── Table ────────────────────────────────────────────────────────────────────────────
 
 interface SessionResultsTableProps {
   rows: SessionResultRowView[];
   /** Лучшее время сессии (отформатированное). */
   fastestLapTime?: string | null;
-  /** Имя текущего пользователя для выделения строки. */
+  /** @deprecated Не используется. Игрок определяется через row.isPlayer. */
   playerName?: string | null;
 }
 
 export function SessionResultsTable({
   rows,
   fastestLapTime,
-  playerName,
 }: SessionResultsTableProps) {
   return (
     <Card className="overflow-hidden">
@@ -136,7 +135,7 @@ export function SessionResultsTable({
                 key={row.position}
                 row={row}
                 isFastest={!!fastestLapTime && row.bestLapTime === fastestLapTime}
-                isPlayer={!!playerName && row.driverName === playerName}
+                isPlayer={row.isPlayer === 1}
               />
             ))}
           </tbody>
