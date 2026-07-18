@@ -1,4 +1,4 @@
-import { pgTable, text, integer, real, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, real, serial, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -49,7 +49,7 @@ export const sessions = pgTable("sessions", {
   trackLengthM: real("track_length_m"),
   gameVersion: text("game_version"),
   dateTime: text("date_time").notNull(),
-  dateTimeUnix: integer("date_time_unix"),
+  dateTimeUnix: bigint("date_time_unix", { mode: "number" }),
   fileName: text("file_name").notNull(),
   setting: text("setting"),
   driverCount: integer("driver_count").notNull(),
@@ -84,8 +84,8 @@ export const importJobs = pgTable("import_jobs", {
   errorLaps: integer("error_laps"),                  // #8: кол-во записей в DLQ
   error: text("error"),                              // сообщение об ошибке при failed
   logFormatVersion: text("log_format_version"),      // #7: версия формата лога (1.0 | 1.1 | 2.0)
-  createdAt: integer("created_at").notNull(),        // Unix ms
-  finishedAt: integer("finished_at"),                // Unix ms
+  createdAt: bigint("created_at", { mode: "number" }).notNull(), // Unix ms
+  finishedAt: bigint("finished_at", { mode: "number" }),         // Unix ms
 });
 
 // Dead Letter Queue — битые/невалидные записи импорта (#8)
@@ -95,7 +95,7 @@ export const importErrors = pgTable("import_errors", {
   rawPayload: text("raw_payload").notNull(),          // исходная строка/запись (JSON)
   errorCode: text("error_code").notNull(),            // VALIDATION_ERROR | PARSE_ERROR | SEMANTIC_ERROR
   errorMessage: text("error_message").notNull(),
-  occurredAt: integer("occurred_at").notNull(),       // Unix ms
+  occurredAt: bigint("occurred_at", { mode: "number" }).notNull(), // Unix ms
 });
 
 // Результат конкретного пилота в сессии
