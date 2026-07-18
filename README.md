@@ -6,8 +6,11 @@
 ![Vite](https://img.shields.io/badge/Vite-7-646cff)
 ![Vitest](https://img.shields.io/badge/Vitest-2-6E9F18)
 ![License](https://img.shields.io/badge/license-MIT-green)
+![Deploy](https://img.shields.io/badge/autodeploy-✅_tested-brightgreen)
 
 Дашборд для мониторинга и анализа времён прохождения трасс в симуляторе **Le Mans Ultimate (LMU)**. Тёмный геймерский интерфейс в рейсинг-эстетике с поддержкой светлой темы. Данные импортируются из XML-логов rFactor2/LMU через встроенный парсер.
+
+> 🚀 **Автодеплой:** обновление README от 18.07.2026 — проверка CI/CD пайплайна.
 
 ---
 
