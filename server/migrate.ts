@@ -80,15 +80,36 @@ export async function runMigrations(): Promise<void> {
         car_class   TEXT NOT NULL,
         car         TEXT NOT NULL,
         lap_ms      INTEGER NOT NULL,
-        sector1_ms  INTEGER NOT NULL,
-        sector2_ms  INTEGER NOT NULL,
-        sector3_ms  INTEGER NOT NULL,
+        sector1_ms  INTEGER,
+        sector2_ms  INTEGER,
+        sector3_ms  INTEGER,
         conditions  TEXT NOT NULL,
         tyre        TEXT NOT NULL,
         date        TEXT NOT NULL,
         source      TEXT NOT NULL DEFAULT 'demo',
         session_id  INTEGER
       )
+    `;
+
+    // Fix: allow NULL sector times for incomplete/formation laps from LMU XML.
+    // Older databases were created with NOT NULL on sector columns; drop those constraints.
+    await migrationClient`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'lap_times'
+            AND column_name = 'sector1_ms'
+            AND is_nullable = 'NO'
+        ) THEN
+          ALTER TABLE lap_times
+            ALTER COLUMN sector1_ms DROP NOT NULL,
+            ALTER COLUMN sector2_ms DROP NOT NULL,
+            ALTER COLUMN sector3_ms DROP NOT NULL;
+          RAISE NOTICE '[migrate] lap_times sector columns: NOT NULL constraint dropped';
+        END IF;
+      END
+      $$;
     `;
 
     await migrationClient`
