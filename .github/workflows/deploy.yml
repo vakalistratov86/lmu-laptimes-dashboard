@@ -53,8 +53,25 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
+
+            mkdir -p /opt/lmu-dashboard
             cd /opt/lmu-dashboard
+
+            cat > .env <<EOF
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            EOF
+
+            chmod 600 .env
+
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            docker compose config
+
             docker pull ghcr.io/vakalistratov86/lmu-laptimes-dashboard:latest
+
+            docker rm -f lmu-dashboard || true
+
             docker compose up -d --force-recreate
+
             docker image prune -f
