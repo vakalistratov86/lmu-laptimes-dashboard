@@ -5,7 +5,7 @@ import { formatLap } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Upload, Timer, Dumbbell, Trophy, ChevronRight, Calendar, Activity } from "lucide-react";
+import { Upload, Timer, Dumbbell, Trophy, ChevronRight } from "lucide-react";
 import { getSessionTypeBadgeClass, SESSION_TYPE_ORDER } from "@/lib/classStyles";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -42,21 +42,13 @@ const CATEGORY_META: Record<SessionCategory, { label: string; icon: React.ReactN
   race:      { label: "Гонка",        icon: <Trophy size={12} /> },
 };
 
+// Цветовые классы фильтров — совпадают с цветами бейджей сессий
 const FILTER_BG_CLASSES: Record<SessionCategory, string> = {
   practice:  "bg-blue-500/15 text-blue-500 dark:text-blue-400 border-blue-500/30",
   qualify:   "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
   race:      "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
   superpole: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
   warmup:    "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
-};
-
-// Gradient accent per category for the left border stripe
-const CATEGORY_ACCENT: Record<SessionCategory, string> = {
-  practice:  "border-l-blue-500",
-  qualify:   "border-l-yellow-500",
-  superpole: "border-l-purple-500",
-  warmup:    "border-l-orange-500",
-  race:      "border-l-red-500",
 };
 
 function trackDisplayLabel(trackName: string, course: string | null | undefined): string {
@@ -84,6 +76,7 @@ function getBestLapForSession(session: SessionItem): number | null {
 }
 
 // ─── Filter buttons ────────────────────────────────────────────────────────────
+// Технический ключ all → человекочитаемое "Все"
 const FILTER_BUTTONS: { key: string; label: string }[] = [
   { key: "all",      label: "Все" },
   { key: "practice", label: "Тренировка" },
@@ -93,92 +86,26 @@ const FILTER_BUTTONS: { key: string; label: string }[] = [
 
 // ─── Loading Skeleton ─────────────────────────────────────────────────────────
 
-function SessionsCardSkeleton() {
+function SessionsTableSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="border-b border-border bg-secondary/30 px-4 py-3">
+        <div className="flex gap-6">
+          {["w-16", "w-28", "w-24", "w-16", "w-20"].map((w, i) => (
+            <Skeleton key={i} className={`h-3 ${w}`} />
+          ))}
+        </div>
+      </div>
       {[...Array(6)].map((_, i) => (
-        <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-5 w-24 rounded-full" />
-            <Skeleton className="h-4 w-20" />
-          </div>
-          <Skeleton className="h-5 w-40" />
-          <div className="flex gap-4">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-4 w-16" />
-          </div>
+        <div key={i} className="flex items-center gap-6 border-b border-border/50 px-4 py-3 last:border-0">
+          <Skeleton className="h-5 w-20 rounded-full" />
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-12" />
+          <Skeleton className="h-4 w-16" />
         </div>
       ))}
     </div>
-  );
-}
-
-// ─── Session Card ─────────────────────────────────────────────────────────────
-
-function SessionCard({ session, activeFilter }: { session: SessionItem; activeFilter: string }) {
-  const cat = normalizeType(session.sessionType);
-  const meta = CATEGORY_META[cat];
-  const bestLap = getBestLapForSession(session);
-  const filterParam = activeFilter !== "all"
-    ? `?from_filter=${encodeURIComponent(activeFilter)}`
-    : "";
-  const href = `/sessions/${session.id}${filterParam}`;
-  const accentClass = CATEGORY_ACCENT[cat];
-
-  return (
-    <Link
-      href={href}
-      data-testid={`card-session-${session.id}`}
-      className={cn(
-        "group relative flex flex-col gap-3 rounded-xl border border-border bg-card p-4",
-        "border-l-[3px]", accentClass,
-        "hover:bg-muted/40 hover:shadow-md active:bg-muted/60 transition-all",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
-      )}
-      aria-label={`${meta.label} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime)}`}
-    >
-      {/* Top row: badge + date */}
-      <div className="flex items-center justify-between gap-2">
-        <Badge
-          variant="outline"
-          className={cn("inline-flex items-center gap-1 text-xs font-medium", getSessionTypeBadgeClass(cat))}
-        >
-          {meta.icon}
-          {meta.label}
-        </Badge>
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Calendar size={11} />
-          {formatDate(session.dateTime)}
-        </span>
-      </div>
-
-      {/* Track name */}
-      <div className="font-semibold text-sm leading-snug truncate">
-        {trackDisplayLabel(session.trackName, session.course)}
-      </div>
-
-      {/* Stats row */}
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <Activity size={11} />
-          <span className="font-data tabular-nums font-medium text-foreground">
-            {bestLap ? formatLap(bestLap) : "—"}
-          </span>
-          <span>лучший</span>
-        </span>
-        <span>{session.lapCount ?? "—"} кругов</span>
-        {session.driverCount > 1 && (
-          <span>{session.driverCount} пилотов</span>
-        )}
-      </div>
-
-      {/* Chevron */}
-      <ChevronRight
-        size={15}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors"
-        aria-hidden
-      />
-    </Link>
   );
 }
 
@@ -193,8 +120,10 @@ export default function Sessions() {
     const normalizedSearch = searchString.startsWith("?")
       ? searchString.slice(1)
       : searchString;
+
     const params = new URLSearchParams(normalizedSearch);
     const filter = params.get("filter");
+
     return filter === "practice" || filter === "qualify" || filter === "race"
       ? filter
       : "all";
@@ -208,22 +137,27 @@ export default function Sessions() {
   const filtered = useMemo(() => {
     if (!sessions) return [] as SessionItem[];
     const all = sessions as SessionItem[];
+
     if (activeFilter === "all") return all;
+
     if (activeFilter === "qualify") {
       return all.filter((s) => {
         const cat = normalizeType(s.sessionType);
         return cat === "qualify" || cat === "superpole";
       });
     }
+
     if (activeFilter === "practice") {
       return all.filter((s) => {
         const cat = normalizeType(s.sessionType);
         return cat === "practice" || cat === "warmup";
       });
     }
+
     return all.filter((s) => normalizeType(s.sessionType) === activeFilter);
   }, [sessions, activeFilter]);
 
+  // Sort by date descending, then by session type order
   const sorted = useMemo(() =>
     [...filtered].sort((a, b) => {
       const dateCmp = b.dateTime.localeCompare(a.dateTime);
@@ -238,7 +172,7 @@ export default function Sessions() {
   const hasFiltered = sorted.length > 0;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Page header */}
       <div>
         <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-page-title">
@@ -278,7 +212,9 @@ export default function Sessions() {
                     ? "bg-accent text-accent-foreground border-border"
                     : "bg-background text-muted-foreground border-border hover:bg-accent/40"
                   : isActive
+                    // Активный цветной фильтр: используем тот же цвет, что и бейдж
                     ? cn(colorClass, "border-transparent hover:ring-1 hover:ring-border/60")
+                    // Неактивный: оставляем нейтральный фон
                     : "bg-background text-muted-foreground/80 border-border opacity-60 hover:opacity-100 hover:bg-accent/10",
               )}
             >
@@ -291,19 +227,14 @@ export default function Sessions() {
             </button>
           );
         })}
-        {hasSessions && (
-          <span className="ml-auto flex items-center text-xs text-muted-foreground self-center">
-            {sorted.length} сессий
-          </span>
-        )}
       </div>
 
       {/* Loading state */}
-      {isLoading && <SessionsCardSkeleton />}
+      {isLoading && <SessionsTableSkeleton />}
 
       {/* Empty state — no sessions at all */}
       {!isLoading && !hasSessions && (
-        <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card p-14 text-center">
+        <div className="flex flex-col items-center gap-4 rounded-lg border border-border bg-card p-14 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
             <Upload size={22} />
           </div>
@@ -325,7 +256,7 @@ export default function Sessions() {
 
       {/* No-results state — sessions exist but filter yields nothing */}
       {!isLoading && hasSessions && !hasFiltered && (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-12 text-center">
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-card p-12 text-center">
           <p className="font-semibold text-muted-foreground">
             Нет сессий с выбранным типом
           </p>
@@ -339,18 +270,81 @@ export default function Sessions() {
         </div>
       )}
 
-      {/* Sessions cards grid */}
+      {/* Sessions table */}
       {!isLoading && hasSessions && hasFiltered && (
-        <div
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
-          role="list"
-          aria-label="Список сессий"
-        >
-          {sorted.map((session) => (
-            <div key={session.id} role="listitem">
-              <SessionCard session={session} activeFilter={activeFilter} />
-            </div>
-          ))}
+        <div className="overflow-hidden rounded-lg border border-border bg-card" role="table" aria-label="Список сессий">
+          {/* Table header */}
+          <div
+            className="grid border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            style={{ gridTemplateColumns: "160px 1fr 140px 80px 110px 24px" }}
+            role="row"
+          >
+            <div role="columnheader">Тип</div>
+            <div role="columnheader">Трек</div>
+            <div role="columnheader" className="text-right">Лучший круг</div>
+            <div role="columnheader" className="text-right">Кругов</div>
+            <div role="columnheader" className="text-right">Дата</div>
+            <div role="columnheader" />
+          </div>
+
+          {/* Table rows */}
+          {sorted.map((session) => {
+            const cat = normalizeType(session.sessionType);
+            const meta = CATEGORY_META[cat];
+            const bestLap = getBestLapForSession(session);
+            const filterParam = activeFilter !== "all"
+              ? `?from_filter=${encodeURIComponent(activeFilter)}`
+              : "";
+            const href = `/sessions/${session.id}${filterParam}`;
+
+            return (
+              <Link
+                key={session.id}
+                href={href}
+                data-testid={`row-session-${session.id}`}
+                className="grid cursor-pointer items-center border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                style={{ gridTemplateColumns: "160px 1fr 140px 80px 110px 24px" }}
+                role="row"
+                aria-label={`${meta.label} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime)}`}
+              >
+                {/* Type badge */}
+                <div role="cell">
+                  <Badge
+                    variant="outline"
+                    className={`inline-flex items-center gap-1 text-xs font-medium ${getSessionTypeBadgeClass(cat)}`}
+                  >
+                    {meta.icon}
+                    {meta.label}
+                  </Badge>
+                </div>
+
+                {/* Track */}
+                <div className="truncate font-medium" role="cell">
+                  {trackDisplayLabel(session.trackName, session.course)}
+                </div>
+
+                {/* Best lap */}
+                <div className="text-right font-data tabular-nums text-sm text-muted-foreground" role="cell">
+                  {bestLap ? formatLap(bestLap) : "—"}
+                </div>
+
+                {/* Lap count */}
+                <div className="text-right font-data tabular-nums text-sm text-muted-foreground" role="cell">
+                  {session.lapCount ?? "—"}
+                </div>
+
+                {/* Date */}
+                <div className="text-right text-sm text-muted-foreground" role="cell">
+                  {formatDate(session.dateTime)}
+                </div>
+
+                {/* Chevron */}
+                <div className="flex justify-end text-muted-foreground/50" role="cell" aria-hidden="true">
+                  <ChevronRight size={15} />
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
