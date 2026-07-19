@@ -130,8 +130,22 @@ export default function Sessions() {
   }, [searchString]);
 
   const setActiveFilter = (key: string) => {
-    if (key === "all") navigate("/sessions");
-    else navigate(`/sessions?filter=${encodeURIComponent(key)}`);
+    if (key === "all") {
+      // wouter's hash-location navigate() only overwrites location.search
+      // when the target URL has a query string of its own — it never
+      // clears an existing one, so switching to "all" from another filter
+      // silently keeps the old ?filter= param. Clear it explicitly first.
+      if (window.location.search) {
+        window.history.replaceState(
+          window.history.state,
+          "",
+          window.location.pathname + window.location.hash,
+        );
+      }
+      navigate("/sessions");
+    } else {
+      navigate(`/sessions?filter=${encodeURIComponent(key)}`);
+    }
   };
 
   const filtered = useMemo(() => {
