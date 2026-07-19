@@ -323,6 +323,20 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
           sector2Ms: s2,
           sector3Ms: s3,
           isPitLap: lap.isPit ? 1 : 0,
+          // Телеметрия круга
+          topSpeedKph: lap.topSpeedKph ?? null,
+          fuelLevel: lap.fuelLevel ?? null,
+          fuelUsed: lap.fuelUsed ?? null,
+          tyreFLCondition: lap.tyreFLCondition ?? null,
+          tyreFRCondition: lap.tyreFRCondition ?? null,
+          tyreRLCondition: lap.tyreRLCondition ?? null,
+          tyreRRCondition: lap.tyreRRCondition ?? null,
+          frontCompound: lap.frontCompound ?? null,
+          rearCompound: lap.rearCompound ?? null,
+          tyreFL: lap.tyreFL ?? null,
+          tyreFR: lap.tyreFR ?? null,
+          tyreRL: lap.tyreRL ?? null,
+          tyreRR: lap.tyreRR ?? null,
         });
 
         if (lap.lapMs != null && !lap.isPit) {
