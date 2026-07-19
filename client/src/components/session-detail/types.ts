@@ -74,6 +74,16 @@ export interface DriverLapRowView {
   isOverallBest: boolean;
   /** Сектора круга в виде отформатированных строк. */
   sectors: [string, string, string];
+  /**
+   * Лучший ли это сектор пилота за сессию (среди его собственных кругов),
+   * по каждому из трёх секторов отдельно.
+   */
+  sectorsPersonalBest: [boolean, boolean, boolean];
+  /**
+   * Лучший ли это сектор среди ВСЕХ пилотов сессии, по каждому из трёх
+   * секторов отдельно. Имеет приоритет над sectorsPersonalBest в отображении.
+   */
+  sectorsAbsoluteBest: [boolean, boolean, boolean];
   /** Является ли круг пит-лапом. */
   isPitLap?: boolean;
   // ── SD-18: Дополнительные столбцы ─────────────────────────────────────────
@@ -122,6 +132,8 @@ export interface DriverSectorSummary {
   bestSectors: [string, string, string];
   /** Теоретически лучший круг (сумма лучших секторов). */
   theoreticalBest: string;
+  /** Является ли каждый из секторов [S1, S2, S3] абсолютно лучшим в сессии. */
+  sectorAbsoluteBest: [boolean, boolean, boolean];
   /** Является ли хотя бы один сектор абсолютно лучшим в сессии. */
   hasAbsoluteBest: boolean;
 }

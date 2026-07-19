@@ -59,16 +59,22 @@ export function DriverLapTable({ laps }: DriverLapTableProps) {
                 {lap.lapTime}
               </td>
 
-              {/* Сектора */}
-              <td className="px-4 py-2 text-right font-data tabular-nums">
-                {lap.sectors[0]}
-              </td>
-              <td className="px-4 py-2 text-right font-data tabular-nums">
-                {lap.sectors[1]}
-              </td>
-              <td className="px-4 py-2 text-right font-data tabular-nums">
-                {lap.sectors[2]}
-              </td>
+              {/* Сектора — фиолетовый: лучший сектор сессии среди всех пилотов,
+                  зелёный: личный лучший сектор пилота */}
+              {[0, 1, 2].map((i) => (
+                <td
+                  key={i}
+                  className={`px-4 py-2 text-right font-data tabular-nums ${
+                    lap.sectorsAbsoluteBest[i]
+                      ? 'font-bold text-purple-500'
+                      : lap.sectorsPersonalBest[i]
+                      ? 'font-semibold text-green-500'
+                      : ''
+                  }`}
+                >
+                  {lap.sectors[i]}
+                </td>
+              ))}
 
               {/* SD-18: Максимальная скорость */}
               <td className="px-4 py-2 text-right font-data tabular-nums text-muted-foreground">

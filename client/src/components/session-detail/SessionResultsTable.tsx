@@ -10,6 +10,7 @@
 import { Medal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DriverName } from '@/components/DriverName';
+import { getMedalColorClass } from '@/lib/classStyles';
 import type { SessionResultRowView } from './types';
 
 // ─── Row ───────────────────────────────────────────────────────────────────────
@@ -42,7 +43,7 @@ export function SessionResultsRow({
       <td className="px-4 py-2.5">
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted/50 font-data text-sm font-bold tabular-nums">
           {row.position <= 3 ? (
-            <Medal size={14} className="text-chart-2" />
+            <Medal size={14} className={getMedalColorClass(row.position)} />
           ) : (
             row.position
           )}

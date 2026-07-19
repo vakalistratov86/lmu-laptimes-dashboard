@@ -1,7 +1,23 @@
-export const CLASS_ORDER = ["Hypercar", "LMP2", "LMP3", "GTE", "GT3", "GT4"] as const;
+// ─── Medal colours (позиции 1–3) ────────────────────────────────────────────────
+// Раньше везде использовался один и тот же цвет для 1/2/3 места — исправлено:
+// золото / серебро / бронза, единый источник для всех мест, где рисуется медаль.
+export const MEDAL_COLOR: Record<number, string> = {
+  1: "text-yellow-400",
+  2: "text-slate-400",
+  3: "text-amber-700",
+};
+
+export function getMedalColorClass(position: number): string {
+  return MEDAL_COLOR[position] ?? "text-chart-2";
+}
+
+// "Hyper" — реальные импортированные данные сокращают "Hypercar" до "Hyper",
+// поэтому это отдельный ключ (с теми же цветами), а не опечатка.
+export const CLASS_ORDER = ["Hypercar", "Hyper", "LMP2", "LMP3", "GTE", "GT3", "GT4"] as const;
 
 export const CLASS_BADGE: Record<string, string> = {
   Hypercar: "bg-chart-1/15 text-chart-1 border-chart-1/30",
+  Hyper:    "bg-chart-1/15 text-chart-1 border-chart-1/30",
   LMP2:     "bg-chart-4/15 text-chart-4 border-chart-4/30",
   LMP3:     "bg-chart-5/15 text-chart-5 border-chart-5/30",
   GTE:      "bg-chart-3/15 text-chart-3 border-chart-3/30",
@@ -11,6 +27,7 @@ export const CLASS_BADGE: Record<string, string> = {
 
 export const CLASS_ACCENT: Record<string, string> = {
   Hypercar: "border-chart-1",
+  Hyper:    "border-chart-1",
   LMP2:     "border-chart-4",
   LMP3:     "border-chart-5",
   GTE:      "border-chart-3",

@@ -8,20 +8,7 @@ import { Link } from 'wouter';
 import { ArrowLeft } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { SessionTypeBadge } from '@/components/SessionTypeBadge';
-
-interface StatTileProps {
-  label: string;
-  value: string;
-}
-
-function StatTile({ label, value }: StatTileProps) {
-  return (
-    <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 space-y-0.5">
-      <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{label}</p>
-      <p className="font-data text-sm font-semibold tabular-nums truncate">{value}</p>
-    </div>
-  );
-}
+import { StatTile } from '@/components/StatTile';
 
 interface SessionInfoCardProps {
   trackName: string;

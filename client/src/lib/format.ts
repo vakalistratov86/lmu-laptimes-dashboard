@@ -18,6 +18,17 @@ export function formatSector(ms: number): string {
   return `${seconds}.${String(millis).padStart(3, "0")}`;
 }
 
+// Форматирование суммарной длительности (в минутах) в «Xч Yм» / «Yм»
+export function formatDurationMin(totalMinutes: number): string {
+  if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return "—";
+  const rounded = Math.round(totalMinutes);
+  const hours = Math.floor(rounded / 60);
+  const minutes = rounded % 60;
+  if (hours === 0) return `${minutes}м`;
+  if (minutes === 0) return `${hours}ч`;
+  return `${hours}ч ${minutes}м`;
+}
+
 // Дельта относительно лучшего времени, со знаком
 export function formatDelta(ms: number, bestMs: number): string {
   const diff = ms - bestMs;

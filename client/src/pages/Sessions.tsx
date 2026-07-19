@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import { useSessions } from "@/lib/api";
-import { formatLap } from "@/lib/format";
+import { formatLap, formatDurationMin } from "@/lib/format";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Upload, Dumbbell, Timer, Trophy, ChevronRight, type LucideIcon } from "lucide-react";
@@ -10,6 +12,8 @@ import {
   getSessionTypeBadgeClass,
   SESSION_CATEGORY_LABEL,
   SESSION_TYPE_ORDER,
+  CLASS_ORDER,
+  getClassBadgeClass,
   type SessionCategory,
 } from "@/lib/classStyles";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
@@ -43,7 +47,14 @@ type SessionItem = {
   event: string;
   driverCount: number;
   lapCount: number;
-  results: { isPlayer: number; position: number; bestLapMs: number | null }[];
+  /** Настроенная длительность сессии в минутах (из лога игры). */
+  sessionDurationMin?: number | null;
+  results: {
+    isPlayer: number;
+    position: number;
+    bestLapMs: number | null;
+    carClass?: string | null;
+  }[];
 };
 
 function getBestLapForSession(session: SessionItem): number | null {
@@ -51,6 +62,38 @@ function getBestLapForSession(session: SessionItem): number | null {
     if (r.bestLapMs == null) return min;
     return min == null || r.bestLapMs < min ? r.bestLapMs : min;
   }, null);
+}
+
+/** Уникальные классы машин, участвовавшие в сессии, в порядке CLASS_ORDER. */
+function getSessionClasses(session: SessionItem): string[] {
+  const present = new Set(
+    session.results.map((r) => r.carClass).filter((c): c is string => !!c),
+  );
+  const ordered = CLASS_ORDER.filter((c) => present.has(c));
+  // Классы вне известного порядка (на всякий случай) — в конец, по алфавиту.
+  const rest = Array.from(present)
+    .filter((c) => !(CLASS_ORDER as readonly string[]).includes(c))
+    .sort();
+  return [...ordered, ...rest];
+}
+
+type SessionsSummary = Record<SessionCategory, { count: number; minutes: number }>;
+
+/** Сводка по всем сессиям (не зависит от текущего фильтра): счётчики и суммарное время по категориям. */
+function buildSessionsSummary(sessions: SessionItem[]): SessionsSummary {
+  const summary: SessionsSummary = {
+    practice: { count: 0, minutes: 0 },
+    qualify: { count: 0, minutes: 0 },
+    race: { count: 0, minutes: 0 },
+  };
+  for (const s of sessions) {
+    const cat = normalizeSessionCategory(s.sessionType);
+    summary[cat].count += 1;
+    if (typeof s.sessionDurationMin === "number" && s.sessionDurationMin > 0) {
+      summary[cat].minutes += s.sessionDurationMin;
+    }
+  }
+  return summary;
 }
 
 // ─── Filter — единая сегментированная кнопка ───────────────────────────────────
@@ -69,6 +112,33 @@ const FILTER_OPTIONS: { key: "all" | SessionCategory; label: string }[] = [
   { key: "qualify", label: SESSION_CATEGORY_LABEL.qualify },
   { key: "race", label: SESSION_CATEGORY_LABEL.race },
 ];
+
+// ─── Summary tile ───────────────────────────────────────────────────────────────
+// Та же стилистика, что и у активной секции фильтра: та же иконка и те же
+// цветовые классы (getSessionTypeBadgeClass), только в виде плитки.
+
+interface SessionSummaryTileProps {
+  category: SessionCategory;
+  label: string;
+  value: string;
+}
+
+function SessionSummaryTile({ category, label, value }: SessionSummaryTileProps) {
+  const Icon = FILTER_ICON[category];
+  return (
+    <div
+      className={cn(
+        "rounded-lg border px-3.5 py-2.5 space-y-0.5",
+        getSessionTypeBadgeClass(category),
+      )}
+    >
+      <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider opacity-80">
+        <Icon size={12} /> {label}
+      </p>
+      <p className="font-data text-sm font-semibold tabular-nums truncate">{value}</p>
+    </div>
+  );
+}
 
 // ─── Loading Skeleton ─────────────────────────────────────────────────────────
 
@@ -134,6 +204,12 @@ export default function Sessions() {
     }
   };
 
+  // Сводка по ВСЕМ сессиям — не зависит от текущего фильтра типа.
+  const summary = useMemo(
+    () => buildSessionsSummary((sessions ?? []) as SessionItem[]),
+    [sessions],
+  );
+
   const filtered = useMemo(() => {
     if (!sessions) return [] as SessionItem[];
     const all = sessions as SessionItem[];
@@ -164,10 +240,22 @@ export default function Sessions() {
         <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-page-title">
           Сессии
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Импортированные сессии — по дате, трассе и типу
-        </p>
       </div>
+
+      {/* Сводка по всем сессиям — количество и суммарное время по категориям.
+          Стилистика плиток совпадает с активной секцией фильтра ниже. */}
+      {hasSessions && (
+        <Card className="overflow-hidden">
+          <div className="grid grid-cols-3 gap-2.5 p-4 sm:grid-cols-6">
+            <SessionSummaryTile category="practice" label="Тренировок" value={String(summary.practice.count)} />
+            <SessionSummaryTile category="qualify" label="Квалификаций" value={String(summary.qualify.count)} />
+            <SessionSummaryTile category="race" label="Гонок" value={String(summary.race.count)} />
+            <SessionSummaryTile category="practice" label="Время тренировок" value={formatDurationMin(summary.practice.minutes)} />
+            <SessionSummaryTile category="qualify" label="Время квалификаций" value={formatDurationMin(summary.qualify.minutes)} />
+            <SessionSummaryTile category="race" label="Время гонок" value={formatDurationMin(summary.race.minutes)} />
+          </div>
+        </Card>
+      )}
 
       {/* Filter — одна кнопка, разделённая на секции; цвет секции совпадает с плашкой */}
       <div
@@ -254,11 +342,12 @@ export default function Sessions() {
           {/* Table header */}
           <div
             className="grid border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            style={{ gridTemplateColumns: "160px 1fr 140px 80px 110px 24px" }}
+            style={{ gridTemplateColumns: "160px 1fr 170px 140px 80px 110px 24px" }}
             role="row"
           >
             <div role="columnheader">Тип</div>
             <div role="columnheader">Трек</div>
+            <div role="columnheader">Классы</div>
             <div role="columnheader" className="text-right">Лучший круг</div>
             <div role="columnheader" className="text-right">Кругов</div>
             <div role="columnheader" className="text-right">Дата</div>
@@ -269,6 +358,7 @@ export default function Sessions() {
           {sorted.map((session) => {
             const cat = normalizeSessionCategory(session.sessionType);
             const bestLap = getBestLapForSession(session);
+            const classes = getSessionClasses(session);
             const filterParam = activeFilter !== "all"
               ? `?from_filter=${encodeURIComponent(activeFilter)}`
               : "";
@@ -280,7 +370,7 @@ export default function Sessions() {
                 href={href}
                 data-testid={`row-session-${session.id}`}
                 className="grid cursor-pointer items-center border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                style={{ gridTemplateColumns: "160px 1fr 140px 80px 110px 24px" }}
+                style={{ gridTemplateColumns: "160px 1fr 170px 140px 80px 110px 24px" }}
                 role="row"
                 aria-label={`${SESSION_CATEGORY_LABEL[cat]} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime)}`}
               >
@@ -292,6 +382,23 @@ export default function Sessions() {
                 {/* Track */}
                 <div className="truncate font-medium" role="cell">
                   {trackDisplayLabel(session.trackName, session.course)}
+                </div>
+
+                {/* Classes */}
+                <div className="flex flex-wrap gap-1" role="cell">
+                  {classes.length > 0 ? (
+                    classes.map((cls) => (
+                      <Badge
+                        key={cls}
+                        variant="outline"
+                        className={`px-1.5 py-0 text-[10px] ${getClassBadgeClass(cls)}`}
+                      >
+                        {cls}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
                 </div>
 
                 {/* Best lap */}

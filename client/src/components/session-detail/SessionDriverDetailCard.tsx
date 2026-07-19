@@ -12,33 +12,13 @@ import { Medal } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DriverName } from '@/components/DriverName';
-import { getClassBadgeClass } from '@/lib/classStyles';
+import { StatTile } from '@/components/StatTile';
+import { getClassBadgeClass, getMedalColorClass } from '@/lib/classStyles';
 import type {
   SessionResultRowView,
   DriverLapsGroupView,
   DriverSectorSummary,
 } from './types';
-
-interface StatTileProps {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}
-
-function StatTile({ label, value, highlight }: StatTileProps) {
-  return (
-    <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 space-y-0.5">
-      <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{label}</p>
-      <p
-        className={`font-data text-sm font-semibold tabular-nums truncate ${
-          highlight ? 'text-green-500' : ''
-        }`}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
 
 interface SessionDriverDetailCardProps {
   row: SessionResultRowView;
@@ -60,7 +40,7 @@ export function SessionDriverDetailCard({
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-secondary/40 px-4 py-3">
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted/50 font-data text-sm font-bold tabular-nums">
           {row.position <= 3 ? (
-            <Medal size={14} className="text-chart-2" />
+            <Medal size={14} className={getMedalColorClass(row.position)} />
           ) : (
             row.position
           )}
@@ -88,7 +68,7 @@ export function SessionDriverDetailCard({
 
       {/* Статистика */}
       <div className="grid grid-cols-2 gap-2.5 p-4 sm:grid-cols-3 lg:grid-cols-5">
-        <StatTile label="Лучший круг" value={row.bestLapTime} highlight />
+        <StatTile label="Лучший круг" value={row.bestLapTime} variant="green" />
         <StatTile label="Отставание" value={row.gap ?? '—'} />
         <StatTile label="Интервал" value={row.interval ?? '—'} />
         <StatTile
@@ -103,7 +83,7 @@ export function SessionDriverDetailCard({
         {lapGroup && (
           <>
             <StatTile label="Средний круг" value={lapGroup.avgLapTime} />
-            <StatTile label="Худший круг" value={lapGroup.worstLapTime} />
+            <StatTile label="Худший круг" value={lapGroup.worstLapTime} variant="red" />
             <StatTile
               label="Макс. скорость"
               value={
@@ -133,13 +113,25 @@ export function SessionDriverDetailCard({
 
         {sectorSummary && (
           <>
-            <StatTile label="Сектор 1" value={sectorSummary.bestSectors[0]} />
-            <StatTile label="Сектор 2" value={sectorSummary.bestSectors[1]} />
-            <StatTile label="Сектор 3" value={sectorSummary.bestSectors[2]} />
+            <StatTile
+              label="Сектор 1"
+              value={sectorSummary.bestSectors[0]}
+              variant={sectorSummary.sectorAbsoluteBest[0] ? 'purple' : 'green'}
+            />
+            <StatTile
+              label="Сектор 2"
+              value={sectorSummary.bestSectors[1]}
+              variant={sectorSummary.sectorAbsoluteBest[1] ? 'purple' : 'green'}
+            />
+            <StatTile
+              label="Сектор 3"
+              value={sectorSummary.bestSectors[2]}
+              variant={sectorSummary.sectorAbsoluteBest[2] ? 'purple' : 'green'}
+            />
             <StatTile
               label="Теор. лучший круг"
               value={sectorSummary.theoreticalBest}
-              highlight={sectorSummary.hasAbsoluteBest}
+              variant={sectorSummary.hasAbsoluteBest ? 'purple' : 'green'}
             />
           </>
         )}

@@ -426,10 +426,13 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
       (sum, s) => sum + (Number.isFinite(s) ? s : 0),
       0,
     );
-    const hasAbsoluteBest =
-      bestS[0] === absoluteBest[0] ||
-      bestS[1] === absoluteBest[1] ||
-      bestS[2] === absoluteBest[2];
+    // SD-21: Абсолютный лучший по КАЖДОМУ сектору отдельно (не общий флаг) —
+    // используется, чтобы красить именно тот сектор, который является рекордом сессии.
+    const sectorAbsoluteBest: [boolean, boolean, boolean] = [
+      Number.isFinite(bestS[0]) && bestS[0] === absoluteBest[0],
+      Number.isFinite(bestS[1]) && bestS[1] === absoluteBest[1],
+      Number.isFinite(bestS[2]) && bestS[2] === absoluteBest[2],
+    ];
 
     return {
       driverName,
@@ -440,7 +443,8 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
         formatLapTime(bestS[2]),
       ] as [string, string, string],
       theoreticalBest: formatLapTime(theoreticalSeconds),
-      hasAbsoluteBest,
+      sectorAbsoluteBest,
+      hasAbsoluteBest: sectorAbsoluteBest.some(Boolean),
     };
   });
 }
@@ -469,10 +473,19 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   }
 
   let overallBestSeconds = Infinity;
+  // SD-21: Абсолютный лучший сектор среди ВСЕХ пилотов сессии (по каждому из трёх).
+  const overallBestSectors: [number, number, number] = [Infinity, Infinity, Infinity];
   for (const { rawLaps } of map.values()) {
     for (const lap of rawLaps) {
       const t = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
       if (Number.isFinite(t) && t < overallBestSeconds) overallBestSeconds = t;
+
+      const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
+      const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
+      const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
+      if (Number.isFinite(s1) && s1 < overallBestSectors[0]) overallBestSectors[0] = s1;
+      if (Number.isFinite(s2) && s2 < overallBestSectors[1]) overallBestSectors[1] = s2;
+      if (Number.isFinite(s3) && s3 < overallBestSectors[2]) overallBestSectors[2] = s3;
     }
   }
 
@@ -480,9 +493,18 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 
   for (const [driverName, { carNumber, isPlayer, rawLaps }] of map.entries()) {
     let personalBestSeconds = Infinity;
+    // SD-21: Личный лучший сектор пилота за сессию (по каждому из трёх).
+    const personalBestSectors: [number, number, number] = [Infinity, Infinity, Infinity];
     for (const lap of rawLaps) {
       const t = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
       if (Number.isFinite(t) && t < personalBestSeconds) personalBestSeconds = t;
+
+      const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
+      const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
+      const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
+      if (Number.isFinite(s1) && s1 < personalBestSectors[0]) personalBestSectors[0] = s1;
+      if (Number.isFinite(s2) && s2 < personalBestSectors[1]) personalBestSectors[1] = s2;
+      if (Number.isFinite(s3) && s3 < personalBestSectors[2]) personalBestSectors[2] = s3;
     }
 
     const lapRows: DriverLapRowView[] = rawLaps
@@ -513,6 +535,17 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
             Number.isFinite(s2) ? formatLapTime(s2) : '—',
             Number.isFinite(s3) ? formatLapTime(s3) : '—',
           ] as [string, string, string],
+          // SD-21: Личный лучший / абсолютный лучший сектор сессии, по каждому сектору
+          sectorsPersonalBest: [
+            Number.isFinite(s1) && s1 === personalBestSectors[0],
+            Number.isFinite(s2) && s2 === personalBestSectors[1],
+            Number.isFinite(s3) && s3 === personalBestSectors[2],
+          ] as [boolean, boolean, boolean],
+          sectorsAbsoluteBest: [
+            Number.isFinite(s1) && s1 === overallBestSectors[0],
+            Number.isFinite(s2) && s2 === overallBestSectors[1],
+            Number.isFinite(s3) && s3 === overallBestSectors[2],
+          ] as [boolean, boolean, boolean],
           isPitLap: Boolean(lap.isPitLap ?? lap.pitLap ?? false),
           // SD-18: Новые поля — имена взяты из реальной схемы session_laps
           maxSpeed: formatSpeed(maxSpeedRaw),
