@@ -2,6 +2,9 @@
  * SD-13: Аккордеон кругов по пилотам.
  * DriverLapsAccordion — список аккордеон-карточек.
  * DriverLapTable     — таблица кругов одного пилота.
+ *
+ * SD-15: Поддержка фильтра по пилоту.
+ * Если driverFilter задан, показывается только группа с совпадающим именем.
  */
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
@@ -9,7 +12,7 @@ import { Card } from '@/components/ui/card';
 import { DriverName } from '@/components/DriverName';
 import type { DriverLapsGroupView, DriverLapRowView } from './types';
 
-// ─── DriverLapTable ───────────────────────────────────────────────────────────────────
+// ─── DriverLapTable ───────────────────────────────────────────────────────────
 
 interface DriverLapTableProps {
   laps: DriverLapRowView[];
@@ -70,14 +73,20 @@ export function DriverLapTable({ laps }: DriverLapTableProps) {
   );
 }
 
-// ─── DriverLapsAccordion ─────────────────────────────────────────────────────────────
+// ─── DriverLapsAccordion ──────────────────────────────────────────────────────
 
 interface DriverLapsAccordionProps {
   groups: DriverLapsGroupView[];
+  /** Если задан — показывать только этого пилота. */
+  driverFilter?: string | null;
 }
 
-export function DriverLapsAccordion({ groups }: DriverLapsAccordionProps) {
+export function DriverLapsAccordion({ groups, driverFilter }: DriverLapsAccordionProps) {
   const [openDrivers, setOpenDrivers] = useState<Set<string>>(new Set());
+
+  const visibleGroups = driverFilter
+    ? groups.filter((g) => g.driverName === driverFilter)
+    : groups;
 
   function toggle(name: string) {
     setOpenDrivers((prev) => {
@@ -96,9 +105,22 @@ export function DriverLapsAccordion({ groups }: DriverLapsAccordionProps) {
     );
   }
 
+  if (visibleGroups.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Нет данных о кругах для пилота «{driverFilter}».
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-3">
-      {groups.map((group) => {
+      {driverFilter && (
+        <p className="text-xs text-muted-foreground">
+          Показаны круги: <span className="font-semibold text-primary">{driverFilter}</span>
+        </p>
+      )}
+      {visibleGroups.map((group) => {
         const isOpen = openDrivers.has(group.driverName);
         return (
           <Card key={group.driverName} className="overflow-hidden">
