@@ -177,6 +177,7 @@ export default function Sessions() {
       <div className="flex flex-wrap gap-2" role="group" aria-label="Фильтр по типу сессии">
         {FILTER_BUTTONS.map(({ key, label }) => {
           const isAll = key === "Все";
+          const isActive = activeFilter === key;
           const normalizedType: SessionCategory | null = isAll ? null : normalizeType(key);
           const colorClass = normalizedType != null ? FILTER_BG_CLASSES[normalizedType] : "";
 
@@ -191,17 +192,16 @@ export default function Sessions() {
               key={key}
               type="button"
               onClick={() => setActiveFilter(key)}
-              aria-pressed={activeFilter === key}
+              aria-pressed={isActive}
               className={cn(
                 "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-colors",
                 isAll
-                  ? activeFilter === key
+                  ? isActive
                     ? "bg-accent text-accent-foreground border-border"
                     : "bg-background text-muted-foreground border-border hover:bg-accent/40"
-                  : cn(
-                      colorClass,
-                      "border-transparent hover:ring-1 hover:ring-border/60",
-                    ),
+                  : isActive
+                    ? cn(colorClass, "border-transparent hover:ring-1 hover:ring-border/60")
+                    : "bg-background text-muted-foreground border-border opacity-50 hover:opacity-80 hover:bg-accent/20",
               )}
             >
               {icon && (
