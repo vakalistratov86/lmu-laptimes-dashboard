@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useDrivers } from "@/lib/api";
 import { useDriverFilter } from "@/lib/driverFilter";
-import { cn } from "@/lib/utils";
-import { Check, ChevronsUpDown, Users, X } from "lucide-react";
+import { Check, ChevronsUpDown, Users, Bot, CheckCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -17,26 +16,36 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { DriverName } from "@/components/DriverName";
 
 export function DriverFilterBar() {
   const { data: drivers } = useDrivers();
-  const { selectedDriverIds, toggleDriver, clearDrivers, isFiltered } = useDriverFilter();
+  const { selectedDriverIds, toggleDriver, setManyDrivers, clearDrivers, isFiltered } =
+    useDriverFilter();
   const [open, setOpen] = useState(false);
   const [hideAI, setHideAI] = useState(false);
 
   if (!drivers || drivers.length === 0) return null;
 
-  // Пилоты, видимые в выпадающем списке с учётом фильтра ИИ
   // isPlayer === 1 → реальный игрок; isPlayer === 0 → ИИ; isPlayer === null → demo (без данных сессий)
-  const visibleDrivers = hideAI
-    ? drivers.filter((d) => d.isPlayer === 1)
-    : drivers;
+  const visibleDrivers = hideAI ? drivers.filter((d) => d.isPlayer === 1) : drivers;
 
   const selectedDrivers = drivers.filter((d) => selectedDriverIds.has(d.id));
+
+  // «Выбрать все» действует на список, видимый сейчас с учётом переключателя ИИ
+  // (независимо от текста поиска — иначе легко случайно выбрать не тех, кого ждёшь).
+  const allVisibleSelected =
+    visibleDrivers.length > 0 && visibleDrivers.every((d) => selectedDriverIds.has(d.id));
+
+  // Разбивка списка: сначала уже выбранные (закреплены сверху), затем игроки, затем ИИ
+  const selectedVisible = visibleDrivers.filter((d) => selectedDriverIds.has(d.id));
+  const unselectedPlayers = visibleDrivers.filter(
+    (d) => !selectedDriverIds.has(d.id) && d.isPlayer === 1,
+  );
+  const unselectedAI = visibleDrivers.filter(
+    (d) => !selectedDriverIds.has(d.id) && d.isPlayer !== 1,
+  );
 
   return (
     <div
@@ -64,17 +73,44 @@ export function DriverFilterBar() {
             <ChevronsUpDown size={12} className="ml-2 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-56 p-0" align="start">
+        <PopoverContent className="w-64 p-0" align="start">
           <Command>
             <CommandInput placeholder="Поиск пилота…" className="h-8 text-xs" />
+
+            {/* Переключатели — внутри выпадашки, рядом со списком, который они контролируют */}
+            <div className="space-y-1.5 border-b border-border px-3 py-2">
+              <label className="flex cursor-pointer items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  <Bot size={13} className="text-amber-400" />
+                  Показать ИИ
+                </span>
+                <Switch checked={!hideAI} onCheckedChange={(checked) => setHideAI(!checked)} />
+              </label>
+              <label className="flex cursor-pointer items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  <CheckCheck size={13} className="text-muted-foreground" />
+                  Выбрать все
+                </span>
+                <Switch
+                  checked={allVisibleSelected}
+                  onCheckedChange={(checked) =>
+                    setManyDrivers(
+                      visibleDrivers.map((d) => d.id),
+                      checked,
+                    )
+                  }
+                />
+              </label>
+            </div>
+
             <CommandList>
               <CommandEmpty className="py-4 text-center text-xs text-muted-foreground">
                 Пилот не найден
               </CommandEmpty>
-              <CommandGroup>
-                {visibleDrivers.map((d) => {
-                  const active = selectedDriverIds.has(d.id);
-                  return (
+
+              {selectedVisible.length > 0 && (
+                <CommandGroup heading="Выбрано">
+                  {selectedVisible.map((d) => (
                     <CommandItem
                       key={d.id}
                       value={d.name}
@@ -82,59 +118,51 @@ export function DriverFilterBar() {
                       onSelect={() => toggleDriver(d.id)}
                       className="text-xs"
                     >
-                      <Check
-                        size={13}
-                        className={cn(
-                          "mr-2 shrink-0",
-                          active ? "opacity-100" : "opacity-0"
-                        )}
-                      />
+                      <Check size={13} className="mr-2 shrink-0 opacity-100" />
+                      <DriverName name={d.name} isPlayer={d.isPlayer} />
+                      <X size={12} className="ml-auto shrink-0 text-muted-foreground" />
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+
+              {unselectedPlayers.length > 0 && (
+                <CommandGroup heading="Игроки">
+                  {unselectedPlayers.map((d) => (
+                    <CommandItem
+                      key={d.id}
+                      value={d.name}
+                      data-testid={`driver-chip-${d.id}`}
+                      onSelect={() => toggleDriver(d.id)}
+                      className="text-xs"
+                    >
+                      <Check size={13} className="mr-2 shrink-0 opacity-0" />
                       <DriverName name={d.name} isPlayer={d.isPlayer} />
                     </CommandItem>
-                  );
-                })}
-              </CommandGroup>
+                  ))}
+                </CommandGroup>
+              )}
+
+              {unselectedAI.length > 0 && (
+                <CommandGroup heading="ИИ">
+                  {unselectedAI.map((d) => (
+                    <CommandItem
+                      key={d.id}
+                      value={d.name}
+                      data-testid={`driver-chip-${d.id}`}
+                      onSelect={() => toggleDriver(d.id)}
+                      className="text-xs"
+                    >
+                      <Check size={13} className="mr-2 shrink-0 opacity-0" />
+                      <DriverName name={d.name} isPlayer={d.isPlayer} />
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
             </CommandList>
           </Command>
         </PopoverContent>
       </Popover>
-
-      {/* Чек-бокс «Скрыть ИИ игроков» */}
-      <div className="flex items-center gap-1.5">
-        <Checkbox
-          id="hide-ai-drivers"
-          checked={hideAI}
-          onCheckedChange={(checked) => setHideAI(checked === true)}
-          className="h-3.5 w-3.5"
-        />
-        <Label
-          htmlFor="hide-ai-drivers"
-          className="cursor-pointer select-none text-[11px] text-muted-foreground"
-        >
-          Скрыть ИИ игроков
-        </Label>
-      </div>
-
-      {selectedDrivers.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {selectedDrivers.map((d) => (
-            <Badge
-              key={d.id}
-              variant="secondary"
-              className="h-5 gap-1 px-2 text-[11px] font-normal"
-            >
-              <DriverName name={d.name} isPlayer={d.isPlayer} />
-              <button
-                onClick={() => toggleDriver(d.id)}
-                className="ml-0.5 rounded-full opacity-60 hover:opacity-100"
-                aria-label={`Убрать ${d.name}`}
-              >
-                <X size={10} />
-              </button>
-            </Badge>
-          ))}
-        </div>
-      )}
 
       {isFiltered && (
         <button

@@ -201,6 +201,29 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+
+  /* Themed scrollbars everywhere — the browser default (plain white) clashes
+     with the dark UI. Firefox: */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  /* Chromium/WebKit: */
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground));
+  }
 }
 
 @layer utilities {

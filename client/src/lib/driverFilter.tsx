@@ -3,6 +3,8 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 interface DriverFilterContextValue {
   selectedDriverIds: Set<number>;
   toggleDriver: (id: number) => void;
+  /** Массово добавляет/убирает переданные id из выборки (для «Выбрать все»). */
+  setManyDrivers: (ids: number[], selected: boolean) => void;
   clearDrivers: () => void;
   isFiltered: boolean;
 }
@@ -10,6 +12,7 @@ interface DriverFilterContextValue {
 const DriverFilterContext = createContext<DriverFilterContextValue>({
   selectedDriverIds: new Set(),
   toggleDriver: () => {},
+  setManyDrivers: () => {},
   clearDrivers: () => {},
   isFiltered: false,
 });
@@ -26,6 +29,17 @@ export function DriverFilterProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const setManyDrivers = (ids: number[], selected: boolean) => {
+    setSelectedDriverIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (selected) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+
   const clearDrivers = () => setSelectedDriverIds(new Set());
 
   return (
@@ -33,6 +47,7 @@ export function DriverFilterProvider({ children }: { children: ReactNode }) {
       value={{
         selectedDriverIds,
         toggleDriver,
+        setManyDrivers,
         clearDrivers,
         isFiltered: selectedDriverIds.size > 0,
       }}
