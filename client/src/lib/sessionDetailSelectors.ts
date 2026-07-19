@@ -47,10 +47,8 @@ function parseSectorSeconds(
   secProp: unknown,
   shortProp: unknown,
 ): number {
-  // Приоритет: *Ms-поле (миллисекунды) → делим на 1000
   const ms = Number(msProp);
   if (Number.isFinite(ms) && ms > 0) return ms / 1000;
-  // Запасные поля: предполагаем секунды
   const sec = Number(secProp ?? shortProp);
   if (Number.isFinite(sec) && sec > 0) return sec;
   return NaN;
@@ -81,10 +79,6 @@ const SESSION_TYPE_MAP: Record<string, NormalizedSessionType> = {
   fp3: 'practice',
 };
 
-/**
- * Нормализует сырую строку типа сессии в одно из пяти значений.
- * Неизвестные типы трактуются как 'practice'.
- */
 export function normalizeSessionType(raw: string): NormalizedSessionType {
   const key = raw.trim().toLowerCase();
   return SESSION_TYPE_MAP[key] ?? 'practice';
@@ -94,15 +88,9 @@ export function normalizeSessionType(raw: string): NormalizedSessionType {
 // buildHeroStats
 // ───────────────────────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySession = Record<string, any>;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyLap = Record<string, any>;
 
-/**
- * Формирует массив KPI-метрик для герой-блока.
- * Определяет победителя / polesitter и fastest lap.
- */
 export function buildHeroStats(session: unknown): SessionHeroStatItem[] {
   const s = session as AnySession;
   const normalized = normalizeSessionType(String(s?.sessionType ?? ''));
@@ -139,13 +127,6 @@ export function buildHeroStats(session: unknown): SessionHeroStatItem[] {
 // buildResultRows
 // ───────────────────────────────────────────────────────────────────────────────
 
-/**
- * Трансформирует сырой массив результатов сессии в массив строк таблицы.
- * Пробрасывает isPlayer напрямую из данных, без сравнения имён.
- *
- * fix: поля в БД называются r.laps, r.pitstops, r.team — добавлены явные
- * алиасы для корректного маппинга; пустые строки нормализуются в null.
- */
 export function buildResultRows(session: unknown): SessionResultRowView[] {
   const s = session as AnySession;
   const rawResults: AnyLap[] = Array.isArray(s?.results) ? s.results : [];
@@ -192,25 +173,21 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       }
     }
 
-    // fix: в схеме БД поле называется r.pitstops (не r.pitStops)
     const pitStops: number | null =
       typeof r.pitStops === 'number' ? r.pitStops :
       typeof r.pitstops === 'number' ? r.pitstops :
       null;
 
-    // fix: в схеме БД поле называется r.laps (не r.totalLaps)
     const totalLaps: number | null =
       typeof r.totalLaps === 'number' ? r.totalLaps :
       typeof r.laps === 'number' ? r.laps :
       null;
 
-    // fix: teamName передаётся через enrichSession; пустая строка нормализуется в null
     const teamName: string | null =
       (r.teamName && r.teamName !== '—') ? r.teamName :
       (r.team && r.team !== '—') ? r.team :
       null;
 
-    // fix: finishStatus — пустая строка нормализуется в null
     const finishStatus: string | null =
       (r.finishStatus && r.finishStatus.trim()) ? r.finishStatus.trim() :
       (r.status && r.status.trim()) ? r.status.trim() :
@@ -237,7 +214,6 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
 // buildLapProgressSeries
 // ───────────────────────────────────────────────────────────────────────────────
 
-/** Строит серии для графика прогресса по кругам, группируя по пилотам. */
 export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
   const map = new Map<string, { carNumber: string | number; points: LapProgressPoint[] }>();
 
@@ -271,7 +247,6 @@ export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
 // buildSectorSummary
 // ───────────────────────────────────────────────────────────────────────────────
 
-/** Вычисляет лучшие сектора и теоретически лучший круг для каждого пилота. */
 export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
   const map = new Map<
     string,
@@ -288,7 +263,6 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     const driver = String(lap.driverName ?? lap.driver ?? 'Unknown');
     const carNumber = lap.carNumber ?? lap.number ?? '';
 
-    // parseSectorSeconds корректно обрабатывает и Ms-поля и поля в секундах
     const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
     const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
     const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
@@ -332,11 +306,6 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
 // buildDriverLapGroups
 // ───────────────────────────────────────────────────────────────────────────────
 
-/**
- * Группирует все круги по пилотам и определяет personal / overall best.
- * Пробрасывает isPlayer напрямую из данных первого круга пилота.
- * fix: добавлена поддержка поля lapNum (имя поля в session_laps) наряду с lapNumber.
- */
 export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   const map = new Map<
     string,
@@ -374,17 +343,14 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
     }
 
     const lapRows: DriverLapRowView[] = rawLaps
-      // fix: поддержка lapNum (session_laps) и lapNumber (legacy)
       .sort((a, b) => Number(a.lapNumber ?? a.lapNum ?? a.lap ?? 0) - Number(b.lapNumber ?? b.lapNum ?? b.lap ?? 0))
       .map((lap) => {
         const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
-        // Используем parseSectorSeconds для корректной обработки Ms-полей
         const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
         const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
         const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
 
         return {
-          // fix: поддержка lapNum (session_laps) и lapNumber (legacy)
           lapNumber: Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0),
           lapTime: Number.isFinite(timeSeconds) ? formatLapTime(timeSeconds) : '—',
           isPersonalBest:
@@ -415,7 +381,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
-// buildTabs
+// buildTabs — вкладка «Секторы» удалена
 // ───────────────────────────────────────────────────────────────────────────────
 
 /** Формирует список вкладок страницы с учётом наличия данных о кругах. */
@@ -423,7 +389,6 @@ export function buildTabs(hasLapData: boolean): SessionTabItem[] {
   const allTabs: SessionTabItem[] = [
     { key: 'results', label: 'Результаты' },
     { key: 'laps', label: 'Круги', requiresLapData: true },
-    { key: 'sectors', label: 'Секторы', requiresLapData: true },
     { key: 'lapProgress', label: 'Прогресс', requiresLapData: true },
   ];
   return allTabs.filter((t) => !t.requiresLapData || hasLapData);

@@ -4,7 +4,7 @@
  * DriverLapTable     — таблица кругов одного пилота.
  *
  * SD-15: Поддержка фильтра по пилоту.
- * Если driverFilter задан, показывается только группа с совпадающим именем.
+ * SD-17: Если driverFilter задан, таблица показывается СРАЗУ (без дропдауна).
  */
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
@@ -77,7 +77,7 @@ export function DriverLapTable({ laps }: DriverLapTableProps) {
 
 interface DriverLapsAccordionProps {
   groups: DriverLapsGroupView[];
-  /** Если задан — показывать только этого пилота. */
+  /** Если задан — показывать только этого пилота и сразу раскрыть таблицу. */
   driverFilter?: string | null;
 }
 
@@ -113,13 +113,34 @@ export function DriverLapsAccordion({ groups, driverFilter }: DriverLapsAccordio
     );
   }
 
+  // SD-17: Если пилот выбран — показываем таблицу сразу без аккордеона
+  if (driverFilter) {
+    const group = visibleGroups[0];
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 px-1">
+          <DriverName
+            name={group.driverName}
+            isPlayer={group.isPlayer}
+            className="font-semibold text-sm"
+          />
+          {group.carNumber ? (
+            <span className="text-xs text-muted-foreground">#{group.carNumber}</span>
+          ) : null}
+          <span className="ml-auto font-data text-xs tabular-nums text-muted-foreground">
+            {group.laps.length} кругов · лучший {group.bestLapTime}
+          </span>
+        </div>
+        <Card className="overflow-hidden">
+          <DriverLapTable laps={group.laps} />
+        </Card>
+      </div>
+    );
+  }
+
+  // Обычный режим: аккордеон по всем пилотам
   return (
     <div className="space-y-3">
-      {driverFilter && (
-        <p className="text-xs text-muted-foreground">
-          Показаны круги: <span className="font-semibold text-primary">{driverFilter}</span>
-        </p>
-      )}
       {visibleGroups.map((group) => {
         const isOpen = openDrivers.has(group.driverName);
         return (

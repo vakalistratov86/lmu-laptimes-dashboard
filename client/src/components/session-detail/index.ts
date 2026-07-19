@@ -1,13 +1,13 @@
 /**
- * Barrel-файл — экспорт всех компонентов session-detail.
+ * Barrel-файл для экспорта компонентов session-detail.
+ * SessionSectorsSummary исключён — вкладка Секторы удалена (SD-16).
  */
 export { SessionHeader } from './SessionHeader';
 export { SessionHeroStats } from './SessionHeroStats';
-export { SessionResultsTable, SessionResultsRow } from './SessionResultsTable';
+export { SessionResultsTable } from './SessionResultsTable';
 export { SessionTabs } from './SessionTabs';
 export { SessionLoadingSkeleton } from './SessionLoadingSkeleton';
 export { SessionEmptyState } from './SessionEmptyState';
-export { SessionSectorsSummary } from './SessionSectorsSummary';
 export { DriverLapsAccordion, DriverLapTable } from './DriverLapsAccordion';
 export { SessionLapProgressChart } from './SessionLapProgressChart';
-export type * from './types';
+export type { SessionTabKey } from './types';
