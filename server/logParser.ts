@@ -12,6 +12,19 @@ export interface ParsedLap {
   isPit: boolean;
   conditions: string | null;      // #63 — из атрибута Lap или Stream
   frontCompound: string | null;   // #63 — из атрибута Lap (компаунд)
+  // Телеметрия круга из XML-атрибутов <Lap>
+  topSpeedKph: number | null;       // topspeed="252.25"
+  fuelLevel: number | null;         // fuel="0.690"
+  fuelUsed: number | null;          // fuelUsed="0.027"
+  tyreFLCondition: number | null;   // twfl="0.988"
+  tyreFRCondition: number | null;   // twfr="0.992"
+  tyreRLCondition: number | null;   // twrl="0.965"
+  tyreRRCondition: number | null;   // twrr="0.980"
+  rearCompound: string | null;      // rcompound="0,Medium"
+  tyreFL: string | null;            // FL="0,Medium"
+  tyreFR: string | null;            // FR="0,Medium"
+  tyreRL: string | null;            // RL="0,Medium"
+  tyreRR: string | null;            // RR="0,Medium"
 }
 
 export interface ParsedDriver {
@@ -176,6 +189,19 @@ function parseDriverBlock(block: string): ParsedDriver | null {
       isPit: attr("pit") === "1",
       conditions,
       frontCompound,
+      // Телеметрия из XML-атрибутов <Lap>
+      topSpeedKph: toFloat(attr("topspeed")),
+      fuelLevel: toFloat(attr("fuel")),
+      fuelUsed: toFloat(attr("fuelUsed")),
+      tyreFLCondition: toFloat(attr("twfl")),
+      tyreFRCondition: toFloat(attr("twfr")),
+      tyreRLCondition: toFloat(attr("twrl")),
+      tyreRRCondition: toFloat(attr("twrr")),
+      rearCompound: attr("rcompound") ?? null,
+      tyreFL: attr("FL") ?? null,
+      tyreFR: attr("FR") ?? null,
+      tyreRL: attr("RL") ?? null,
+      tyreRR: attr("RR") ?? null,
     });
   }
 
