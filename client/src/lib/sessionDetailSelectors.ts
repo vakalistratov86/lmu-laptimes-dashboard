@@ -15,9 +15,9 @@ import type {
 } from '@/components/session-detail/types';
 import type { NormalizedSessionType } from './sessionDetail.types';
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // Вспомогательные утилиты
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 /** Форматирует миллисекунды (integer) в строку «M:SS.mmm». */
 export function formatLapMs(ms: number): string {
@@ -62,8 +62,8 @@ export function formatGap(seconds: number): string {
 }
 
 /**
- * SD-18: Форматирует значение скорости в строку «XXX км/ч» или «—».
- * Принимает значение в км/ч (число).
+ * SD-18: Форматирует значение скорости в строку «XXX» (км/ч) или «—».
+ * Принимает число в км/ч.
  */
 function formatSpeed(raw: unknown): string {
   const v = Number(raw);
@@ -72,7 +72,7 @@ function formatSpeed(raw: unknown): string {
 }
 
 /**
- * SD-18: Форматирует остаток топлива в строку «X.XX л» или «—».
+ * SD-18: Форматирует остаток топлива в строку «X.XX» (л) или «—».
  */
 function formatFuel(raw: unknown): string {
   const v = Number(raw);
@@ -81,31 +81,49 @@ function formatFuel(raw: unknown): string {
 }
 
 /**
- * SD-18: Парсит значение износа шины в строку «XX.X%» или «—».
- * Если значение в диапазоне 0–1, считается долей и переводится в %.
+ * SD-18: Парсит значение состояния/износа шины в строку «XX.X%» или «—».
+ * LMU хранит condition как долю 0–1 (1.0 = новая шина).
+ * Отображаем как процент оставшегося ресурса: 1.0 → 100%, 0.75 → 75%.
  */
 function formatWear(raw: unknown): string {
   const v = Number(raw);
   if (!Number.isFinite(v)) return '—';
+  // Значение может быть 0–1 (доля) или 0–100 (проценты)
   const pct = v > 1 ? v : v * 100;
   return `${pct.toFixed(1)}%`;
 }
 
 /**
  * SD-18: Формирует объект TyreWear из полей lap-записи.
- * Поддерживает варианты именования: tyreWearFL / tireWearFL / wearFL / wear_fl и т.п.
+ *
+ * Реальные поля в session_laps (schema.ts):
+ *   tyreFLCondition, tyreFRCondition, tyreRLCondition, tyreRRCondition
+ *
+ * Fallback-цепочка для совместимости с другими форматами импорта.
  */
 function parseTyreWear(lap: Record<string, any>): TyreWear | null {
+  // Приоритет 1: реальные поля схемы БД (session_laps)
   const fl =
+    lap.tyreFLCondition ??
+    lap.tyreFLcondition ??
     lap.tyreWearFL ?? lap.tireWearFL ?? lap.wearFL ?? lap.wear_fl ??
     lap.tyreWear?.fl ?? lap.tireWear?.fl ?? null;
+
   const fr =
+    lap.tyreFRCondition ??
+    lap.tyreFRcondition ??
     lap.tyreWearFR ?? lap.tireWearFR ?? lap.wearFR ?? lap.wear_fr ??
     lap.tyreWear?.fr ?? lap.tireWear?.fr ?? null;
+
   const rl =
+    lap.tyreRLCondition ??
+    lap.tyreRLcondition ??
     lap.tyreWearRL ?? lap.tireWearRL ?? lap.wearRL ?? lap.wear_rl ??
     lap.tyreWear?.rl ?? lap.tireWear?.rl ?? null;
+
   const rr =
+    lap.tyreRRCondition ??
+    lap.tyreRRcondition ??
     lap.tyreWearRR ?? lap.tireWearRR ?? lap.wearRR ?? lap.wear_rr ??
     lap.tyreWear?.rr ?? lap.tireWear?.rr ?? null;
 
@@ -120,19 +138,30 @@ function parseTyreWear(lap: Record<string, any>): TyreWear | null {
 }
 
 /**
- * SD-18: Извлекает тип шин из lap-записи.
+ * SD-18: Извлекает тип/состав шин из lap-записи.
+ *
+ * Реальные поля в session_laps (schema.ts):
+ *   frontCompound, rearCompound, tyreFL, tyreFR, tyreRL, tyreRR
+ *
+ * Используем frontCompound как основной источник; если не задан —
+ * пробуем tyreFL (текстовое название шины на конкретном колесе).
  */
 function parseTyreType(lap: Record<string, any>): string {
   const raw =
+    lap.frontCompound ??
+    lap.tyreFL ??
+    lap.rearCompound ??
+    lap.tyreFR ??
     lap.tyreType ?? lap.tireType ?? lap.tyreCompound ?? lap.tireCompound ??
     lap.compound ?? lap.tyre ?? lap.tire ?? null;
+
   if (raw == null || raw === '') return '—';
   return String(raw);
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // normalizeSessionType
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 const SESSION_TYPE_MAP: Record<string, NormalizedSessionType> = {
   race: 'race',
@@ -154,9 +183,9 @@ export function normalizeSessionType(raw: string): NormalizedSessionType {
   return SESSION_TYPE_MAP[key] ?? 'practice';
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // buildHeroStats
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 type AnySession = Record<string, any>;
 type AnyLap = Record<string, any>;
@@ -193,9 +222,9 @@ export function buildHeroStats(session: unknown): SessionHeroStatItem[] {
   return stats;
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // buildResultRows
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 export function buildResultRows(session: unknown): SessionResultRowView[] {
   const s = session as AnySession;
@@ -235,9 +264,11 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       const intervalVal = Number(r.interval);
       intervalFormatted = intervalVal > 0 ? formatGap(intervalVal) : null;
     } else if (idx > 0 && bestLapMs !== null) {
-      const prevMs = typeof rawResults[idx - 1].bestLapMs === 'number' && rawResults[idx - 1].bestLapMs > 0
-        ? rawResults[idx - 1].bestLapMs as number
-        : null;
+      const prevMs =
+        typeof rawResults[idx - 1].bestLapMs === 'number' &&
+        rawResults[idx - 1].bestLapMs > 0
+          ? (rawResults[idx - 1].bestLapMs as number)
+          : null;
       if (prevMs !== null && bestLapMs > prevMs) {
         intervalFormatted = formatGap((bestLapMs - prevMs) / 1000);
       }
@@ -280,9 +311,9 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
   });
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // buildLapProgressSeries
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
   const map = new Map<string, { carNumber: string | number; points: LapProgressPoint[] }>();
@@ -313,9 +344,9 @@ export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
   }));
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // buildSectorSummary
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
   const map = new Map<
@@ -352,7 +383,10 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
   }
 
   return Array.from(map.entries()).map(([driverName, { carNumber, bestS }]) => {
-    const theoreticalSeconds = bestS.reduce((sum, s) => sum + (Number.isFinite(s) ? s : 0), 0);
+    const theoreticalSeconds = bestS.reduce(
+      (sum, s) => sum + (Number.isFinite(s) ? s : 0),
+      0,
+    );
     const hasAbsoluteBest =
       bestS[0] === absoluteBest[0] ||
       bestS[1] === absoluteBest[1] ||
@@ -372,9 +406,9 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
   });
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // buildDriverLapGroups
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   const map = new Map<
@@ -413,20 +447,37 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
     }
 
     const lapRows: DriverLapRowView[] = rawLaps
-      .sort((a, b) => Number(a.lapNumber ?? a.lapNum ?? a.lap ?? 0) - Number(b.lapNumber ?? b.lapNum ?? b.lap ?? 0))
+      .sort(
+        (a, b) =>
+          Number(a.lapNumber ?? a.lapNum ?? a.lap ?? 0) -
+          Number(b.lapNumber ?? b.lapNum ?? b.lap ?? 0),
+      )
       .map((lap) => {
         const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
         const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
         const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
         const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
 
-        // SD-18: Максимальная скорость (поддержка нескольких вариантов имён полей)
+        // SD-18: Максимальная скорость
+        // Приоритет: topSpeedKph (реальное поле session_laps) → fallback
         const maxSpeedRaw =
-          lap.maxSpeed ?? lap.topSpeed ?? lap.maxSpeedKmh ?? lap.top_speed ?? null;
+          lap.topSpeedKph ??
+          lap.topSpeed ??
+          lap.maxSpeed ??
+          lap.maxSpeedKmh ??
+          lap.top_speed_kph ??
+          lap.top_speed ??
+          null;
 
         // SD-18: Остаток топлива
+        // Приоритет: fuelLevel (реальное поле session_laps) → fallback
         const fuelRaw =
-          lap.fuelRemaining ?? lap.fuel ?? lap.fuelLevel ?? lap.fuel_remaining ?? null;
+          lap.fuelLevel ??
+          lap.fuelRemaining ??
+          lap.fuel ??
+          lap.fuel_level ??
+          lap.fuel_remaining ??
+          null;
 
         return {
           lapNumber: Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0),
@@ -441,7 +492,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
             Number.isFinite(s3) ? formatLapTime(s3) : '—',
           ] as [string, string, string],
           isPitLap: Boolean(lap.isPitLap ?? lap.pitLap ?? false),
-          // SD-18: Новые поля
+          // SD-18: Новые поля — имена взяты из реальной схемы session_laps
           maxSpeed: formatSpeed(maxSpeedRaw),
           fuelRemaining: formatFuel(fuelRaw),
           tyreWear: parseTyreWear(lap),
@@ -463,9 +514,9 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   return groups;
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // buildTabs — вкладка «Секторы» удалена
-// ───────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 /** Формирует список вкладок страницы с учётом наличия данных о кругах. */
 export function buildTabs(hasLapData: boolean): SessionTabItem[] {
