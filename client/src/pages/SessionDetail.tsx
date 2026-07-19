@@ -4,9 +4,9 @@
  *
  * SD-15: Фильтр по пилоту.
  * Клик по строке в таблице результатов устанавливает selectedDriver.
- * Вкладка «Круги» передаёт этот фильтр в дочерние компоненты.
+ * Вкладки «Круги» и «Секторы» передают этот фильтр в дочерние компоненты.
  *
- * SD-16: Вкладка «Секторы» удалена.
+ * SD-16 revert: Вкладка «Секторы» восстановлена.
  * SD-17: Вкладка «Круги» показывает таблицу напрямую (без аккордеона)
  *         когда выбран конкретный пилот.
  */
@@ -19,6 +19,7 @@ import {
   buildResultRows,
   buildDriverLapGroups,
   buildLapProgressSeries,
+  buildSectorSummary,
   buildTabs,
   normalizeSessionType,
 } from '@/lib/sessionDetailSelectors';
@@ -31,6 +32,7 @@ import {
   SessionEmptyState,
   DriverLapsAccordion,
   SessionLapProgressChart,
+  SessionSectorsSummary,
 } from '@/components/session-detail';
 import type { SessionTabKey } from '@/components/session-detail';
 
@@ -60,7 +62,7 @@ export default function SessionDetail() {
 
   const [activeTab, setActiveTab] = useState<SessionTabKey>('results');
 
-  // SD-15: выбранный пилот для фильтрации вкладки Круги
+  // SD-15: выбранный пилот для фильтрации вкладок Круги / Секторы
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
 
   // ── Вычисляемые данные ────────────────────────────────────────────────────
@@ -80,6 +82,11 @@ export default function SessionDetail() {
 
   const lapGroups = useMemo(
     () => buildDriverLapGroups(laps ?? []),
+    [laps],
+  );
+
+  const sectorRows = useMemo(
+    () => buildSectorSummary(laps ?? []),
     [laps],
   );
 
@@ -173,6 +180,14 @@ export default function SessionDetail() {
         {activeTab === 'laps' && (
           <DriverLapsAccordion
             groups={lapGroups}
+            driverFilter={selectedDriver}
+          />
+        )}
+
+        {/* SD-12: Секторы — сводная таблица лучших секторов и теор. круга */}
+        {activeTab === 'sectors' && (
+          <SessionSectorsSummary
+            rows={sectorRows}
             driverFilter={selectedDriver}
           />
         )}

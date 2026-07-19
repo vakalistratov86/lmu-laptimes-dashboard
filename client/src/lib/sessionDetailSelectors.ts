@@ -515,7 +515,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// buildTabs — вкладка «Секторы» удалена
+// buildTabs — вкладка «Секторы» восстановлена
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Формирует список вкладок страницы с учётом наличия данных о кругах. */
@@ -523,6 +523,7 @@ export function buildTabs(hasLapData: boolean): SessionTabItem[] {
   const allTabs: SessionTabItem[] = [
     { key: 'results', label: 'Результаты' },
     { key: 'laps', label: 'Круги', requiresLapData: true },
+    { key: 'sectors', label: 'Секторы', requiresLapData: true },
     { key: 'lapProgress', label: 'Прогресс', requiresLapData: true },
   ];
   return allTabs.filter((t) => !t.requiresLapData || hasLapData);
