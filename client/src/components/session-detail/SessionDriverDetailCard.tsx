@@ -8,7 +8,7 @@
  * выбранный пилот (по умолчанию позиция 1) и остаётся видимой при
  * переключении вкладок Результаты / Круги / Прогресс.
  */
-import { Medal, User } from 'lucide-react';
+import { Medal } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DriverName } from '@/components/DriverName';
@@ -51,8 +51,6 @@ export function SessionDriverDetailCard({
   lapGroup,
   sectorSummary,
 }: SessionDriverDetailCardProps) {
-  const isPlayer = row.isPlayer === 1;
-
   return (
     <Card
       data-testid="card-driver-detail"
@@ -67,12 +65,7 @@ export function SessionDriverDetailCard({
             row.position
           )}
         </div>
-        {isPlayer && <User size={14} className="text-primary" />}
-        <DriverName
-          name={row.driverName}
-          isPlayer={row.isPlayer}
-          className={`font-semibold text-sm ${isPlayer ? 'text-primary' : ''}`}
-        />
+        <DriverName name={row.driverName} isPlayer={row.isPlayer} className="font-semibold text-sm" />
         {row.carClass && (
           <Badge variant="outline" className={getClassBadgeClass(row.carClass)}>
             {row.carClass}

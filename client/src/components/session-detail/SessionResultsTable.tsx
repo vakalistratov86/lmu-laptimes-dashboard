@@ -7,7 +7,7 @@
  * пилот (по умолчанию — позиция 1), карточка с его деталями видна
  * постоянно на всех вкладках.
  */
-import { Medal, User } from 'lucide-react';
+import { Medal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DriverName } from '@/components/DriverName';
 import type { SessionResultRowView } from './types';
@@ -17,7 +17,6 @@ import type { SessionResultRowView } from './types';
 interface SessionResultsRowProps {
   row: SessionResultRowView;
   isFastest: boolean;
-  isPlayer: boolean;
   isSelected: boolean;
   onSelect: (driverName: string) => void;
 }
@@ -25,7 +24,6 @@ interface SessionResultsRowProps {
 export function SessionResultsRow({
   row,
   isFastest,
-  isPlayer,
   isSelected,
   onSelect,
 }: SessionResultsRowProps) {
@@ -37,8 +35,6 @@ export function SessionResultsRow({
         'border-b border-border/60 last:border-0 cursor-pointer transition-colors',
         isSelected
           ? 'bg-primary/15 ring-1 ring-inset ring-primary/40'
-          : isPlayer
-          ? 'bg-primary/5 hover:bg-primary/10'
           : 'hover:bg-muted/40',
       ].join(' ')}
     >
@@ -56,12 +52,7 @@ export function SessionResultsRow({
       {/* Пилот */}
       <td className="px-4 py-2.5">
         <div className="flex items-center gap-2">
-          {isPlayer && <User size={13} className="text-primary" />}
-          <DriverName
-            name={row.driverName}
-            isPlayer={row.isPlayer}
-            className={isPlayer ? 'font-medium text-primary' : 'font-medium'}
-          />
+          <DriverName name={row.driverName} isPlayer={row.isPlayer} className="font-medium" />
         </div>
       </td>
 
@@ -151,7 +142,6 @@ export function SessionResultsTable({
               key={row.position}
               row={row}
               isFastest={!!fastestLapTime && row.bestLapTime === fastestLapTime}
-              isPlayer={row.isPlayer === 1}
               isSelected={selectedDriver === row.driverName}
               onSelect={onSelectDriver}
             />

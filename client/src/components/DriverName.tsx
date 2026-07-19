@@ -1,32 +1,29 @@
+import { User, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DriverNameProps {
   name: string;
   isPlayer?: number | null;
   className?: string;
-  badgeClassName?: string;
+  iconClassName?: string;
 }
 
 /**
- * Отображает имя пилота с меткой «ИИ» если isPlayer !== 1.
- * isPlayer=1 → живой игрок (без метки), isPlayer=0/null → ИИ.
+ * Отображает имя пилота со значком типа: человек (зелёный) — реальный
+ * игрок (isPlayer === 1), робот (жёлтый) — ИИ (isPlayer === 0 / null).
+ * Единый стиль для всех списков пилотов в приложении. Имя всегда наследует
+ * обычный адаптивный цвет текста — только значок кодирует тип пилота.
  */
-export function DriverName({ name, isPlayer, className, badgeClassName }: DriverNameProps) {
-  const isAI = isPlayer !== 1;
+export function DriverName({ name, isPlayer, className, iconClassName }: DriverNameProps) {
+  const isReal = isPlayer === 1;
+  const Icon = isReal ? User : Bot;
   return (
-    <span className={cn("inline-flex items-center gap-1", className)}>
+    <span className={cn("inline-flex items-center gap-1.5", className)}>
+      <Icon
+        size={13}
+        className={cn("shrink-0", isReal ? "text-green-500" : "text-amber-400", iconClassName)}
+      />
       {name}
-      {isAI && (
-        <span
-          className={cn(
-            "inline-flex items-center rounded px-1 py-0 text-[9px] font-semibold uppercase leading-4 tracking-wide",
-            "bg-amber-400/15 text-amber-400 border border-amber-400/30",
-            badgeClassName
-          )}
-        >
-          ИИ
-        </span>
-      )}
     </span>
   );
 }
