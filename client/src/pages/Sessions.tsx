@@ -117,8 +117,16 @@ export default function Sessions() {
   const [, navigate] = useLocation();
 
   const activeFilter = useMemo(() => {
-    const params = new URLSearchParams(searchString);
-    return params.get("filter") ?? "all";
+    const normalizedSearch = searchString.startsWith("?")
+      ? searchString.slice(1)
+      : searchString;
+
+    const params = new URLSearchParams(normalizedSearch);
+    const filter = params.get("filter");
+
+    return filter === "practice" || filter === "qualify" || filter === "race"
+      ? filter
+      : "all";
   }, [searchString]);
 
   const setActiveFilter = (key: string) => {
