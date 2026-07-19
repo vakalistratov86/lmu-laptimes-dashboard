@@ -44,11 +44,11 @@ const CATEGORY_META: Record<SessionCategory, { label: string; icon: React.ReactN
 
 // Цветовые классы фильтров — совпадают с цветами бейджей сессий
 const FILTER_BG_CLASSES: Record<SessionCategory, string> = {
-  practice:  "bg-sky-400/10 text-sky-400",
-  qualify:   "bg-amber-400/10 text-amber-400",
-  race:      "bg-emerald-400/10 text-emerald-400",
-  superpole: "bg-fuchsia-400/10 text-fuchsia-400",
-  warmup:    "bg-slate-400/10 text-slate-300",
+  practice:  "bg-blue-500/15 text-blue-500 dark:text-blue-400 border-blue-500/30",
+  qualify:   "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
+  race:      "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
+  superpole: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
+  warmup:    "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
 };
 
 function trackDisplayLabel(trackName: string, course: string | null | undefined): string {
@@ -76,9 +76,9 @@ function getBestLapForSession(session: SessionItem): number | null {
 }
 
 // ─── Filter buttons ────────────────────────────────────────────────────────────
-// Оставлены только 3 основных типа: тренировка, квалификация, гонка
+// Технический ключ all → человекочитаемое "Все"
 const FILTER_BUTTONS: { key: string; label: string }[] = [
-  { key: "Все",       label: "Все" },
+  { key: "all",      label: "Все" },
   { key: "practice", label: "Тренировка" },
   { key: "qualify",  label: "Квалификация" },
   { key: "race",     label: "Гонка" },
@@ -118,32 +118,34 @@ export default function Sessions() {
 
   const activeFilter = useMemo(() => {
     const params = new URLSearchParams(searchString);
-    return params.get("filter") ?? "Все";
+    return params.get("filter") ?? "all";
   }, [searchString]);
 
   const setActiveFilter = (key: string) => {
-    if (key === "Все") navigate("/sessions");
+    if (key === "all") navigate("/sessions");
     else navigate(`/sessions?filter=${encodeURIComponent(key)}`);
   };
 
   const filtered = useMemo(() => {
     if (!sessions) return [] as SessionItem[];
     const all = sessions as SessionItem[];
-    if (activeFilter === "Все") return all;
-    // Для фильтра «qualify» — захватываем и superpole
+
+    if (activeFilter === "all") return all;
+
     if (activeFilter === "qualify") {
       return all.filter((s) => {
         const cat = normalizeType(s.sessionType);
         return cat === "qualify" || cat === "superpole";
       });
     }
-    // Для фильтра «practice» — захватываем и warmup
+
     if (activeFilter === "practice") {
       return all.filter((s) => {
         const cat = normalizeType(s.sessionType);
         return cat === "practice" || cat === "warmup";
       });
     }
+
     return all.filter((s) => normalizeType(s.sessionType) === activeFilter);
   }, [sessions, activeFilter]);
 
@@ -176,10 +178,12 @@ export default function Sessions() {
       {/* Filter buttons */}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Фильтр по типу сессии">
         {FILTER_BUTTONS.map(({ key, label }) => {
-          const isAll = key === "Все";
+          const isAll = key === "all";
           const isActive = activeFilter === key;
-          const normalizedType: SessionCategory | null = isAll ? null : normalizeType(key);
-          const colorClass = normalizedType != null ? FILTER_BG_CLASSES[normalizedType] : "";
+          const normalizedType: SessionCategory | null =
+            isAll ? null : (normalizeType(key) as SessionCategory);
+          const colorClass =
+            normalizedType != null ? FILTER_BG_CLASSES[normalizedType] : "";
 
           const icon =
             normalizedType === "practice" ? <Dumbbell className="h-3 w-3" /> :
@@ -200,8 +204,11 @@ export default function Sessions() {
                     ? "bg-accent text-accent-foreground border-border"
                     : "bg-background text-muted-foreground border-border hover:bg-accent/40"
                   : isActive
+                    // Активный цветной фильтр: используем тот же цвет, что и бейдж
                     ? cn(colorClass, "border-transparent hover:ring-1 hover:ring-border/60")
-                    : "bg-background text-muted-foreground border-border opacity-50 hover:opacity-80 hover:bg-accent/20",
+                    // Неактивный: оставляем нейтральный фон, но не трогаем цвет текста,
+                    // чтобы иконка могла наследовать его из активного состояния
+                    : "bg-background text-muted-foreground/80 border-border opacity-60 hover:opacity-100 hover:bg-accent/10",
               )}
             >
               {icon && (
@@ -248,7 +255,7 @@ export default function Sessions() {
           </p>
           <button
             type="button"
-            onClick={() => setActiveFilter("Все")}
+            onClick={() => setActiveFilter("all")}
             className="text-sm text-primary underline-offset-4 hover:underline"
           >
             Показать все сессии
@@ -278,7 +285,7 @@ export default function Sessions() {
             const cat = normalizeType(session.sessionType);
             const meta = CATEGORY_META[cat];
             const bestLap = getBestLapForSession(session);
-            const filterParam = activeFilter !== "Все"
+            const filterParam = activeFilter !== "all"
               ? `?from_filter=${encodeURIComponent(activeFilter)}`
               : "";
             const href = `/sessions/${session.id}${filterParam}`;
