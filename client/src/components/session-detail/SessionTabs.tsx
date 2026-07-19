@@ -1,5 +1,9 @@
 /**
  * SD-8: Переключатель вкладок страницы SessionDetail.
+ *
+ * SD-20: Встроен в шапку общей карточки результатов/кругов/прогресса —
+ * теперь единственный «заголовок» этой карточки (текст «Итоговые
+ * результаты» убран, вкладки сами обозначают текущий раздел).
  */
 import type { SessionTabItem, SessionTabKey } from './types';
 
@@ -14,7 +18,7 @@ export function SessionTabs({ tabs, active, onChange }: SessionTabsProps) {
     <nav
       role="tablist"
       aria-label="Разделы сессии"
-      className="flex gap-1 border-b border-border"
+      className="flex gap-1 border-b border-border bg-secondary/40 px-2 pt-2"
     >
       {tabs.map((tab) => {
         const isActive = tab.key === active;

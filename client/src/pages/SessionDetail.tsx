@@ -2,20 +2,21 @@
  * SD-11: Рефакторинг страницы SessionDetail.
  * Страница теперь — оркестратор данных; вся разметка вынесена в компоненты.
  *
- * SD-15: Фильтр по пилоту.
- * Клик по строке в таблице результатов устанавливает selectedDriver.
- * Вкладки «Круги» и «Секторы» передают этот фильтр в дочерние компоненты.
- *
- * SD-16 revert: Вкладка «Секторы» восстановлена.
- * SD-17: Вкладка «Круги» показывает таблицу напрямую (без аккордеона)
- *         когда выбран конкретный пилот.
+ * SD-20: Переработка дизайна страницы.
+ * - Вкладка «Секторы» убрана (сектора остались только внутри карточки пилота).
+ * - Вкладки Результаты / Круги / Прогресс встроены в шапку общей карточки
+ *   (там, где раньше был заголовок «Итоговые результаты»).
+ * - Карточка деталей пилота больше не закрывается: по умолчанию выбрана
+ *   позиция 1, карточка видна на всех вкладках постоянно.
+ * - SessionHeader + SessionHeroStats заменены единой статичной плиткой
+ *   SessionInfoCard с информацией только о трассе и сессии (без данных
+ *   пилотов) — она тоже видна на всех вкладках.
  */
 import { useMemo, useState } from 'react';
 import { useRoute, useSearch } from 'wouter';
 import { useSession, useSessionLaps } from '@/lib/api';
 import { formatLap } from '@/lib/format';
 import {
-  buildHeroStats,
   buildResultRows,
   buildDriverLapGroups,
   buildLapProgressSeries,
@@ -24,15 +25,14 @@ import {
   normalizeSessionType,
 } from '@/lib/sessionDetailSelectors';
 import {
-  SessionHeader,
-  SessionHeroStats,
+  SessionInfoCard,
   SessionResultsTable,
+  SessionDriverDetailCard,
   SessionTabs,
   SessionLoadingSkeleton,
   SessionEmptyState,
-  DriverLapsAccordion,
+  DriverLapTable,
   SessionLapProgressChart,
-  SessionSectorsSummary,
 } from '@/components/session-detail';
 import type { SessionTabKey } from '@/components/session-detail';
 
@@ -62,18 +62,13 @@ export default function SessionDetail() {
 
   const [activeTab, setActiveTab] = useState<SessionTabKey>('results');
 
-  // SD-15: выбранный пилот для фильтрации вкладок Круги / Секторы
+  // SD-15/SD-20: Выбранный пилот для карточки деталей — всегда ровно один.
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
 
   // ── Вычисляемые данные ────────────────────────────────────────────────────
   const hasLapData = (laps?.length ?? 0) > 0;
 
   const tabs = useMemo(() => buildTabs(hasLapData), [hasLapData]);
-
-  const heroStats = useMemo(
-    () => (session ? buildHeroStats(session) : []),
-    [session],
-  );
 
   const resultRows = useMemo(
     () => (session ? buildResultRows(session) : []),
@@ -88,6 +83,24 @@ export default function SessionDetail() {
   const sectorRows = useMemo(
     () => buildSectorSummary(laps ?? []),
     [laps],
+  );
+
+  // SD-20: По умолчанию выбрана позиция 1 (resultRows уже отсортированы по
+  // позиции) — без этого при первой отрисовке карточка была бы пустой.
+  const effectiveSelectedDriver = selectedDriver ?? resultRows[0]?.driverName ?? null;
+
+  // SD-19: Данные выбранного пилота для детальной карточки над таблицей
+  const selectedResultRow = useMemo(
+    () => resultRows.find((r) => r.driverName === effectiveSelectedDriver),
+    [resultRows, effectiveSelectedDriver],
+  );
+  const selectedLapGroup = useMemo(
+    () => lapGroups.find((g) => g.driverName === effectiveSelectedDriver),
+    [lapGroups, effectiveSelectedDriver],
+  );
+  const selectedSectorSummary = useMemo(
+    () => sectorRows.find((s) => s.driverName === effectiveSelectedDriver),
+    [sectorRows, effectiveSelectedDriver],
   );
 
   const progressSeries = useMemo(
@@ -108,13 +121,6 @@ export default function SessionDetail() {
     return min ? formatLap(min) : null;
   }, [session]);
 
-  const playerName = useMemo(() => {
-    if (!session) return null;
-    const s = session as Record<string, any>;
-    const results: Record<string, any>[] = Array.isArray(s.results) ? s.results : [];
-    return results.find((r) => r.isPlayer === 1)?.driverName ?? null;
-  }, [session]);
-
   // ── Состояния загрузки / ошибки ───────────────────────────────────────────
   if (isLoading) {
     return <SessionLoadingSkeleton />;
@@ -131,71 +137,72 @@ export default function SessionDetail() {
     String(s.course).toLowerCase() !== String(s.trackName).toLowerCase()
       ? String(s.course)
       : null;
+  const trackLengthKm =
+    typeof s.trackLengthM === 'number' && s.trackLengthM > 0
+      ? (s.trackLengthM / 1000).toFixed(3)
+      : null;
 
   return (
     <div className="space-y-5">
-      {/* SD-5: Заголовок */}
-      <SessionHeader
+      {/* SD-20: Статичная плитка с информацией о трассе и сессии */}
+      <SessionInfoCard
         trackName={String(s.trackName ?? '')}
+        courseLabel={courseLabel}
         sessionType={String(s.sessionType ?? '')}
         sessionTypeNorm={sessionTypeNorm}
         dateFormatted={formatDate(String(s.dateTime ?? ''))}
-        courseLabel={courseLabel}
         backHref={backHref}
+        event={s.event}
+        driverCount={s.driverCount}
+        lapCount={s.lapCount}
+        trackLengthKm={trackLengthKm}
+        gameVersion={s.gameVersion}
       />
 
-      {/* SD-6: KPI-блок */}
-      <SessionHeroStats
-        stats={heroStats}
-        meta={{
-          event: s.event,
-          driverCount: s.driverCount,
-          lapCount: s.lapCount,
-          gameVersion: s.gameVersion,
-        }}
-      />
+      {/* SD-20: Карточка деталей пилота — всегда видна, не зависит от вкладки */}
+      {selectedResultRow && (
+        <SessionDriverDetailCard
+          row={selectedResultRow}
+          lapGroup={selectedLapGroup}
+          sectorSummary={selectedSectorSummary}
+        />
+      )}
 
-      {/* SD-8: Вкладки */}
-      <SessionTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
+      {/* SD-20: Вкладки встроены в шапку общей карточки результатов/кругов/прогресса */}
+      <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
+        <SessionTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
 
-      {/* Контент вкладок */}
-      <div
-        id={`tabpanel-${activeTab}`}
-        role="tabpanel"
-        aria-labelledby={activeTab}
-        className="space-y-4"
-      >
-        {/* SD-7: Таблица результатов */}
-        {activeTab === 'results' && (
-          <SessionResultsTable
-            rows={resultRows}
-            fastestLapTime={fastestLapTime}
-            playerName={playerName}
-            selectedDriver={selectedDriver}
-            onSelectDriver={setSelectedDriver}
-          />
-        )}
+        <div
+          id={`tabpanel-${activeTab}`}
+          role="tabpanel"
+          aria-labelledby={activeTab}
+        >
+          {/* SD-7: Таблица результатов */}
+          {activeTab === 'results' && (
+            <SessionResultsTable
+              rows={resultRows}
+              fastestLapTime={fastestLapTime}
+              selectedDriver={effectiveSelectedDriver}
+              onSelectDriver={setSelectedDriver}
+            />
+          )}
 
-        {/* SD-13 / SD-17: Круги — таблица без аккордеона если пилот выбран */}
-        {activeTab === 'laps' && (
-          <DriverLapsAccordion
-            groups={lapGroups}
-            driverFilter={selectedDriver}
-          />
-        )}
+          {/* SD-17/SD-20: Круги выбранного пилота */}
+          {activeTab === 'laps' && (
+            selectedLapGroup ? (
+              <DriverLapTable laps={selectedLapGroup.laps} />
+            ) : (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Данные по кругам недоступны для этой сессии.
+              </p>
+            )
+          )}
 
-        {/* SD-12: Секторы — сводная таблица лучших секторов и теор. круга */}
-        {activeTab === 'sectors' && (
-          <SessionSectorsSummary
-            rows={sectorRows}
-            driverFilter={selectedDriver}
-          />
-        )}
-
-        {/* SD-14: График прогресса */}
-        {activeTab === 'lapProgress' && (
-          <SessionLapProgressChart series={progressSeries} />
-        )}
+          {/* SD-14: График прогресса */}
+          {activeTab === 'lapProgress' && (
+            <SessionLapProgressChart series={progressSeries} />
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,13 +1,12 @@
 /**
  * Barrel-файл для экспорта компонентов session-detail.
  */
-export { SessionHeader } from './SessionHeader';
-export { SessionHeroStats } from './SessionHeroStats';
+export { SessionInfoCard } from './SessionInfoCard';
 export { SessionResultsTable } from './SessionResultsTable';
+export { SessionDriverDetailCard } from './SessionDriverDetailCard';
 export { SessionTabs } from './SessionTabs';
 export { SessionLoadingSkeleton } from './SessionLoadingSkeleton';
 export { SessionEmptyState } from './SessionEmptyState';
-export { DriverLapsAccordion, DriverLapTable } from './DriverLapsAccordion';
+export { DriverLapTable } from './DriverLapTable';
 export { SessionLapProgressChart } from './SessionLapProgressChart';
-export { SessionSectorsSummary } from './SessionSectorsSummary';
 export type { SessionTabKey } from './types';

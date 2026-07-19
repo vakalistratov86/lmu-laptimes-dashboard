@@ -1,14 +1,13 @@
 /**
  * SD-7: Таблица итоговых результатов сессии.
- * SessionResultsTable — обёртка (Card + thead).
- * SessionResultsRow  — строка таблицы.
  *
- * SD-15: Поддержка выделения строки пилота.
- * Клик по строке устанавливает selectedDriver; повторный клик — сбрасывает.
- * Выделенный пилот передаётся в onSelectDriver для фильтрации вкладок Круги / Секторы.
+ * SD-20: Больше не рендерит собственную Card/заголовок — таблица теперь
+ * встроена в общую карточку с вкладками (см. SessionDetail.tsx). Выбор
+ * пилота больше не снимается повторным кликом: всегда выбран ровно один
+ * пилот (по умолчанию — позиция 1), карточка с его деталями видна
+ * постоянно на всех вкладках.
  */
 import { Medal, User } from 'lucide-react';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DriverName } from '@/components/DriverName';
 import type { SessionResultRowView } from './types';
@@ -119,12 +118,10 @@ interface SessionResultsTableProps {
   rows: SessionResultRowView[];
   /** Лучшее время сессии (отформатированное). */
   fastestLapTime?: string | null;
-  /** @deprecated Не используется. Игрок определяется через row.isPlayer. */
-  playerName?: string | null;
-  /** Имя выбранного пилота (null = никто не выбран). */
+  /** Имя выбранного пилота — всегда задано (по умолчанию позиция 1). */
   selectedDriver?: string | null;
   /** Колбэк при клике на строку пилота. */
-  onSelectDriver?: (driverName: string | null) => void;
+  onSelectDriver: (driverName: string) => void;
 }
 
 export function SessionResultsTable({
@@ -133,59 +130,34 @@ export function SessionResultsTable({
   selectedDriver,
   onSelectDriver,
 }: SessionResultsTableProps) {
-  function handleSelect(name: string) {
-    if (!onSelectDriver) return;
-    // Повторный клик — снять выделение
-    onSelectDriver(selectedDriver === name ? null : name);
-  }
-
   return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border bg-secondary/40 px-4 py-3">
-        <h2 className="font-semibold text-sm">Итоговые результаты</h2>
-        {selectedDriver && (
-          <button
-            type="button"
-            onClick={() => onSelectDriver?.(null)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Сбросить фильтр ✕
-          </button>
-        )}
-      </div>
-      {selectedDriver && (
-        <div className="bg-primary/5 px-4 py-1.5 text-xs text-primary border-b border-primary/20">
-          Фильтр: <span className="font-semibold">{selectedDriver}</span> — вкладки «Круги» и «Секторы» показывают только этого пилота
-        </div>
-      )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="px-4 py-2.5 w-12">Поз.</th>
-              <th className="px-4 py-2.5">Пилот</th>
-              <th className="hidden px-4 py-2.5 sm:table-cell">Команда / машина</th>
-              <th className="px-4 py-2.5">Статус</th>
-              <th className="px-4 py-2.5 text-right">Кругов</th>
-              <th className="hidden px-4 py-2.5 text-right md:table-cell">Пит</th>
-              <th className="px-4 py-2.5 text-right">Лучший круг</th>
-              <th className="hidden px-4 py-2.5 text-right lg:table-cell">Отставание</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <SessionResultsRow
-                key={row.position}
-                row={row}
-                isFastest={!!fastestLapTime && row.bestLapTime === fastestLapTime}
-                isPlayer={row.isPlayer === 1}
-                isSelected={selectedDriver === row.driverName}
-                onSelect={handleSelect}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <th className="px-4 py-2.5 w-12">Поз.</th>
+            <th className="px-4 py-2.5">Пилот</th>
+            <th className="hidden px-4 py-2.5 sm:table-cell">Команда / машина</th>
+            <th className="px-4 py-2.5">Статус</th>
+            <th className="px-4 py-2.5 text-right">Кругов</th>
+            <th className="hidden px-4 py-2.5 text-right md:table-cell">Пит</th>
+            <th className="px-4 py-2.5 text-right">Лучший круг</th>
+            <th className="hidden px-4 py-2.5 text-right lg:table-cell">Отставание</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <SessionResultsRow
+              key={row.position}
+              row={row}
+              isFastest={!!fastestLapTime && row.bestLapTime === fastestLapTime}
+              isPlayer={row.isPlayer === 1}
+              isSelected={selectedDriver === row.driverName}
+              onSelect={onSelectDriver}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

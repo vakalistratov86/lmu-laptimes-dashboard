@@ -138,6 +138,37 @@ function parseTyreWear(lap: Record<string, any>): TyreWear | null {
 }
 
 /**
+ * SD-19: Извлекает «сырое» значение максимальной скорости из lap-записи
+ * (используется как при форматировании отдельного круга, так и при
+ * агрегации максимума по всей сессии для карточки пилота).
+ */
+function extractMaxSpeedRaw(lap: Record<string, any>): unknown {
+  return (
+    lap.topSpeedKph ??
+    lap.topSpeed ??
+    lap.maxSpeed ??
+    lap.maxSpeedKmh ??
+    lap.top_speed_kph ??
+    lap.top_speed ??
+    null
+  );
+}
+
+/**
+ * SD-19: Извлекает «сырое» значение остатка топлива из lap-записи.
+ */
+function extractFuelRaw(lap: Record<string, any>): unknown {
+  return (
+    lap.fuelLevel ??
+    lap.fuelRemaining ??
+    lap.fuel ??
+    lap.fuel_level ??
+    lap.fuel_remaining ??
+    null
+  );
+}
+
+/**
  * SD-18: Извлекает тип/состав шин из lap-записи.
  *
  * Реальные поля в session_laps (schema.ts):
@@ -294,6 +325,12 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       (r.status && r.status.trim()) ? r.status.trim() :
       null;
 
+    const carClass: string | null =
+      (r.carClass && String(r.carClass).trim()) ? String(r.carClass).trim() : null;
+
+    const classPosition: number | null =
+      typeof r.classPosition === 'number' ? r.classPosition : null;
+
     return {
       position: r.position ?? idx + 1,
       driverName: String(r.driverName ?? r.driver ?? '—'),
@@ -307,6 +344,8 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       totalLaps,
       finishStatus,
       isPlayer: r.isPlayer ?? null,
+      carClass,
+      classPosition,
     };
   });
 }
@@ -458,26 +497,9 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
         const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
         const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
 
-        // SD-18: Максимальная скорость
-        // Приоритет: topSpeedKph (реальное поле session_laps) → fallback
-        const maxSpeedRaw =
-          lap.topSpeedKph ??
-          lap.topSpeed ??
-          lap.maxSpeed ??
-          lap.maxSpeedKmh ??
-          lap.top_speed_kph ??
-          lap.top_speed ??
-          null;
-
-        // SD-18: Остаток топлива
-        // Приоритет: fuelLevel (реальное поле session_laps) → fallback
-        const fuelRaw =
-          lap.fuelLevel ??
-          lap.fuelRemaining ??
-          lap.fuel ??
-          lap.fuel_level ??
-          lap.fuel_remaining ??
-          null;
+        // SD-18: Максимальная скорость и остаток топлива
+        const maxSpeedRaw = extractMaxSpeedRaw(lap);
+        const fuelRaw = extractFuelRaw(lap);
 
         return {
           lapNumber: Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0),
@@ -500,6 +522,48 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
         };
       });
 
+    // SD-19: Агрегированная статистика по кругам — для карточки деталей пилота.
+    // rawLaps уже отсортированы по номеру круга (sort() выше мутирует массив).
+    const sortedRawLaps = rawLaps as AnyLap[];
+    const timedLaps = sortedRawLaps.filter((lap: AnyLap) => {
+      const t = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
+      return Number.isFinite(t) && t > 0;
+    });
+    // Пит-лапы искажают среднее/худшее время — считаем без них,
+    // но если все круги были пит-лапами, используем все круги как fallback.
+    const nonPitTimedLaps = timedLaps.filter(
+      (lap: AnyLap) => !(lap.isPitLap ?? lap.pitLap ?? false),
+    );
+    const lapsForAvg = nonPitTimedLaps.length > 0 ? nonPitTimedLaps : timedLaps;
+    const lapSeconds: number[] = lapsForAvg.map((lap: AnyLap) =>
+      Number(lap.lapTimeSeconds ?? lap.time ?? NaN),
+    );
+    const avgSeconds =
+      lapSeconds.length > 0
+        ? lapSeconds.reduce((sum: number, t: number) => sum + t, 0) / lapSeconds.length
+        : NaN;
+    const worstSeconds =
+      lapSeconds.length > 0 ? Math.max(...lapSeconds) : NaN;
+
+    let maxSpeedRawAgg = -Infinity;
+    const tyreTypesUsed = new Set<string>();
+    for (const lap of sortedRawLaps) {
+      const speed = Number(extractMaxSpeedRaw(lap));
+      if (Number.isFinite(speed) && speed > maxSpeedRawAgg) maxSpeedRawAgg = speed;
+      const tyre = parseTyreType(lap);
+      if (tyre !== '—') tyreTypesUsed.add(tyre);
+    }
+
+    const fuelStartRaw = sortedRawLaps.length > 0 ? extractFuelRaw(sortedRawLaps[0]) : null;
+    const fuelEndRaw =
+      sortedRawLaps.length > 0
+        ? extractFuelRaw(sortedRawLaps[sortedRawLaps.length - 1])
+        : null;
+
+    const pitLapsCount = sortedRawLaps.filter((lap: AnyLap) =>
+      Boolean(lap.isPitLap ?? lap.pitLap ?? false),
+    ).length;
+
     groups.push({
       driverName,
       carNumber,
@@ -508,6 +572,15 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
         ? formatLapTime(personalBestSeconds)
         : '—',
       laps: lapRows,
+      avgLapTime: formatLapTime(avgSeconds),
+      worstLapTime: formatLapTime(worstSeconds),
+      maxSpeedObserved: formatSpeed(
+        Number.isFinite(maxSpeedRawAgg) ? maxSpeedRawAgg : null,
+      ),
+      tyreTypesUsed: Array.from(tyreTypesUsed),
+      fuelStart: formatFuel(fuelStartRaw),
+      fuelEnd: formatFuel(fuelEndRaw),
+      pitLapsCount,
     });
   }
 
@@ -523,7 +596,6 @@ export function buildTabs(hasLapData: boolean): SessionTabItem[] {
   const allTabs: SessionTabItem[] = [
     { key: 'results', label: 'Результаты' },
     { key: 'laps', label: 'Круги', requiresLapData: true },
-    { key: 'sectors', label: 'Секторы', requiresLapData: true },
     { key: 'lapProgress', label: 'Прогресс', requiresLapData: true },
   ];
   return allTabs.filter((t) => !t.requiresLapData || hasLapData);

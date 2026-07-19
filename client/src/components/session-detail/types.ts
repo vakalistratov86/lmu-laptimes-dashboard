@@ -5,8 +5,8 @@
 
 // ── Вкладки ──────────────────────────────────────────────────────────────────
 
-/** Допустимые ключи вкл��док страницы SessionDetail. */
-export type SessionTabKey = 'results' | 'laps' | 'lapProgress' | 'sectors';
+/** Допустимые ключи вкладок страницы SessionDetail. */
+export type SessionTabKey = 'results' | 'laps' | 'lapProgress';
 
 /** Элемент навигационной вкладки. */
 export interface SessionTabItem {
@@ -48,6 +48,10 @@ export interface SessionResultRowView {
   finishStatus?: string | null;
   /** 1 — живой игрок, 0 / null — ИИ. */
   isPlayer?: number | null;
+  /** Класс машины (Hypercar / LMP2 / GT3…). */
+  carClass?: string | null;
+  /** Позиция внутри класса. */
+  classPosition?: number | null;
 }
 
 // ── Круги по пилотам ─────────────────────────────────────────────────────────
@@ -91,6 +95,21 @@ export interface DriverLapsGroupView {
   laps: DriverLapRowView[];
   /** 1 — живой игрок, 0 / null — ИИ. */
   isPlayer?: number | null;
+  // ── SD-19: Агрегированная статистика по кругам пилота ─────────────────────
+  /** Средний круг (без учёта пит-лапов). */
+  avgLapTime: string;
+  /** Худший (самый медленный) круг без учёта пит-лапов. */
+  worstLapTime: string;
+  /** Максимальная зафиксированная скорость за сессию (км/ч). */
+  maxSpeedObserved: string;
+  /** Уникальные типы/составы шин, использованные за сессию. */
+  tyreTypesUsed: string[];
+  /** Остаток топлива на первом зафиксированном круге (л). */
+  fuelStart: string;
+  /** Остаток топлива на последнем зафиксированном круге (л). */
+  fuelEnd: string;
+  /** Количество пит-лапов. */
+  pitLapsCount: number;
 }
 
 // ── Секторы ──────────────────────────────────────────────────────────────────

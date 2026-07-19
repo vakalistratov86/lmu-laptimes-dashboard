@@ -68,8 +68,7 @@ export function SessionLapProgressChart({ series }: SessionLapProgressChartProps
   });
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-4 text-sm font-semibold">Прогрессия времён кругов</h2>
+    <div className="p-4">
       <ResponsiveContainer width="100%" height={320}>
         <LineChart data={data} margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
           <CartesianGrid
