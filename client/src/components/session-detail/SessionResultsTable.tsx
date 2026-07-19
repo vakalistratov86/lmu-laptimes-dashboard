@@ -2,29 +2,46 @@
  * SD-7: Таблица итоговых результатов сессии.
  * SessionResultsTable — обёртка (Card + thead).
  * SessionResultsRow  — строка таблицы.
+ *
+ * SD-15: Поддержка выделения строки пилота.
+ * Клик по строке устанавливает selectedDriver; повторный клик — сбрасывает.
+ * Выделенный пилот передаётся в onSelectDriver для фильтрации вкладок Круги / Секторы.
  */
 import { Medal, User } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DriverName } from '@/components/DriverName';
-import { getClassBadgeClass } from '@/lib/classStyles';
 import type { SessionResultRowView } from './types';
 
-// ─── Row ───────────────────────────────────────────────────────────────────────────────
+// ─── Row ───────────────────────────────────────────────────────────────────────
 
 interface SessionResultsRowProps {
   row: SessionResultRowView;
   isFastest: boolean;
   isPlayer: boolean;
+  isSelected: boolean;
+  onSelect: (driverName: string) => void;
 }
 
-export function SessionResultsRow({ row, isFastest, isPlayer }: SessionResultsRowProps) {
+export function SessionResultsRow({
+  row,
+  isFastest,
+  isPlayer,
+  isSelected,
+  onSelect,
+}: SessionResultsRowProps) {
   return (
     <tr
       data-testid={`row-result-${row.position}`}
-      className={`border-b border-border/60 last:border-0 hover:bg-muted/40 ${
-        isPlayer ? 'bg-primary/5' : ''
-      }`}
+      onClick={() => onSelect(row.driverName)}
+      className={[
+        'border-b border-border/60 last:border-0 cursor-pointer transition-colors',
+        isSelected
+          ? 'bg-primary/15 ring-1 ring-inset ring-primary/40'
+          : isPlayer
+          ? 'bg-primary/5 hover:bg-primary/10'
+          : 'hover:bg-muted/40',
+      ].join(' ')}
     >
       {/* Позиция */}
       <td className="px-4 py-2.5">
@@ -96,7 +113,7 @@ export function SessionResultsRow({ row, isFastest, isPlayer }: SessionResultsRo
   );
 }
 
-// ─── Table ────────────────────────────────────────────────────────────────────────────
+// ─── Table ────────────────────────────────────────────────────────────────────
 
 interface SessionResultsTableProps {
   rows: SessionResultRowView[];
@@ -104,17 +121,43 @@ interface SessionResultsTableProps {
   fastestLapTime?: string | null;
   /** @deprecated Не используется. Игрок определяется через row.isPlayer. */
   playerName?: string | null;
+  /** Имя выбранного пилота (null = никто не выбран). */
+  selectedDriver?: string | null;
+  /** Колбэк при клике на строку пилота. */
+  onSelectDriver?: (driverName: string | null) => void;
 }
 
 export function SessionResultsTable({
   rows,
   fastestLapTime,
+  selectedDriver,
+  onSelectDriver,
 }: SessionResultsTableProps) {
+  function handleSelect(name: string) {
+    if (!onSelectDriver) return;
+    // Повторный клик — снять выделение
+    onSelectDriver(selectedDriver === name ? null : name);
+  }
+
   return (
     <Card className="overflow-hidden">
-      <div className="border-b border-border bg-secondary/40 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border bg-secondary/40 px-4 py-3">
         <h2 className="font-semibold text-sm">Итоговые результаты</h2>
+        {selectedDriver && (
+          <button
+            type="button"
+            onClick={() => onSelectDriver?.(null)}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Сбросить фильтр ✕
+          </button>
+        )}
       </div>
+      {selectedDriver && (
+        <div className="bg-primary/5 px-4 py-1.5 text-xs text-primary border-b border-primary/20">
+          Фильтр: <span className="font-semibold">{selectedDriver}</span> — вкладки «Круги» и «Секторы» показывают только этого пилота
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -136,6 +179,8 @@ export function SessionResultsTable({
                 row={row}
                 isFastest={!!fastestLapTime && row.bestLapTime === fastestLapTime}
                 isPlayer={row.isPlayer === 1}
+                isSelected={selectedDriver === row.driverName}
+                onSelect={handleSelect}
               />
             ))}
           </tbody>

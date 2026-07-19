@@ -1,11 +1,15 @@
 /**
  * SD-11: Рефакторинг страницы SessionDetail.
  * Страница теперь — оркестратор данных; вся разметка вынесена в компоненты.
+ *
+ * SD-15: Фильтр по пилоту.
+ * Клик по строке в таблице результатов устанавливает selectedDriver.
+ * Вкладки «Круги» и «Секторы» передают этот фильтр в дочерние компоненты.
  */
 import { useMemo, useState } from 'react';
 import { useRoute, useSearch } from 'wouter';
 import { useSession, useSessionLaps } from '@/lib/api';
-import { formatLap, formatSector } from '@/lib/format';
+import { formatLap } from '@/lib/format';
 import {
   buildHeroStats,
   buildResultRows,
@@ -53,6 +57,9 @@ export default function SessionDetail() {
   const { data: laps } = useSessionLaps(id);
 
   const [activeTab, setActiveTab] = useState<SessionTabKey>('results');
+
+  // SD-15: выбранный пилот для фильтрации вкладок Круги / Секторы
+  const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
 
   // ── Вычисляемые данные ────────────────────────────────────────────────────
   const hasLapData = (laps?.length ?? 0) > 0;
@@ -160,14 +167,26 @@ export default function SessionDetail() {
             rows={resultRows}
             fastestLapTime={fastestLapTime}
             playerName={playerName}
+            selectedDriver={selectedDriver}
+            onSelectDriver={setSelectedDriver}
           />
         )}
 
-        {/* SD-13: Аккордеон кругов */}
-        {activeTab === 'laps' && <DriverLapsAccordion groups={lapGroups} />}
+        {/* SD-13: Аккордеон кругов — с фильтром по пилоту */}
+        {activeTab === 'laps' && (
+          <DriverLapsAccordion
+            groups={lapGroups}
+            driverFilter={selectedDriver}
+          />
+        )}
 
-        {/* SD-12: Секторы */}
-        {activeTab === 'sectors' && <SessionSectorsSummary rows={sectorRows} />}
+        {/* SD-12: Секторы — с фильтром по пилоту */}
+        {activeTab === 'sectors' && (
+          <SessionSectorsSummary
+            rows={sectorRows}
+            driverFilter={selectedDriver}
+          />
+        )}
 
         {/* SD-14: График прогресса */}
         {activeTab === 'lapProgress' && (

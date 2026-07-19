@@ -1,15 +1,24 @@
 /**
  * SD-12: Сводная таблица по секторам.
  * Показывает лучшие секторы и теоретически лучший круг для каждого пилота.
+ *
+ * SD-15: Поддержка фильтра по пилоту.
+ * Если driverFilter задан, показывается только строка совпадающего пилота.
  */
 import { Card } from '@/components/ui/card';
 import type { DriverSectorSummary } from './types';
 
 interface SessionSectorsSummaryProps {
   rows: DriverSectorSummary[];
+  /** Если задан — показывать только этого пилота. */
+  driverFilter?: string | null;
 }
 
-export function SessionSectorsSummary({ rows }: SessionSectorsSummaryProps) {
+export function SessionSectorsSummary({ rows, driverFilter }: SessionSectorsSummaryProps) {
+  const visibleRows = driverFilter
+    ? rows.filter((r) => r.driverName === driverFilter)
+    : rows;
+
   if (rows.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
@@ -18,10 +27,23 @@ export function SessionSectorsSummary({ rows }: SessionSectorsSummaryProps) {
     );
   }
 
+  if (visibleRows.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Нет данных по секторам для пилота «{driverFilter}».
+      </p>
+    );
+  }
+
   return (
     <Card className="overflow-hidden">
-      <div className="border-b border-border bg-secondary/40 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border bg-secondary/40 px-4 py-3">
         <h2 className="font-semibold text-sm">Сводка по секторам</h2>
+        {driverFilter && (
+          <span className="text-xs text-primary">
+            Пилот: <span className="font-semibold">{driverFilter}</span>
+          </span>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -35,7 +57,7 @@ export function SessionSectorsSummary({ rows }: SessionSectorsSummaryProps) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <tr
                 key={row.driverName}
                 className={`border-b border-border/60 last:border-0 hover:bg-muted/40 ${
