@@ -501,19 +501,40 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 // Helpers
 // ────────────────────────────────────────────────
 
+// Допуск для сопоставления по длине трассы (км). Один и тот же физический
+// конфиг трассы может приходить из логов под разными строками course
+// (напр. "Circuit de Spa-Francorchamps" и "...Endurance" для одного и того
+// же контура), при этом trackLengthM у них совпадает или отличается на
+// доли метра. Разные реальные конфигурации (напр. Bahrain GP 5.4км и
+// Bahrain Outer Circuit 3.5км) отличаются на километры — далеко за порогом.
+const TRACK_LENGTH_MATCH_TOLERANCE_KM = 0.05;
+
 async function findOrCreateTrack(tx: any, parsed: ParsedSession): Promise<Track> {
   const all = await tx.select().from(tracks);
   const course = parsed.course;
   const canonicalName = canonicalTrackName(parsed.venue).name.toLowerCase();
   const parsedCourseNorm = (course ?? "").toLowerCase();
+  const parsedLengthKm = parsed.trackLengthM ? parsed.trackLengthM / 1000 : null;
 
-  const exactMatch = all.find((t: Track) => {
-    const dbNameLower = t.name.toLowerCase();
+  const sameName = all.filter((t: Track) => t.name.toLowerCase() === canonicalName);
+
+  // 1) Точное совпадение по названию конфигурации (course/layout).
+  const exactMatch = sameName.find((t: Track) => {
     const layoutNorm = (t.layout ?? "").toLowerCase();
-    if (course) return dbNameLower === canonicalName && layoutNorm === parsedCourseNorm;
-    return dbNameLower === canonicalName;
+    if (course) return layoutNorm === parsedCourseNorm;
+    return true;
   });
   if (exactMatch) return exactMatch;
+
+  // 2) Строка course не совпала, но известна длина трассы — считаем это той
+  // же физической конфигурацией, если длина почти совпадает с уже известной
+  // трассой (та же трасса, просто другой ярлык course в логах игры).
+  if (parsedLengthKm != null) {
+    const byLength = sameName.find(
+      (t: Track) => Math.abs(t.lengthKm - parsedLengthKm) < TRACK_LENGTH_MATCH_TOLERANCE_KM
+    );
+    if (byLength) return byLength;
+  }
 
   const canonical = canonicalTrackName(parsed.venue);
   const lengthKm = parsed.trackLengthM ? +(parsed.trackLengthM / 1000).toFixed(3) : 0;
@@ -548,7 +569,9 @@ function normalizeClass(raw: string): string {
 function canonicalTrackName(venue: string): { name: string; country: string; turns: number } {
   const v = venue.toLowerCase();
   if (v.includes("carlos pace") || v.includes("interlagos")) return { name: "Interlagos", country: "Бразилия", turns: 15 };
-  if (v.includes("le mans")) return { name: "Le Mans", country: "Франция", turns: 38 };
+  if (v.includes("le mans") || v.includes("circuit de la sarthe") || v.includes("sarthe")) {
+    return { name: "Le Mans", country: "Франция", turns: 38 };
+  }
   if (v.includes("spa")) return { name: "Spa-Francorchamps", country: "Бельгия", turns: 20 };
   if (v.includes("monza")) return { name: "Monza", country: "Италия", turns: 11 };
   if (v.includes("fuji")) return { name: "Fuji Speedway", country: "Япония", turns: 16 };

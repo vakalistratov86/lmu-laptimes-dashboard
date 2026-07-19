@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { MapPin, RotateCw, Ruler, ArrowRight, CalendarClock, Timer, Layers, Trophy } from "lucide-react";
-import { TrackMap, hasTrackMap } from "@/components/TrackMap";
+import { TrackMap, hasTrackMap, resolveTrackMapName } from "@/components/TrackMap";
 import { useMemo } from "react";
 import { getClassBadgeClass } from "@/lib/classStyles";
 
@@ -92,12 +92,12 @@ export default function Tracks() {
               <Link key={t.id} href={`/tracks/${t.id}`} data-testid={`card-track-${t.id}`}>
                 <Card className="group flex h-full flex-row items-stretch p-4 hover-elevate gap-4">
 
-                  {/* Левая часть: схема трассы — увеличенная, с акцентным amber-цветом */}
+                  {/* Левая часть: схема трассы — увеличенная, единый фирменный акцентный цвет */}
                   <div className="flex flex-col items-center justify-center shrink-0 w-36">
-                    {hasTrackMap(t.name) ? (
+                    {hasTrackMap(resolveTrackMapName(t)) ? (
                       <TrackMap
-                        name={t.name}
-                        className="h-28 w-36 text-amber-400 transition-colors group-hover:text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]"
+                        name={resolveTrackMapName(t)}
+                        className="h-28 w-36 text-primary/80 transition-colors group-hover:text-primary"
                       />
                     ) : (
                       <ArrowRight size={16} className="text-muted-foreground transition-transform group-hover:translate-x-1" />

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, MapPin, Ruler, RotateCw, Timer, Users, Lightbulb } from "lucide-react";
-import { TrackMap, hasTrackMap } from "@/components/TrackMap";
+import { TrackMap, hasTrackMap, resolveTrackMapName } from "@/components/TrackMap";
 import { DriverName } from "@/components/DriverName";
 import { useMemo } from "react";
 import {
@@ -107,14 +107,14 @@ export default function TrackDetail() {
         </Card>
       )}
 
-      {hasTrackMap(track.name) && (
+      {hasTrackMap(resolveTrackMapName(track)) && (
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-border bg-secondary/40 px-4 py-3">
             <h2 className="font-semibold">Схема трассы</h2>
             <span className="text-xs text-muted-foreground">{track.lengthKm} км · {track.turns} поворотов</span>
           </div>
           <div className="flex items-center justify-center bg-gradient-to-b from-card to-secondary/20 p-6">
-            <TrackMap name={track.name} className="h-56 w-full max-w-xl text-primary" />
+            <TrackMap name={resolveTrackMapName(track)} className="h-56 w-full max-w-xl text-primary" />
           </div>
         </Card>
       )}

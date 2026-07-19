@@ -170,7 +170,7 @@ export async function seedIfEmpty() {
   if (existing.length > 0) return;
 
   const trackData: InsertTrack[] = [
-    { name: "Le Mans", country: "Франция", lengthKm: 13.626, turns: 38, layout: "Full 24h" },
+    { name: "Le Mans", country: "Франция", lengthKm: 13.626, turns: 38, layout: "Circuit de la Sarthe" },
     { name: "Spa-Francorchamps", country: "Бельгия", lengthKm: 7.004, turns: 20, layout: "GP" },
     { name: "Monza", country: "Италия", lengthKm: 5.793, turns: 11, layout: "GP" },
     { name: "Fuji Speedway", country: "Япония", lengthKm: 4.563, turns: 16, layout: "GP" },
@@ -271,4 +271,44 @@ export async function seedIfEmpty() {
   if (lapRows.length > 0) {
     await db.insert(lapTimes).values(lapRows);
   }
+}
+
+/**
+ * Полный каталог трасс LMU, для которых в приложении есть готовая схема
+ * (client/src/components/TrackMap.tsx). Имена совпадают с ключами в TrackMap,
+ * чтобы схема трассы отображалась независимо от того, есть ли по трассе
+ * реальные заезды.
+ */
+const CATALOG_TRACKS: InsertTrack[] = [
+  { name: "Le Mans", country: "Франция", lengthKm: 13.626, turns: 38, layout: "Circuit de la Sarthe" },
+  { name: "Spa-Francorchamps", country: "Бельгия", lengthKm: 7.004, turns: 20, layout: "GP" },
+  { name: "Monza", country: "Италия", lengthKm: 5.793, turns: 11, layout: "GP" },
+  { name: "Fuji Speedway", country: "Япония", lengthKm: 4.563, turns: 16, layout: "GP" },
+  { name: "Sebring", country: "США", lengthKm: 6.019, turns: 17, layout: "International" },
+  { name: "Bahrain", country: "Бахрейн", lengthKm: 5.412, turns: 15, layout: "GP" },
+  { name: "Imola", country: "Италия", lengthKm: 4.909, turns: 19, layout: "GP" },
+  { name: "Portimão", country: "Португалия", lengthKm: 4.653, turns: 15, layout: "GP" },
+  { name: "Interlagos", country: "Бразилия", lengthKm: 4.309, turns: 15, layout: "GP" },
+  { name: "COTA", country: "США", lengthKm: 5.513, turns: 20, layout: "GP" },
+  { name: "Silverstone", country: "Великобритания", lengthKm: 5.891, turns: 18, layout: "GP" },
+  { name: "Barcelona", country: "Испания", lengthKm: 4.657, turns: 14, layout: "GP" },
+  { name: "Paul Ricard", country: "Франция", lengthKm: 5.842, turns: 15, layout: "GP" },
+  { name: "Lusail", country: "Катар", lengthKm: 5.380, turns: 16, layout: "GP" },
+];
+
+/**
+ * Гарантирует, что все трассы каталога присутствуют в БД — даже если по ним
+ * ещё не было ни одной сессии/заезда. Идемпотентна: при повторных запусках
+ * добавляет только реально отсутствующие строки. Выполняется при каждом
+ * старте сервера (в отличие от seedIfEmpty, которая работает один раз на
+ * пустой БД).
+ */
+export async function ensureCatalogTracks() {
+  const existing = await db.select().from(tracks);
+  const existingNames = new Set(existing.map((t) => t.name.toLowerCase()));
+
+  const missing = CATALOG_TRACKS.filter((t) => !existingNames.has(t.name.toLowerCase()));
+  if (missing.length === 0) return;
+
+  await db.insert(tracks).values(missing);
 }
