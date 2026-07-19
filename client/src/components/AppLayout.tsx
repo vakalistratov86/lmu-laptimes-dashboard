@@ -10,7 +10,7 @@ const NAV = [
   { href: "/leaderboards", label: "Лидерборды", icon: Trophy, testId: "link-leaderboards" },
   { href: "/tracks", label: "Трассы", icon: Flag, testId: "link-tracks" },
   { href: "/sessions", label: "Сессии", icon: ListChecks, testId: "link-sessions" },
-  { href: "/events", label: "Special Events", icon: CalendarDays, testId: "link-events" },
+  { href: "/events", label: "LMU Events", icon: CalendarDays, testId: "link-events" },
   { href: "/import", label: "Импорт логов", icon: Upload, testId: "link-import" },
 ];
 

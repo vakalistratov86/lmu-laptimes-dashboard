@@ -12,6 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TrackMap, hasTrackMap } from "@/components/TrackMap";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -78,12 +79,14 @@ const DAILY_RACES_STATIC: DailyRace[] = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Та же адаптивная схема (bg .../15 + dark:text-...-400), что и в classStyles.ts —
+// одинаково хорошо читается в тёмной и светлой теме.
 const CLASS_COLORS: Record<string, string> = {
-  Hypercar:    "bg-red-900/40 text-red-300 border-red-800",
-  "WEC LMP2":  "bg-blue-900/40 text-blue-300 border-blue-800",
-  "ELMS LMP2": "bg-cyan-900/40 text-cyan-300 border-cyan-800",
-  LMP3:        "bg-purple-900/40 text-purple-300 border-purple-800",
-  LMGT3:       "bg-green-900/40 text-green-300 border-green-800",
+  Hypercar:    "bg-red-500/15    text-red-600    dark:text-red-400    border-red-500/30",
+  "WEC LMP2":  "bg-blue-500/15   text-blue-600   dark:text-blue-400   border-blue-500/30",
+  "ELMS LMP2": "bg-cyan-500/15   text-cyan-600   dark:text-cyan-400   border-cyan-500/30",
+  LMP3:        "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
+  LMGT3:       "bg-green-500/15  text-green-600  dark:text-green-400  border-green-500/30",
 };
 
 const MONTH_RU = [
@@ -91,13 +94,66 @@ const MONTH_RU = [
   "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь",
 ];
 
-function classColor(cls: string): string {
-  return CLASS_COLORS[cls] ?? "bg-zinc-800 text-zinc-300 border-zinc-700";
+// Родительный падеж — для формата «14 июля» вместо «14 Июль»
+const MONTH_RU_GENITIVE = [
+  "января","февраля","марта","апреля","мая","июня",
+  "июля","августа","сентября","октября","ноября","декабря",
+];
+
+const DAY_RU_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+
+// Алиасы: имя трассы в календаре LMU → ключ в TrackMap (там, где не совпадает дословно)
+const TRACK_MAP_ALIASES: Record<string, string> = {
+  "Spa": "Spa-Francorchamps",
+  "Fuji": "Fuji Speedway",
+  "Portimao": "Portimão",
+  "Circuit de la Sarthe (Le Mans)": "Le Mans",
+};
+
+function resolveTrackMapName(raw: string): string | null {
+  if (hasTrackMap(raw)) return raw;
+  const alias = TRACK_MAP_ALIASES[raw];
+  if (alias && hasTrackMap(alias)) return alias;
+  return null;
 }
 
-function formatDateRu(dateIso: string): string {
-  const [year, month, day] = dateIso.slice(0, 10).split("-");
-  return `${day}.${month}.${year}`;
+function classColor(cls: string): string {
+  return CLASS_COLORS[cls] ?? "bg-muted/40 text-muted-foreground border-border";
+}
+
+/** Компактная дата с днём недели: «Пт, 14 июля» (без года — минималистичный формат). */
+function formatEventDateCompact(dateIso: string): string {
+  const d = new Date(`${dateIso.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return dateIso;
+  return `${DAY_RU_SHORT[d.getDay()]}, ${d.getDate()} ${MONTH_RU_GENITIVE[d.getMonth()]}`;
+}
+
+/** Обратный отсчёт: «сегодня» / «завтра» / «через N дн.» / «через N мес.» / «N дн. назад». */
+function formatCountdown(dateIso: string): { label: string; tone: "soon" | "normal" | "past" } {
+  const target = new Date(`${dateIso.slice(0, 10)}T00:00:00`).getTime();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((target - today.getTime()) / 86_400_000);
+
+  if (diffDays === 0) return { label: "сегодня", tone: "soon" };
+  if (diffDays < 0) {
+    const abs = Math.abs(diffDays);
+    return { label: abs === 1 ? "вчера" : `${abs} дн. назад`, tone: "past" };
+  }
+  if (diffDays === 1) return { label: "завтра", tone: "soon" };
+  if (diffDays <= 7) return { label: `через ${diffDays} дн.`, tone: "soon" };
+  if (diffDays <= 60) return { label: `через ${diffDays} дн.`, tone: "normal" };
+  return { label: `через ${Math.round(diffDays / 30)} мес.`, tone: "normal" };
+}
+
+/** Минималистичная относительная метка времени обновления: «5 мин назад». */
+function formatRelativeTime(iso: string): string {
+  const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (diffMin < 1) return "только что";
+  if (diffMin < 60) return `${diffMin} мин назад`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24) return `${diffH} ч назад`;
+  return `${Math.round(diffH / 24)} дн назад`;
 }
 
 function groupByMonth(events: SpecialEvent[]): Map<string, SpecialEvent[]> {
@@ -118,56 +174,87 @@ function isPast(ev: SpecialEvent): boolean {
   return !isUpcoming(ev);
 }
 
+// ─── Track icon (общий для обеих карточек) ────────────────────────────────────
+
+function TrackIcon({ track, trackTba }: { track: string; trackTba?: boolean }) {
+  const mapName = !trackTba ? resolveTrackMapName(track) : null;
+  if (mapName) {
+    return (
+      <TrackMap
+        name={mapName}
+        showStartFinish={false}
+        className="h-8 w-8 shrink-0 text-primary/80"
+      />
+    );
+  }
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/40">
+      <Flag size={14} className={trackTba ? "text-muted-foreground" : "text-primary"} />
+    </div>
+  );
+}
+
+// ─── Countdown chip ────────────────────────────────────────────────────────────
+
+const COUNTDOWN_TONE_CLASS: Record<"soon" | "normal" | "past", string> = {
+  soon: "bg-primary/15 text-primary",
+  normal: "bg-muted text-muted-foreground",
+  past: "bg-muted/50 text-muted-foreground/60",
+};
+
+function CountdownChip({ dateIso }: { dateIso: string }) {
+  const { label, tone } = formatCountdown(dateIso);
+  return (
+    <span
+      className={cn(
+        "shrink-0 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium",
+        COUNTDOWN_TONE_CLASS[tone]
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
 // ─── Special Event Card ───────────────────────────────────────────────────────
 
 function EventCard({ ev }: { ev: SpecialEvent }) {
   const past = isPast(ev);
-  const diff = (new Date(ev.dateIso).getTime() - Date.now()) / 86400000;
-  const isNext = diff >= 0 && diff <= 7;
 
   return (
     <div
       className={cn(
         "relative rounded-xl border p-4 transition-all",
         ev.isFeatured
-          ? "border-yellow-600/60 bg-yellow-950/20 shadow-md"
+          ? "border-yellow-500/50 bg-yellow-500/10 shadow-md"
           : past
-          ? "border-zinc-800 bg-zinc-900/40 opacity-60"
-          : "border-zinc-700 bg-zinc-900/60 hover:border-primary/50",
-        isNext && "ring-1 ring-primary/60"
+          ? "border-border bg-muted/20 opacity-60"
+          : "border-border bg-card hover:border-primary/50"
       )}
     >
       {ev.isFeatured && (
-        <div className="absolute -top-2 right-3 flex items-center gap-1 rounded-full bg-yellow-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-yellow-100">
+        <div className="absolute -top-2 right-3 flex items-center gap-1 rounded-full bg-yellow-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-yellow-950">
           <Star size={10} /> Featured
         </div>
       )}
-      {isNext && (
-        <div className="absolute -top-2 left-3 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
-          Ближайшее
-        </div>
-      )}
 
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Flag size={14} className={ev.trackTba ? "text-zinc-500" : "text-primary"} />
-          <span className={cn("text-sm font-semibold", ev.trackTba ? "text-zinc-400 italic" : "text-foreground")}>
-            {ev.trackTba ? "Трасса TBA" : ev.track}
-          </span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <TrackIcon track={ev.track} trackTba={ev.trackTba} />
+          <div>
+            <div className={cn("text-sm font-semibold", ev.trackTba ? "text-muted-foreground italic" : "text-foreground")}>
+              {ev.trackTba ? "Трасса TBA" : ev.track}
+            </div>
+            <div className="text-xs text-muted-foreground">{formatEventDateCompact(ev.dateIso)}</div>
+          </div>
         </div>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Clock size={12} />
-          <span>{ev.duration}h</span>
-        </div>
+        <CountdownChip dateIso={ev.dateIso} />
       </div>
 
-      <div className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
-        <CalendarDays size={12} />
-        <span>{formatDateRu(ev.dateIso)}</span>
-        {past && <span className="ml-1 text-zinc-600">(прошло)</span>}
-      </div>
-
-      <div className="flex flex-wrap gap-1">
+      <div className="mt-3 flex flex-wrap gap-1">
+        <span className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+          <Clock size={10} /> {ev.duration}ч
+        </span>
         {ev.classes.map((cls) => (
           <span
             key={cls}
@@ -185,30 +272,28 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
 
 function DailyRaceCard({ race }: { race: DailyRace }) {
   return (
-    <div className="relative rounded-xl border border-zinc-700 bg-zinc-900/60 p-4 hover:border-primary/50 transition-all">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Zap size={14} className="text-primary" />
+    <div className="relative rounded-xl border border-border bg-card p-4 hover:border-primary/50 transition-all">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <TrackIcon track={race.track} />
           <span className="text-sm font-semibold text-foreground">{race.track}</span>
         </div>
         <span
           className={cn(
-            "rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+            "shrink-0 rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
             race.raceType === "Sprint"
-              ? "border-orange-700 bg-orange-900/30 text-orange-300"
-              : "border-blue-700 bg-blue-900/30 text-blue-300"
+              ? "border-orange-500/30 bg-orange-500/15 text-orange-600 dark:text-orange-400"
+              : "border-blue-500/30 bg-blue-500/15 text-blue-600 dark:text-blue-400"
           )}
         >
           {race.raceType}
         </span>
       </div>
 
-      <div className="mb-3 flex items-center gap-1 text-xs text-zinc-400">
-        <Clock size={12} />
-        <span>{race.durationMinutes} мин</span>
-      </div>
-
-      <div className="flex flex-wrap gap-1">
+      <div className="mt-3 flex flex-wrap gap-1">
+        <span className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+          <Clock size={10} /> {race.durationMinutes} мин
+        </span>
         {race.classes.map((cls) => (
           <span
             key={cls}
@@ -254,34 +339,33 @@ export default function Events() {
       : events;
 
   const grouped = groupByMonth(filtered);
-  const fetchedAt = data?.fetchedAt
-    ? new Date(data.fetchedAt).toLocaleString("ru-RU")
-    : null;
 
   return (
     <div className="space-y-6">
       {/* Заголовок */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight">Events</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">LMU Events</h1>
           <p className="text-sm text-muted-foreground">
             Официальные гонки Le Mans Ultimate
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {mainTab === "special" && fetchedAt && (
-            <span className="text-xs text-muted-foreground">Обновлено: {fetchedAt}</span>
+          {/* Минималистичный индикатор обновления — одинаково на обеих вкладках */}
+          {data?.fetchedAt && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock size={12} />
+              {formatRelativeTime(data.fetchedAt)}
+            </span>
           )}
-          {mainTab === "special" && (
-            <button
-              onClick={() => refresh.mutate()}
-              disabled={refresh.isPending}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover-elevate disabled:opacity-50"
-            >
-              <RefreshCw size={12} className={cn(refresh.isPending && "animate-spin")} />
-              Обновить
-            </button>
-          )}
+          <button
+            onClick={() => refresh.mutate()}
+            disabled={refresh.isPending}
+            className="flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover-elevate disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={cn(refresh.isPending && "animate-spin")} />
+            Обновить
+          </button>
           <a
             href={
               mainTab === "special"
@@ -299,7 +383,7 @@ export default function Events() {
       </div>
 
       {/* Основные табы */}
-      <div className="flex gap-1 rounded-lg border border-border bg-zinc-900/40 p-1 w-fit">
+      <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1 w-fit">
         <button
           onClick={() => setMainTab("special")}
           className={cn(
@@ -361,7 +445,7 @@ export default function Events() {
           )}
 
           {isError && (
-            <div className="flex items-center gap-2 rounded-lg border border-red-800 bg-red-950/30 p-4 text-sm text-red-300">
+            <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-400">
               <AlertCircle size={16} /> Не удалось загрузить события. Проверьте соединение.
             </div>
           )}
@@ -412,20 +496,6 @@ export default function Events() {
       {/* ── DAILY RACES ── */}
       {mainTab === "daily" && (
         <div className="space-y-6">
-          <div className="rounded-lg border border-zinc-700 bg-zinc-900/30 px-4 py-3 text-sm text-zinc-400">
-            Daily Races — еженедельно обновляемые короткие гонки в мультиплеере LMU.
-            Новая ротация каждый понедельник.{" "}
-            <a
-              href="https://lemansultimate.com/daily-races/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline hover:text-foreground"
-            >
-              Актуальное расписание на сайте LMU
-            </a>
-            .
-          </div>
-
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {DAILY_RACES_STATIC.map((race) => (
               <DailyRaceCard key={race.id} race={race} />
@@ -433,15 +503,15 @@ export default function Events() {
           </div>
 
           <p className="text-[11px] text-muted-foreground">
-            Данные о текущей ротации Daily Races обновляются вручную. Для актуальной
-            информации посетите{" "}
+            Daily Races — еженедельно обновляемые короткие гонки в мультиплеере LMU.
+            Новая ротация каждый понедельник. Актуальное расписание на{" "}
             <a
               href="https://lemansultimate.com/daily-races/"
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"
             >
-              lemansultimate.com/daily-races
+              сайте LMU
             </a>
             .
           </p>
