@@ -2,11 +2,17 @@ import { useMemo } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import { useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Upload, Timer, Dumbbell, Trophy, ChevronRight } from "lucide-react";
-import { getSessionTypeBadgeClass, SESSION_TYPE_ORDER } from "@/lib/classStyles";
+import { Upload, Dumbbell, Timer, Trophy, ChevronRight, type LucideIcon } from "lucide-react";
+import {
+  normalizeSessionCategory,
+  getSessionTypeBadgeClass,
+  SESSION_CATEGORY_LABEL,
+  SESSION_TYPE_ORDER,
+  type SessionCategory,
+} from "@/lib/classStyles";
+import { SessionTypeBadge } from "@/components/SessionTypeBadge";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -22,34 +28,6 @@ function formatDate(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
-
-type SessionCategory = "practice" | "qualify" | "race" | "warmup" | "superpole";
-
-function normalizeType(raw: string): SessionCategory {
-  const s = raw.toLowerCase();
-  if (s.includes("гонка") || s.includes("race")) return "race";
-  if (s.includes("квалификация") || s.includes("qualify")) return "qualify";
-  if (s.includes("superpole")) return "superpole";
-  if (s.includes("прогрев") || s.includes("warmup")) return "warmup";
-  return "practice";
-}
-
-const CATEGORY_META: Record<SessionCategory, { label: string; icon: React.ReactNode }> = {
-  practice:  { label: "Тренировка",   icon: <Dumbbell size={12} /> },
-  qualify:   { label: "Квалификация", icon: <Timer size={12} /> },
-  superpole: { label: "Квалификация", icon: <Timer size={12} /> },
-  warmup:    { label: "Тренировка",   icon: <Dumbbell size={12} /> },
-  race:      { label: "Гонка",        icon: <Trophy size={12} /> },
-};
-
-// Цветовые классы фильтров — совпадают с цветами бейджей сессий
-const FILTER_BG_CLASSES: Record<SessionCategory, string> = {
-  practice:  "bg-blue-500/15 text-blue-500 dark:text-blue-400 border-blue-500/30",
-  qualify:   "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
-  race:      "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
-  superpole: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
-  warmup:    "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
-};
 
 function trackDisplayLabel(trackName: string, course: string | null | undefined): string {
   if (!course || course.toLowerCase() === trackName.toLowerCase()) return trackName;
@@ -75,13 +53,21 @@ function getBestLapForSession(session: SessionItem): number | null {
   }, null);
 }
 
-// ─── Filter buttons ────────────────────────────────────────────────────────────
-// Технический ключ all → человекочитаемое "Все"
-const FILTER_BUTTONS: { key: string; label: string }[] = [
-  { key: "all",      label: "Все" },
-  { key: "practice", label: "Тренировка" },
-  { key: "qualify",  label: "Квалификация" },
-  { key: "race",     label: "Гонка" },
+// ─── Filter — единая сегментированная кнопка ───────────────────────────────────
+// Технический ключ all → человекочитаемое "Все". Цвета и текст берутся из тех
+// же источников (classStyles.ts), что и плашки в таблице — гарантированно
+// совпадают.
+const FILTER_ICON: Record<SessionCategory, LucideIcon> = {
+  practice: Dumbbell,
+  qualify: Timer,
+  race: Trophy,
+};
+
+const FILTER_OPTIONS: { key: "all" | SessionCategory; label: string }[] = [
+  { key: "all", label: "Все" },
+  { key: "practice", label: SESSION_CATEGORY_LABEL.practice },
+  { key: "qualify", label: SESSION_CATEGORY_LABEL.qualify },
+  { key: "race", label: SESSION_CATEGORY_LABEL.race },
 ];
 
 // ─── Loading Skeleton ─────────────────────────────────────────────────────────
@@ -154,21 +140,7 @@ export default function Sessions() {
 
     if (activeFilter === "all") return all;
 
-    if (activeFilter === "qualify") {
-      return all.filter((s) => {
-        const cat = normalizeType(s.sessionType);
-        return cat === "qualify" || cat === "superpole";
-      });
-    }
-
-    if (activeFilter === "practice") {
-      return all.filter((s) => {
-        const cat = normalizeType(s.sessionType);
-        return cat === "practice" || cat === "warmup";
-      });
-    }
-
-    return all.filter((s) => normalizeType(s.sessionType) === activeFilter);
+    return all.filter((s) => normalizeSessionCategory(s.sessionType) === activeFilter);
   }, [sessions, activeFilter]);
 
   // Sort by date descending, then by session type order
@@ -176,8 +148,8 @@ export default function Sessions() {
     [...filtered].sort((a, b) => {
       const dateCmp = b.dateTime.localeCompare(a.dateTime);
       if (dateCmp !== 0) return dateCmp;
-      return (SESSION_TYPE_ORDER[normalizeType(a.sessionType)] ?? 99) -
-             (SESSION_TYPE_ORDER[normalizeType(b.sessionType)] ?? 99);
+      return SESSION_TYPE_ORDER[normalizeSessionCategory(a.sessionType)] -
+             SESSION_TYPE_ORDER[normalizeSessionCategory(b.sessionType)];
     }),
     [filtered],
   );
@@ -197,21 +169,16 @@ export default function Sessions() {
         </p>
       </div>
 
-      {/* Filter buttons */}
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Фильтр по типу сессии">
-        {FILTER_BUTTONS.map(({ key, label }) => {
+      {/* Filter — одна кнопка, разделённая на секции; цвет секции совпадает с плашкой */}
+      <div
+        className="inline-flex overflow-hidden rounded-lg border border-border"
+        role="group"
+        aria-label="Фильтр по типу сессии"
+      >
+        {FILTER_OPTIONS.map(({ key, label }, index) => {
           const isAll = key === "all";
           const isActive = activeFilter === key;
-          const normalizedType: SessionCategory | null =
-            isAll ? null : (normalizeType(key) as SessionCategory);
-          const colorClass =
-            normalizedType != null ? FILTER_BG_CLASSES[normalizedType] : "";
-
-          const icon =
-            normalizedType === "practice" ? <Dumbbell className="h-3 w-3" /> :
-            normalizedType === "qualify"  ? <Timer className="h-3 w-3" /> :
-            normalizedType === "race"     ? <Trophy className="h-3 w-3" /> :
-            null;
+          const Icon = isAll ? null : FILTER_ICON[key];
 
           return (
             <button
@@ -220,23 +187,20 @@ export default function Sessions() {
               onClick={() => setActiveFilter(key)}
               aria-pressed={isActive}
               className={cn(
-                "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition-colors",
+                "inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold transition-colors",
+                index > 0 && "border-l border-border",
                 isAll
                   ? isActive
-                    ? "bg-accent text-accent-foreground border-border"
-                    : "bg-background text-muted-foreground border-border hover:bg-accent/40"
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-background text-muted-foreground hover:bg-accent/40"
                   : isActive
-                    // Активный цветной фильтр: используем тот же цвет, что и бейдж
-                    ? cn(colorClass, "border-transparent hover:ring-1 hover:ring-border/60")
-                    // Неактивный: оставляем нейтральный фон
-                    : "bg-background text-muted-foreground/80 border-border opacity-60 hover:opacity-100 hover:bg-accent/10",
+                    // Активная цветная секция: тот же цвет, что и плашка этого типа
+                    ? getSessionTypeBadgeClass(key)
+                    // Неактивная: нейтральный фон
+                    : "bg-background text-muted-foreground/80 hover:bg-accent/10",
               )}
             >
-              {icon && (
-                <span className="flex h-4 w-4 items-center justify-center">
-                  {icon}
-                </span>
-              )}
+              {Icon && <Icon size={13} />}
               <span>{label}</span>
             </button>
           );
@@ -303,8 +267,7 @@ export default function Sessions() {
 
           {/* Table rows */}
           {sorted.map((session) => {
-            const cat = normalizeType(session.sessionType);
-            const meta = CATEGORY_META[cat];
+            const cat = normalizeSessionCategory(session.sessionType);
             const bestLap = getBestLapForSession(session);
             const filterParam = activeFilter !== "all"
               ? `?from_filter=${encodeURIComponent(activeFilter)}`
@@ -319,17 +282,11 @@ export default function Sessions() {
                 className="grid cursor-pointer items-center border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
                 style={{ gridTemplateColumns: "160px 1fr 140px 80px 110px 24px" }}
                 role="row"
-                aria-label={`${meta.label} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime)}`}
+                aria-label={`${SESSION_CATEGORY_LABEL[cat]} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime)}`}
               >
                 {/* Type badge */}
                 <div role="cell">
-                  <Badge
-                    variant="outline"
-                    className={`inline-flex items-center gap-1 text-xs font-medium ${getSessionTypeBadgeClass(cat)}`}
-                  >
-                    {meta.icon}
-                    {meta.label}
-                  </Badge>
+                  <SessionTypeBadge sessionType={session.sessionType} />
                 </div>
 
                 {/* Track */}

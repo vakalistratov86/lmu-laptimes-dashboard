@@ -22,7 +22,6 @@ import {
   buildLapProgressSeries,
   buildSectorSummary,
   buildTabs,
-  normalizeSessionType,
 } from '@/lib/sessionDetailSelectors';
 import {
   SessionInfoCard,
@@ -131,7 +130,6 @@ export default function SessionDetail() {
   }
 
   const s = session as Record<string, any>;
-  const sessionTypeNorm = normalizeSessionType(String(s.sessionType ?? ''));
   const courseLabel =
     s.course &&
     String(s.course).toLowerCase() !== String(s.trackName).toLowerCase()
@@ -149,7 +147,6 @@ export default function SessionDetail() {
         trackName={String(s.trackName ?? '')}
         courseLabel={courseLabel}
         sessionType={String(s.sessionType ?? '')}
-        sessionTypeNorm={sessionTypeNorm}
         dateFormatted={formatDate(String(s.dateTime ?? ''))}
         backHref={backHref}
         event={s.event}

@@ -31,33 +31,50 @@ export function getClassAccentClass(carClass?: string): string {
 }
 
 // ─── Session-type badge styles ─────────────────────────────────────────────────
+//
+// Единая (единственная) точка нормализации типа сессии для всего фронтенда.
+// Сырое поле session.sessionType из БД — составная строка вида
+// "Гонка (Race1)" / "Практика (Practice1)" / "Прогрев (Warmup)" / "Тесты (TestDay)".
+// Здесь мы сводим её к ровно трём отображаемым категориям (так решил пользователь):
+// тренировка (в т.ч. прогрев/тесты/неизвестное) / квалификация (в т.ч. superpole) / гонка.
+
+export type SessionCategory = "practice" | "qualify" | "race";
+
+/** Определяет категорию по сырой строке sessionType (регистронезависимо, по подстроке). */
+export function normalizeSessionCategory(raw: string | null | undefined): SessionCategory {
+  const s = (raw ?? "").toLowerCase();
+  if (s.includes("гонка") || s.includes("race")) return "race";
+  if (s.includes("квалиф") || s.includes("qualify") || s.includes("superpole")) return "qualify";
+  return "practice";
+}
+
+/** Единственный источник отображаемого текста плашки — одинаков во всём приложении. */
+export const SESSION_CATEGORY_LABEL: Record<SessionCategory, string> = {
+  practice: "Тренировка",
+  qualify: "Квалификация",
+  race: "Гонка",
+};
 
 /** Neutral fallback used for any unknown session type. */
 export const SESSION_TYPE_BADGE_FALLBACK =
   "bg-muted/40 text-muted-foreground border-border";
 
 /**
- * Maps normalised session categories to Tailwind badge classes.
- * Works in both light and dark mode via Tailwind opacity modifiers:
- * background opacity like 15% stays subtle, while text colours remain readable.
- * This also works with shadcn/ui CSS-variable colour tokens, or with
- * the raw Tailwind colours below for a simple dark-compatible palette.
+ * Цвета плашек по категориям — синий/жёлтый/красный, одинаковые везде,
+ * где отображается тип сессии (список сессий, карточка сессии, фильтр).
+ * Работает в тёмной и светлой теме за счёт opacity-модификаторов Tailwind.
  */
-export const SESSION_TYPE_BADGE: Record<string, string> = {
-  practice:  "bg-blue-500/15   text-blue-500   dark:text-blue-400   border-blue-500/30",
-  qualify:   "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
-  warmup:    "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
-  race:      "bg-red-500/15    text-red-600    dark:text-red-400    border-red-500/30",
-  superpole: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
+export const SESSION_TYPE_BADGE: Record<SessionCategory, string> = {
+  practice: "bg-blue-500/15   text-blue-500   dark:text-blue-400   border-blue-500/30",
+  qualify:  "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
+  race:     "bg-red-500/15    text-red-600    dark:text-red-400    border-red-500/30",
 };
 
 /** Display order for session categories inside a group. */
-export const SESSION_TYPE_ORDER: Record<string, number> = {
-  practice:  0,
-  qualify:   1,
-  superpole: 2,
-  warmup:    3,
-  race:      4,
+export const SESSION_TYPE_ORDER: Record<SessionCategory, number> = {
+  practice: 0,
+  qualify: 1,
+  race: 2,
 };
 
 /**
@@ -66,6 +83,6 @@ export const SESSION_TYPE_ORDER: Record<string, number> = {
  */
 export function getSessionTypeBadgeClass(category?: string): string {
   return category
-    ? SESSION_TYPE_BADGE[category] ?? SESSION_TYPE_BADGE_FALLBACK
+    ? SESSION_TYPE_BADGE[category as SessionCategory] ?? SESSION_TYPE_BADGE_FALLBACK
     : SESSION_TYPE_BADGE_FALLBACK;
 }

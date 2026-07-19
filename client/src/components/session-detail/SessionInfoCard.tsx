@@ -7,8 +7,7 @@
 import { Link } from 'wouter';
 import { ArrowLeft } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { getSessionTypeBadgeClass } from '@/lib/classStyles';
+import { SessionTypeBadge } from '@/components/SessionTypeBadge';
 
 interface StatTileProps {
   label: string;
@@ -28,7 +27,6 @@ interface SessionInfoCardProps {
   trackName: string;
   courseLabel?: string | null;
   sessionType: string;
-  sessionTypeNorm: string;
   dateFormatted: string;
   backHref: string;
   event?: string | null;
@@ -42,7 +40,6 @@ export function SessionInfoCard({
   trackName,
   courseLabel,
   sessionType,
-  sessionTypeNorm,
   dateFormatted,
   backHref,
   event,
@@ -63,12 +60,7 @@ export function SessionInfoCard({
         </Link>
 
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <Badge
-            variant="outline"
-            className={`text-xs ${getSessionTypeBadgeClass(sessionTypeNorm)}`}
-          >
-            {sessionType}
-          </Badge>
+          <SessionTypeBadge sessionType={sessionType} />
           <h1
             className="font-display text-xl font-bold tracking-tight"
             data-testid="text-session-title"
