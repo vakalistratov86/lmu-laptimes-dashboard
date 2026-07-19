@@ -11,37 +11,33 @@
 
 Дашборд для мониторинга и анализа времён прохождения трасс в симуляторе **Le Mans Ultimate (LMU)**. Тёмный геймерский интерфейс в рейсинг-эстетике с поддержкой светлой темы. Данные импортируются из XML-логов rFactor2/LMU через встроенный парсер и сохраняются в PostgreSQL.
 
-> 🚀 **Автодеплой:** обновление README от 18.07.2026 — проверка CI/CD пайплайна.
-
 ---
 
 ## Возможности
 
 ### 📊 Основные разделы
 
-- **Overview** — сводные KPI (заезды, трассы, пилоты, лучший круг) и график рекордов по трассам.
-- **Sessions** — табличный список сессий с фильтрацией по типу (`Все` / `Тренировка` / `Квалификация` / `Гонка`), сохранением фильтра в URL и навигацией по кнопке «Назад» с возвратом в отфильтрованный список. Строки полностью кликабельны.
-- **Session Detail** — детальный вид сессии: заголовок + badge типа, KPI-карточки (победитель, fastest lap, количество кругов), таблица результатов с медалями топ‑3 и выделением игрока, вкладки results / laps / sectors, график прогрессии кругов, сводка по секторам и accordion с детальными кругами по пилотам.
-- **Laps** — полная таблица заездов с расширенными фильтрами (трасса / конфигурация / пилот / класс машины / условия), сортировкой по колонкам, дельтами к лучшему кругу, данными по секторам и экспортом в CSV.
-- **Leaderboards** — топ‑5 пилотов по каждой трассе + конфигурации с медалями и отставаниями; дата и время рекорда. Поддерживает полный рейтинг по выбранной трассе. Группировка по `trackName + course`.
-- **Tracks** — каталог трасс с рекордами, детальные страницы (статистика, блок «Интересно», график по пилотам, рейтинг).
-- **Import** — страница загрузки XML-логов rFactor2/LMU с прогресс-индикатором и отображением результата импорта.
+- **Overview** — 8 KPI-плиток (пройдено расстояния, трасс, пилотов, лучший круг, гонок, реальных игроков, ИИ-игроков, кругов пройдено) и график лучшего времени по трассам.
+- **Sessions** — сводная плитка с количеством и суммарным временем тренировок/квалификаций/гонок (в цветах категорий), сегментированный фильтр по типу сессии (`Все` / `Тренировка` / `Квалификация` / `Гонка`) с сохранением в URL, таблица сессий (тип, трек, классы машин, лучший круг, круги, дата). Кнопка «Назад» из деталей сессии возвращает в отфильтрованный список. Строки полностью кликабельны.
+- **Session Detail** — статичная плитка трассы/сессии (не зависит от активной вкладки) + всегда видимая карточка выбранного пилота (по умолчанию — позиция 1, весь набор его статистики за сессию, включая раскраску секторов) + вкладки «Результаты / Круги / Прогресс», встроенные в шапку общей карточки. Сектора и медали топ‑3 подсвечиваются цветом (личный лучший / абсолютный лучший сессии; золото/серебро/бронза).
+- **Leaderboards** — вертикальный список полноширинных карточек по трассе (группировка по `trackName + course`), внутри каждой — разбивка по классам машин, медали, отставания, дата и время рекорда, фильтр по конфигурации трассы.
+- **Tracks** — каталог трасс с амбер-подсветкой контура на карте, рекордами, блоком «Интересно» и рейтингом по трассе.
+- **Import** — загрузка XML-логов через выбор папки (File System Access API с fallback для браузеров без поддержки), автоимпорт новых файлов по таймеру, устойчивый к перезагрузке журнал импорта, определение дубликатов по хэшу файла, кнопка очистки БД.
 - **Events** — разделён на две вкладки: **Daily Races** и **Special Events** с корректным форматом дат (DD.MM.YYYY).
 
 ### 🏁 Ключевые функции
 
 - **Парсер XML-логов** (`server/logParser.ts`) с поддержкой поля `sessionCourse` (конфигурация трассы) во всех слоях — от хранилища до UI.
 - **Нормализатор данных** (`server/normalizer.ts`) — очистка и унификация распознанных полей перед записью в БД.
-- **Import Worker** (`server/importWorker.ts`) — фоновая обработка загруженных файлов с передачей прогресса через WebSocket.
-- **Session Detail — компонентная архитектура (view-model слой):**
-  - Barrel-файл типов `session-detail/types.ts`
-  - Доменная view-model `SessionDetailViewModel`
-  - Селекторы: `normalizeSessionType`, `buildHeroStats`, `buildResultRows`, `buildLapProgressSeries`, `buildSectorSummary`, `buildDriverLapGroups`
-  - Компоненты: `SessionHeader`, `SessionHeroStats`, `SessionResultsTable`, `SessionTabs`, `SessionLoadingSkeleton`, `SessionEmptyState`, `SessionSectorsSummary`, `DriverLapsAccordion`, `SessionLapProgressChart`
-- **Чек-бокс «Скрыть ИИ игроков»** рядом с фильтром пилотов.
-- **Компонент `DriverName`** с AI-бейджем — метки ИИ-пилотов в SessionDetail, Leaderboards, Laps и DriverFilterBar.
-- **Searchable multi-select dropdown** для выбора нескольких пилотов одновременно.
-- **Общий модуль `classStyles.ts`** — стили бейджей классов машин (LMP3, GT3, GT4) без дублирования.
+- **Import** (`server/importWorker.ts` + `client/src/pages/Import.tsx`) — синхронная обработка файлов по одному, идемпотентность по SHA-256 хэшу содержимого, DLQ для битых записей (`import_errors`), журнал импорта в localStorage/IndexedDB, автоимпорт папки.
+- **Session Detail — компонентная архитектура:**
+  - Единый источник категорий/цветов/подписей типа сессии и медалей — `client/src/lib/classStyles.ts` (`normalizeSessionCategory`, `SESSION_TYPE_BADGE`, `getMedalColorClass`)
+  - Общие компоненты `SessionTypeBadge` (плашка фиксированной ширины, одинаковая везде) и `StatTile` (переиспользуемая мини-плитка статистики)
+  - Селекторы `sessionDetailSelectors.ts`: `buildResultRows`, `buildDriverLapGroups`, `buildSectorSummary`, `buildLapProgressSeries`, `buildTabs`
+  - Компоненты `session-detail/*`: `SessionInfoCard`, `SessionDriverDetailCard`, `SessionResultsTable`, `SessionTabs`, `DriverLapTable`, `SessionLapProgressChart`, `SessionLoadingSkeleton`, `SessionEmptyState`
+- **Единая иконка пилота** (`DriverName`) — зелёный человечек для реального игрока, жёлтый робот для ИИ; используется в Sessions, Session Detail, Leaderboards, Tracks и `DriverFilterBar`.
+- **`DriverFilterBar`** — searchable multi-select с секциями «Выбрано / Игроки / ИИ», переключателями «Показать ИИ» и «Выбрать все» (массовый выбор видимого списка).
+- Тематизированный скроллбар во всём приложении (не системный) — под цвет тёмной/светлой темы.
 - Адаптивная вёрстка: на мобильных — выпадающее меню навигации.
 - Светлая и тёмная темы.
 
@@ -51,8 +47,8 @@
 
 | Слой | Технологии |
 |------|------------|
-| **Frontend** | React 18, Vite 7, TypeScript 5.6, Tailwind CSS 3, shadcn/ui, wouter, TanStack Query, Recharts, Framer Motion |
-| **Backend** | Express 5 (TypeScript), WebSocket (ws) |
+| **Frontend** | React 18, Vite 7, TypeScript 5.6, Tailwind CSS 3, shadcn/ui, wouter, TanStack Query, Recharts |
+| **Backend** | Express 5 (TypeScript) |
 | **База данных** | PostgreSQL (drizzle-orm + postgres-js), миграции drizzle-kit |
 | **Тестирование** | Vitest 2 + coverage-v8 |
 
@@ -64,28 +60,34 @@
 .
 ├── client/              # Frontend (React)
 │   └── src/
-│       ├── pages/       # Overview, Sessions, SessionDetail, Laps, Leaderboards,
+│       ├── pages/       # Overview, Sessions, SessionDetail, Leaderboards,
 │       │                #   Tracks, TrackDetail, Events, Import, not-found
 │       ├── components/  # AppLayout, Logo, DriverName, DriverFilterBar,
-│       │                #   session-detail/* (компонентная архитектура), UI
+│       │                #   SessionTypeBadge, StatTile, TrackMap,
+│       │                #   session-detail/* (SessionInfoCard, SessionDriverDetailCard,
+│       │                #   SessionResultsTable, SessionTabs, DriverLapTable,
+│       │                #   SessionLapProgressChart, ...), UI (shadcn)
 │       ├── hooks/       # Кастомные React-хуки
-│       └── lib/         # API-хуки, форматирование времён, classStyles.ts,
-│                        #   sessionDetail.ts, sessionDetailSelectors.ts
+│       └── lib/         # API-хуки, форматирование времён, classStyles.ts
+│                        #   (единый источник цветов/подписей типов сессии, классов
+│                        #   машин и медалей), sessionDetailSelectors.ts
 ├── server/              # Backend (Express)
-│   ├── index.ts         # Точка входа, инициализация Express + WebSocket
+│   ├── index.ts         # Точка входа, инициализация Express
 │   ├── routes.ts        # REST API маршруты (async, PostgreSQL)
 │   ├── storage.ts       # Слой работы с БД (Drizzle ORM + postgres-js)
 │   ├── migrate.ts       # Авто-миграции БД при старте
 │   ├── logParser.ts     # Парсер XML-логов rFactor2/LMU
-│   ├── importWorker.ts  # Фоновый воркер импорта с прогресс-стримингом
+│   ├── importWorker.ts  # Разбор и синхронная запись импортируемого файла в БД
 │   ├── normalizer.ts    # Нормализация и валидация распознанных данных
 │   ├── eventsParser.ts  # Парсер данных Events (Daily Races / Special Events)
 │   ├── logger.ts        # Утилита логирования
 │   ├── static.ts        # Раздача статики (продакшен)
 │   └── vite.ts          # Интеграция Vite Dev Server (разработка)
-├── shared/              # Общая схема данных (Drizzle + Zod)
+├── shared/              # Общая схема данных (Drizzle + Zod), 11 таблиц PostgreSQL
 ├── script/              # Скрипты сборки (build.ts)
-├── tests/               # Тесты (Vitest): routes, schema, eventsParser
+├── tests/               # Тесты (Vitest): routes, schema, storage, logParser,
+│                        #   normalizer, validators, eventsParser, format,
+│                        #   importIdempotency
 ├── docs/                # Дополнительная документация
 ├── drizzle.config.ts    # Конфигурация Drizzle ORM (PostgreSQL)
 ├── docker-compose.yml   # PostgreSQL + приложение, порты 3000→5000
@@ -101,8 +103,17 @@
 
 - **tracks** — трассы (название, страна, длина, повороты, конфигурация)
 - **drivers** — пилоты (имя, команда, страна, флаг `isPlayer`)
-- **sessions** — сессии с полем `sessionCourse` (конфигурация трассы) и типом сессии
-- **lap_times** — заезды (время круга, секторы, класс машины, шины, условия, дата)
+- **lap_times** — «плоские» заезды демо-сезона (время круга, секторы, класс машины, шины, условия, дата) — используются на Overview/Leaderboards/Tracks
+- **sessions** — сессии, импортированные из XML-логов (тип, трасса, `sessionCourse`, событие, версия игры, длительность и др.)
+- **session_results** — итоговый результат каждого пилота в сессии (позиция, класс, команда, лучший круг, пит-стопы, статус финиша)
+- **session_laps** — данные по каждому кругу каждого пилота (время, 3 сектора, макс. скорость, топливо, износ и состав шин, пит-лап)
+- **session_incidents** — инциденты сессии (участники, тяжесть, момент времени)
+- **session_sector_bests** — лучшие времена по секторам в разрезе класса машины
+- **session_track_limits** — нарушения трек-лимитов
+- **import_jobs** — журнал импортированных файлов (статус, хэш содержимого для идемпотентности, счётчики кругов)
+- **import_errors** — DLQ: записи, не прошедшие валидацию при импорте
+
+> Демо-заполнение (`seedIfEmpty`) создаёт 8 трасс, 8 пилотов и заезды в `lap_times` — этого достаточно для Overview/Leaderboards/Tracks, но раздел **Sessions/Session Detail** показывает данные только после реального импорта XML-логов через **Import**.
 
 ---
 
@@ -183,7 +194,7 @@ DATABASE_URL=postgres://lmu:lmu_password@localhost:5432/lmu_laptimes
 
 ## Импорт данных
 
-Загрузите XML-лог rFactor2/LMU через раздел **Import** в интерфейсе. Сервер разберёт файл (`logParser.ts`), нормализует данные (`normalizer.ts`) и запишет их в БД через фоновый воркер (`importWorker.ts`) с отображением прогресса в реальном времени.
+Выберите папку с XML-логами rFactor2/LMU через раздел **Import** (File System Access API; для браузеров без поддержки — обычный выбор файлов). Каждый файл отправляется отдельным запросом `POST /api/import`, сервер разбирает его (`logParser.ts`), нормализует (`normalizer.ts`) и синхронно записывает в БД (`importWorker.ts`), возвращая результат сразу в ответе. Дубликаты определяются по SHA-256 хэшу содержимого, файлы без кругов пропускаются с предупреждением (не как ошибка), а невалидные записи попадают в DLQ (`import_errors`). Журнал импорта и список уже обработанных файлов сохраняются в localStorage/IndexedDB и переживают перезагрузку страницы; опционально можно включить автоимпорт — повторное сканирование папки по таймеру.
 
 ---
 
