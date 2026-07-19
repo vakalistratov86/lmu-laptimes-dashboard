@@ -92,10 +92,13 @@ export default function Tracks() {
               <Link key={t.id} href={`/tracks/${t.id}`} data-testid={`card-track-${t.id}`}>
                 <Card className="group flex h-full flex-row items-stretch p-4 hover-elevate gap-4">
 
-                  {/* Левая часть: схема трассы */}
-                  <div className="flex flex-col items-center justify-center shrink-0 w-24">
+                  {/* Левая часть: схема трассы — увеличенная, с акцентным amber-цветом */}
+                  <div className="flex flex-col items-center justify-center shrink-0 w-36">
                     {hasTrackMap(t.name) ? (
-                      <TrackMap name={t.name} className="h-16 w-20 text-primary/70 transition-colors group-hover:text-primary" />
+                      <TrackMap
+                        name={t.name}
+                        className="h-28 w-36 text-amber-400 transition-colors group-hover:text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]"
+                      />
                     ) : (
                       <ArrowRight size={16} className="text-muted-foreground transition-transform group-hover:translate-x-1" />
                     )}
