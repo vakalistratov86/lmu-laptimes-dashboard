@@ -52,6 +52,14 @@ export interface SessionResultRowView {
 
 // ── Круги по пилотам ─────────────────────────────────────────────────────────
 
+/** Износ шин по четырём колёсам (FL/FR/RL/RR) в процентах. */
+export interface TyreWear {
+  fl: string;
+  fr: string;
+  rl: string;
+  rr: string;
+}
+
 /** Один круг конкретного пилота. */
 export interface DriverLapRowView {
   lapNumber: number;
@@ -64,6 +72,15 @@ export interface DriverLapRowView {
   sectors: [string, string, string];
   /** Является ли круг пит-лапом. */
   isPitLap?: boolean;
+  // ── SD-18: Дополнительные столбцы ─────────────────────────────────────────
+  /** Максимальная скорость на круге (км/ч или строка «—»). */
+  maxSpeed: string;
+  /** Остаток топлива на конец круга (литры или строка «—»). */
+  fuelRemaining: string;
+  /** Износ шин FL/FR/RL/RR (строки в %). */
+  tyreWear: TyreWear | null;
+  /** Тип/состав шин (например «Soft», «Medium», «Hard» или строка из данных). */
+  tyreType: string;
 }
 
 /** Группа кругов одного пилота. */

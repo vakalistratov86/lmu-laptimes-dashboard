@@ -7,6 +7,7 @@ import type {
   SessionResultRowView,
   DriverLapsGroupView,
   DriverLapRowView,
+  TyreWear,
   DriverSectorSummary,
   LapProgressSeries,
   LapProgressPoint,
@@ -58,6 +59,75 @@ function parseSectorSeconds(
 export function formatGap(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return '—';
   return `+${seconds.toFixed(3)}`;
+}
+
+/**
+ * SD-18: Форматирует значение скорости в строку «XXX км/ч» или «—».
+ * Принимает значение в км/ч (число).
+ */
+function formatSpeed(raw: unknown): string {
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v <= 0) return '—';
+  return `${Math.round(v)}`;
+}
+
+/**
+ * SD-18: Форматирует остаток топлива в строку «X.XX л» или «—».
+ */
+function formatFuel(raw: unknown): string {
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v < 0) return '—';
+  return `${v.toFixed(2)}`;
+}
+
+/**
+ * SD-18: Парсит значение износа шины в строку «XX.X%» или «—».
+ * Если значение в диапазоне 0–1, считается долей и переводится в %.
+ */
+function formatWear(raw: unknown): string {
+  const v = Number(raw);
+  if (!Number.isFinite(v)) return '—';
+  const pct = v > 1 ? v : v * 100;
+  return `${pct.toFixed(1)}%`;
+}
+
+/**
+ * SD-18: Формирует объект TyreWear из полей lap-записи.
+ * Поддерживает варианты именования: tyreWearFL / tireWearFL / wearFL / wear_fl и т.п.
+ */
+function parseTyreWear(lap: Record<string, any>): TyreWear | null {
+  const fl =
+    lap.tyreWearFL ?? lap.tireWearFL ?? lap.wearFL ?? lap.wear_fl ??
+    lap.tyreWear?.fl ?? lap.tireWear?.fl ?? null;
+  const fr =
+    lap.tyreWearFR ?? lap.tireWearFR ?? lap.wearFR ?? lap.wear_fr ??
+    lap.tyreWear?.fr ?? lap.tireWear?.fr ?? null;
+  const rl =
+    lap.tyreWearRL ?? lap.tireWearRL ?? lap.wearRL ?? lap.wear_rl ??
+    lap.tyreWear?.rl ?? lap.tireWear?.rl ?? null;
+  const rr =
+    lap.tyreWearRR ?? lap.tireWearRR ?? lap.wearRR ?? lap.wear_rr ??
+    lap.tyreWear?.rr ?? lap.tireWear?.rr ?? null;
+
+  if (fl == null && fr == null && rl == null && rr == null) return null;
+
+  return {
+    fl: formatWear(fl),
+    fr: formatWear(fr),
+    rl: formatWear(rl),
+    rr: formatWear(rr),
+  };
+}
+
+/**
+ * SD-18: Извлекает тип шин из lap-записи.
+ */
+function parseTyreType(lap: Record<string, any>): string {
+  const raw =
+    lap.tyreType ?? lap.tireType ?? lap.tyreCompound ?? lap.tireCompound ??
+    lap.compound ?? lap.tyre ?? lap.tire ?? null;
+  if (raw == null || raw === '') return '—';
+  return String(raw);
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -350,6 +420,14 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
         const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
         const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
 
+        // SD-18: Максимальная скорость (поддержка нескольких вариантов имён полей)
+        const maxSpeedRaw =
+          lap.maxSpeed ?? lap.topSpeed ?? lap.maxSpeedKmh ?? lap.top_speed ?? null;
+
+        // SD-18: Остаток топлива
+        const fuelRaw =
+          lap.fuelRemaining ?? lap.fuel ?? lap.fuelLevel ?? lap.fuel_remaining ?? null;
+
         return {
           lapNumber: Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0),
           lapTime: Number.isFinite(timeSeconds) ? formatLapTime(timeSeconds) : '—',
@@ -363,6 +441,11 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
             Number.isFinite(s3) ? formatLapTime(s3) : '—',
           ] as [string, string, string],
           isPitLap: Boolean(lap.isPitLap ?? lap.pitLap ?? false),
+          // SD-18: Новые поля
+          maxSpeed: formatSpeed(maxSpeedRaw),
+          fuelRemaining: formatFuel(fuelRaw),
+          tyreWear: parseTyreWear(lap),
+          tyreType: parseTyreType(lap),
         };
       });
 
