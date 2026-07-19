@@ -214,8 +214,7 @@ export default function Sessions() {
                   : isActive
                     // Активный цветной фильтр: используем тот же цвет, что и бейдж
                     ? cn(colorClass, "border-transparent hover:ring-1 hover:ring-border/60")
-                    // Неактивный: оставляем нейтральный фон, но не трогаем цвет текста,
-                    // чтобы иконка могла наследовать его из активного состояния
+                    // Неактивный: оставляем нейтральный фон
                     : "bg-background text-muted-foreground/80 border-border opacity-60 hover:opacity-100 hover:bg-accent/10",
               )}
             >

@@ -5,8 +5,8 @@
 
 // ── Вкладки ──────────────────────────────────────────────────────────────────
 
-/** Допустимые ключи вкладок страницы SessionDetail. */
-export type SessionTabKey = 'results' | 'laps' | 'sectors' | 'lapProgress';
+/** Допустимые ключи вкладок страницы SessionDetail. Вкладка «sectors» удалена. */
+export type SessionTabKey = 'results' | 'laps' | 'lapProgress';
 
 /** Элемент навигационной вкладки. */
 export interface SessionTabItem {

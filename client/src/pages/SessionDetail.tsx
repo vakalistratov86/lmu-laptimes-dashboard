@@ -4,7 +4,11 @@
  *
  * SD-15: Фильтр по пилоту.
  * Клик по строке в таблице результатов устанавливает selectedDriver.
- * Вкладки «Круги» и «Секторы» передают этот фильтр в дочерние компоненты.
+ * Вкладка «Круги» передаёт этот фильтр в дочерние компоненты.
+ *
+ * SD-16: Вкладка «Секторы» удалена.
+ * SD-17: Вкладка «Круги» показывает таблицу напрямую (без аккордеона)
+ *         когда выбран конкретный пилот.
  */
 import { useMemo, useState } from 'react';
 import { useRoute, useSearch } from 'wouter';
@@ -14,7 +18,6 @@ import {
   buildHeroStats,
   buildResultRows,
   buildDriverLapGroups,
-  buildSectorSummary,
   buildLapProgressSeries,
   buildTabs,
   normalizeSessionType,
@@ -26,7 +29,6 @@ import {
   SessionTabs,
   SessionLoadingSkeleton,
   SessionEmptyState,
-  SessionSectorsSummary,
   DriverLapsAccordion,
   SessionLapProgressChart,
 } from '@/components/session-detail';
@@ -58,7 +60,7 @@ export default function SessionDetail() {
 
   const [activeTab, setActiveTab] = useState<SessionTabKey>('results');
 
-  // SD-15: выбранный пилот для фильтрации вкладок Круги / Секторы
+  // SD-15: выбранный пилот для фильтрации вкладки Круги
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
 
   // ── Вычисляемые данные ────────────────────────────────────────────────────
@@ -78,11 +80,6 @@ export default function SessionDetail() {
 
   const lapGroups = useMemo(
     () => buildDriverLapGroups(laps ?? []),
-    [laps],
-  );
-
-  const sectorRows = useMemo(
-    () => buildSectorSummary(laps ?? []),
     [laps],
   );
 
@@ -172,18 +169,10 @@ export default function SessionDetail() {
           />
         )}
 
-        {/* SD-13: Аккордеон кругов — с фильтром по пилоту */}
+        {/* SD-13 / SD-17: Круги — таблица без аккордеона если пилот выбран */}
         {activeTab === 'laps' && (
           <DriverLapsAccordion
             groups={lapGroups}
-            driverFilter={selectedDriver}
-          />
-        )}
-
-        {/* SD-12: Секторы — с фильтром по пилоту */}
-        {activeTab === 'sectors' && (
-          <SessionSectorsSummary
-            rows={sectorRows}
             driverFilter={selectedDriver}
           />
         )}
