@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Trophy, Flag, ListChecks, Upload, Moon, Sun, Menu, X, CalendarDays } from "lucide-react";
+import { LayoutDashboard, Trophy, Flag, ListChecks, Upload, Moon, Sun, Menu, X, CalendarDays, Activity } from "lucide-react";
 import { Logo } from "./Logo";
 import { DriverFilterBar } from "./DriverFilterBar";
 import { useState, useEffect, type ReactNode } from "react";
@@ -13,6 +13,7 @@ function useNav() {
     { href: "/leaderboards", label: t("nav.leaderboards"), icon: Trophy, testId: "link-leaderboards" },
     { href: "/tracks", label: t("nav.tracks"), icon: Flag, testId: "link-tracks" },
     { href: "/sessions", label: t("nav.sessions"), icon: ListChecks, testId: "link-sessions" },
+    { href: "/telemetry", label: t("nav.telemetry"), icon: Activity, testId: "link-telemetry" },
     { href: "/events", label: t("nav.events"), icon: CalendarDays, testId: "link-events" },
     { href: "/import", label: t("nav.import"), icon: Upload, testId: "link-import" },
   ];

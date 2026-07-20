@@ -7,6 +7,7 @@ import { eq, notInArray } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
 import { computeFileHash, generateId, getJobStatus, getJobErrors, runImport } from "./importWorker";
 import { computeFileHashBinary, runTelemetryImport } from "./telemetryImportWorker";
+import { listTelemetrySessions, getTelemetrySessionWithChannels, getSessionLaps, getLapSeries } from "./telemetryQuery";
 
 /**
  * Wraps an async route handler so that any rejected Promise is forwarded
@@ -107,6 +108,37 @@ export async function registerRoutes(
     }));
 
     res.json(enriched);
+  }));
+
+  // ── Телеметрия (просмотр) ────────────────────────────────────────
+  app.get("/api/telemetry/sessions", asyncRoute(async (_req, res) => {
+    res.json(await listTelemetrySessions());
+  }));
+
+  app.get("/api/telemetry/sessions/:id", asyncRoute(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Некорректный id" });
+    const result = await getTelemetrySessionWithChannels(id);
+    if (!result) return res.status(404).json({ message: "Запись телеметрии не найдена" });
+    res.json(result);
+  }));
+
+  app.get("/api/telemetry/sessions/:id/laps", asyncRoute(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Некорректный id" });
+    res.json(await getSessionLaps(id));
+  }));
+
+  app.get("/api/telemetry/sessions/:id/laps/:lapNumber/series", asyncRoute(async (req, res) => {
+    const id = Number(req.params.id);
+    const lapNumber = Number(req.params.lapNumber);
+    if (!Number.isFinite(id) || !Number.isFinite(lapNumber)) {
+      return res.status(400).json({ message: "Некорректные параметры" });
+    }
+    const laps = await getSessionLaps(id);
+    const lap = laps.find((l) => l.lapNumber === lapNumber);
+    if (!lap) return res.status(404).json({ message: "Круг не найден" });
+    res.json(await getLapSeries(id, lap));
   }));
 
   /**
