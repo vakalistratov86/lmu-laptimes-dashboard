@@ -1,10 +1,12 @@
+import express from "express";
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from 'node:http';
 import { storage, type LapFilter, db } from "./storage";
-import { importJobs, importErrors, tracks, drivers, lapTimes, sessions, sessionResults, sessionLaps, sessionIncidents, sessionSectorBests, sessionTrackLimits } from '@shared/schema';
+import { importJobs, importErrors, tracks, drivers, lapTimes, sessions, sessionResults, sessionLaps, sessionIncidents, sessionSectorBests, sessionTrackLimits, telemetryImportJobs, telemetrySessions, telemetryChannels, telemetrySamples } from '@shared/schema';
 import { eq, notInArray } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
 import { computeFileHash, generateId, getJobStatus, getJobErrors, runImport } from "./importWorker";
+import { computeFileHashBinary, runTelemetryImport } from "./telemetryImportWorker";
 
 /**
  * Wraps an async route handler so that any rejected Promise is forwarded
@@ -235,6 +237,88 @@ export async function registerRoutes(
       await tx.delete(tracks);
     });
     res.json({ ok: true, message: "База данных успешно очищена" });
+  }));
+
+  /**
+   * POST /api/import/telemetry?fileName=<name> — импорт .duckdb файла телеметрии.
+   *
+   * Тело запроса — сырые байты файла (application/octet-stream), а не JSON:
+   * .duckdb — бинарный формат, десятки МБ, base64-в-JSON был бы неэффективен.
+   * Мидлварь express.raw() навешана только на этот роут, не трогая глобальный
+   * express.json() в server/index.ts. Идемпотентность — по SHA-256 сырых байт,
+   * как в POST /api/import для XML-логов.
+   */
+  app.post(
+    "/api/import/telemetry",
+    express.raw({ type: "application/octet-stream", limit: "150mb" }),
+    asyncRoute(async (req, res) => {
+      const fileName = String(req.query.fileName ?? "телеметрия.duckdb");
+      const buffer = req.body;
+
+      if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+        return res.status(400).json({ message: "Не передано содержимое файла" });
+      }
+
+      const fileHash = computeFileHashBinary(buffer);
+      const existingRows = await db
+        .select()
+        .from(telemetryImportJobs)
+        .where(eq(telemetryImportJobs.fileHash, fileHash));
+      const existing = existingRows[0];
+
+      if (existing) {
+        return res.status(409).json({
+          ok: false,
+          fileName,
+          message: "Файл уже был импортирован",
+          importId: existing.id,
+          importStatus: existing.status,
+        });
+      }
+
+      const id = generateId();
+      await db.insert(telemetryImportJobs).values({
+        id,
+        fileHash,
+        fileName,
+        status: "processing",
+        createdAt: Date.now(),
+      });
+
+      try {
+        const { telemetrySessionId, channelCount, sampleCount } = await runTelemetryImport({
+          id,
+          fileHash,
+          fileName,
+          buffer,
+        });
+
+        await db.update(telemetryImportJobs)
+          .set({ status: "completed", telemetrySessionId, channelCount, sampleCount, finishedAt: Date.now() })
+          .where(eq(telemetryImportJobs.id, id));
+
+        res.json({ ok: true, fileName, importId: id, telemetrySessionId, channelCount, sampleCount });
+      } catch (e: any) {
+        await db.update(telemetryImportJobs)
+          .set({ status: "failed", error: e.message, finishedAt: Date.now() })
+          .where(eq(telemetryImportJobs.id, id));
+        res.status(500).json({ ok: false, fileName, message: e.message, importId: id });
+      }
+    })
+  );
+
+  /**
+   * DELETE /api/import/telemetry/all — очистка импортированной телеметрии.
+   * Не затрагивает данные заездов (sessions/lap_times) — независимый набор таблиц.
+   */
+  app.delete("/api/import/telemetry/all", asyncRoute(async (_req, res) => {
+    await db.transaction(async (tx) => {
+      await tx.delete(telemetrySamples);
+      await tx.delete(telemetryChannels);
+      await tx.delete(telemetrySessions);
+      await tx.delete(telemetryImportJobs);
+    });
+    res.json({ ok: true, message: "Телеметрия успешно очищена" });
   }));
 
   /**

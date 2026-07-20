@@ -1,4 +1,4 @@
-import { pgTable, text, integer, real, serial, bigint } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, real, serial, bigint, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -190,6 +190,66 @@ export const sessionTrackLimits = pgTable("session_track_limits", {
   decision: text("decision"),
 });
 
+// Задания импорта телеметрии (.duckdb) — idempotency по SHA-256 сырых байт файла
+export const telemetryImportJobs = pgTable("telemetry_import_jobs", {
+  id: text("id").primaryKey(),                                // nanoid
+  fileHash: text("file_hash").notNull().unique(),
+  fileName: text("file_name").notNull(),
+  status: text("status").notNull().default("processing"),     // processing | completed | failed
+  telemetrySessionId: integer("telemetry_session_id"),
+  channelCount: integer("channel_count"),
+  sampleCount: integer("sample_count"),
+  error: text("error"),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  finishedAt: bigint("finished_at", { mode: "number" }),
+});
+
+// Одна запись телеметрии на импортированный .duckdb файл (метаданные заезда)
+export const telemetrySessions = pgTable("telemetry_sessions", {
+  id: serial("id").primaryKey(),
+  importJobId: text("import_job_id").notNull(),
+  fileName: text("file_name").notNull(),
+  driverName: text("driver_name"),
+  steamId: text("steam_id"),
+  recordingTime: text("recording_time"),
+  sessionTime: text("session_time"),
+  sessionType: text("session_type"),
+  trackName: text("track_name"),
+  trackLayout: text("track_layout"),
+  weatherConditions: text("weather_conditions"),
+  carName: text("car_name"),
+  carClass: text("car_class"),
+  carSetup: text("car_setup"),                                 // сырой JSON сетапа авто
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+
+// Реестр каналов/событий телеметрии, найденных в конкретном файле
+export const telemetryChannels = pgTable("telemetry_channels", {
+  id: serial("id").primaryKey(),
+  telemetrySessionId: integer("telemetry_session_id").notNull(),
+  name: text("name").notNull(),
+  kind: text("kind").notNull(),                                 // channel | event
+  frequencyHz: integer("frequency_hz"),                         // только для channel
+  unit: text("unit"),
+  sampleCount: integer("sample_count").notNull(),
+});
+
+// Сами сэмплы телеметрии (EAV: одна таблица вместо ~100 таблиц-на-канал)
+export const telemetrySamples = pgTable("telemetry_samples", {
+  id: serial("id").primaryKey(),
+  channelId: integer("channel_id").notNull(),
+  seq: integer("seq").notNull(),                                // порядковый номер строки в исходном файле
+  // Для events — реальное время (сек) из файла; для channels — NULL,
+  // потребитель считает время как seq / frequencyHz канала.
+  ts: real("ts"),
+  value1: real("value1"),
+  value2: real("value2"),
+  value3: real("value3"),
+  value4: real("value4"),
+}, (table) => ({
+  channelIdIdx: index("telemetry_samples_channel_id_idx").on(table.channelId),
+}));
+
 export const insertTrackSchema = createInsertSchema(tracks).omit({ id: true });
 export const insertDriverSchema = createInsertSchema(drivers).omit({ id: true });
 export const insertLapTimeSchema = createInsertSchema(lapTimes).omit({ id: true });
@@ -201,6 +261,10 @@ export const insertSessionSectorBestSchema = createInsertSchema(sessionSectorBes
 export const insertSessionTrackLimitsSchema = createInsertSchema(sessionTrackLimits).omit({ id: true });
 export const insertImportJobSchema = createInsertSchema(importJobs).omit({ id: true });
 export const insertImportErrorSchema = createInsertSchema(importErrors).omit({ id: true });
+export const insertTelemetryImportJobSchema = createInsertSchema(telemetryImportJobs).omit({ id: true });
+export const insertTelemetrySessionSchema = createInsertSchema(telemetrySessions).omit({ id: true });
+export const insertTelemetryChannelSchema = createInsertSchema(telemetryChannels).omit({ id: true });
+export const insertTelemetrySampleSchema = createInsertSchema(telemetrySamples).omit({ id: true });
 
 export type InsertTrack = z.infer<typeof insertTrackSchema>;
 export type Track = typeof tracks.$inferSelect;
@@ -224,6 +288,14 @@ export type InsertImportJob = z.infer<typeof insertImportJobSchema>;
 export type ImportJob = typeof importJobs.$inferSelect;
 export type InsertImportError = z.infer<typeof insertImportErrorSchema>;
 export type ImportError = typeof importErrors.$inferSelect;
+export type InsertTelemetryImportJob = z.infer<typeof insertTelemetryImportJobSchema>;
+export type TelemetryImportJob = typeof telemetryImportJobs.$inferSelect;
+export type InsertTelemetrySession = z.infer<typeof insertTelemetrySessionSchema>;
+export type TelemetrySession = typeof telemetrySessions.$inferSelect;
+export type InsertTelemetryChannel = z.infer<typeof insertTelemetryChannelSchema>;
+export type TelemetryChannel = typeof telemetryChannels.$inferSelect;
+export type InsertTelemetrySample = z.infer<typeof insertTelemetrySampleSchema>;
+export type TelemetrySample = typeof telemetrySamples.$inferSelect;
 
 export type DriverEnriched = Driver & {
   isPlayer: number | null;

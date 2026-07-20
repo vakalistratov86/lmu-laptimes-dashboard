@@ -12,8 +12,14 @@ import {
   RefreshCw,
   AlertTriangle,
   Trash2,
+  FileText,
+  Activity,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
+import TelemetryImportPanel from "@/components/TelemetryImportPanel";
+
+type MainTab = "logs" | "telemetry";
 
 // ─── Расширяем типизацию input для webkitdirectory ───────────────────────────
 declare module "react" {
@@ -160,6 +166,7 @@ export default function Import() {
   const [counters, setCountersState] = useState<Counters>(() => loadCounters());
   const [mode, setMode] = useState<ImportMode>("idle");
   const [clearingDb, setClearingDb] = useState(false);
+  const [mainTab, setMainTab] = useState<MainTab>("logs");
 
   // Обёртки, которые одновременно обновляют state и localStorage
   const setLog = useCallback((updater: (prev: LogEntry[]) => LogEntry[]) => {
@@ -409,6 +416,40 @@ export default function Import() {
         </p>
       </div>
 
+      {/* Основные табы */}
+      <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1 w-fit">
+        <button
+          data-testid="tab-import-logs"
+          onClick={() => setMainTab("logs")}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            mainTab === "logs"
+              ? "bg-primary text-primary-foreground shadow"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <FileText size={14} />
+          {t("imp.tabLogs")}
+        </button>
+        <button
+          data-testid="tab-import-telemetry"
+          onClick={() => setMainTab("telemetry")}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            mainTab === "telemetry"
+              ? "bg-primary text-primary-foreground shadow"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Activity size={14} />
+          {t("imp.tabTelemetry")}
+        </button>
+      </div>
+
+      {mainTab === "telemetry" ? (
+        <TelemetryImportPanel />
+      ) : (
+      <>
       {/* Предупреждение об очистке БД */}
       <div className="space-y-3">
         <div className="flex flex-col gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 sm:flex-row sm:items-start sm:justify-between">
@@ -620,6 +661,8 @@ export default function Import() {
             ))}
           </ul>
         </div>
+      )}
+      </>
       )}
     </div>
   );

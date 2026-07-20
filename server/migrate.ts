@@ -265,6 +265,70 @@ export async function runMigrations(): Promise<void> {
       )
     `;
 
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS telemetry_import_jobs (
+        id                    TEXT PRIMARY KEY,
+        file_hash             TEXT NOT NULL UNIQUE,
+        file_name             TEXT NOT NULL,
+        status                TEXT NOT NULL DEFAULT 'processing',
+        telemetry_session_id  INTEGER,
+        channel_count         INTEGER,
+        sample_count          INTEGER,
+        error                 TEXT,
+        created_at            BIGINT NOT NULL,
+        finished_at           BIGINT
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS telemetry_sessions (
+        id                   SERIAL PRIMARY KEY,
+        import_job_id        TEXT NOT NULL,
+        file_name            TEXT NOT NULL,
+        driver_name          TEXT,
+        steam_id             TEXT,
+        recording_time       TEXT,
+        session_time         TEXT,
+        session_type         TEXT,
+        track_name           TEXT,
+        track_layout         TEXT,
+        weather_conditions   TEXT,
+        car_name             TEXT,
+        car_class            TEXT,
+        car_setup            TEXT,
+        created_at           BIGINT NOT NULL
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS telemetry_channels (
+        id                     SERIAL PRIMARY KEY,
+        telemetry_session_id   INTEGER NOT NULL,
+        name                   TEXT NOT NULL,
+        kind                   TEXT NOT NULL,
+        frequency_hz           INTEGER,
+        unit                   TEXT,
+        sample_count           INTEGER NOT NULL
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS telemetry_samples (
+        id          SERIAL PRIMARY KEY,
+        channel_id  INTEGER NOT NULL,
+        seq         INTEGER NOT NULL,
+        ts          REAL,
+        value1      REAL,
+        value2      REAL,
+        value3      REAL,
+        value4      REAL
+      )
+    `;
+
+    await migrationClient`
+      CREATE INDEX IF NOT EXISTS telemetry_samples_channel_id_idx ON telemetry_samples (channel_id)
+    `;
+
     console.log("[migrate] All tables are up to date.");
   } finally {
     await migrationClient.end();
