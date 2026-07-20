@@ -92,12 +92,15 @@ export default function Tracks() {
               <Link key={t.id} href={`/tracks/${t.id}`} data-testid={`card-track-${t.id}`}>
                 <Card className="group flex h-full flex-row items-stretch p-4 hover-elevate gap-4">
 
-                  {/* Левая часть: схема трассы — увеличенная, единый фирменный акцентный цвет */}
-                  <div className="flex flex-col items-center justify-center shrink-0 w-36">
+                  {/* Левая часть: схема трассы — увеличенная, единый фирменный акцентный цвет.
+                      Уже на телефонах ширина карточки — это почти вся ширина экрана, поэтому
+                      фиксированные 144px схемы почти не оставляли места для правой колонки —
+                      значения статистики наезжали друг на друга. На узких экранах схема меньше. */}
+                  <div className="flex flex-col items-center justify-center shrink-0 w-24 sm:w-36">
                     {hasTrackMap(resolveTrackMapName(t)) ? (
                       <TrackMap
                         name={resolveTrackMapName(t)}
-                        className="h-28 w-36 text-primary/80 transition-colors group-hover:text-primary"
+                        className="h-20 w-24 text-primary/80 transition-colors group-hover:text-primary sm:h-28 sm:w-36"
                       />
                     ) : (
                       <ArrowRight size={16} className="text-muted-foreground transition-transform group-hover:translate-x-1" />
@@ -134,16 +137,18 @@ export default function Tracks() {
                       </div>
                     )}
 
-                    {/* Статистика */}
+                    {/* Статистика. min-w-0 на каждой ячейке + truncate на значении обязательны:
+                        без них длинное время круга (напр. "3:25.180") не оборачивалось и не
+                        обрезалось, а вылезало поверх соседней ячейки "Сессий" на узких экранах. */}
                     <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2">
 
                       {/* Рекорд круга */}
-                      <div className="col-span-1">
+                      <div className="col-span-1 min-w-0">
                         <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                           <Trophy size={10} /> Рекорд
                         </div>
-                        <div className="mt-0.5">
-                          <span className="font-data text-sm font-bold tabular-nums text-green-500">
+                        <div className="mt-0.5 min-w-0">
+                          <span className="block truncate font-data text-xs font-bold tabular-nums text-green-500 sm:text-sm">
                             {hasBest ? formatLap(st.bestMs) : "—"}
                           </span>
                           {hasBest && (
@@ -153,21 +158,21 @@ export default function Tracks() {
                       </div>
 
                       {/* Сессий */}
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                           <Layers size={10} /> Сессий
                         </div>
-                        <div className="mt-0.5 text-sm font-semibold">
+                        <div className="mt-0.5 truncate text-sm font-semibold">
                           {st?.sessionCount ?? 0}
                         </div>
                       </div>
 
                       {/* Кругов */}
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                           <Timer size={10} /> Кругов
                         </div>
-                        <div className="mt-0.5 text-sm font-semibold">
+                        <div className="mt-0.5 truncate text-sm font-semibold">
                           {st?.lapCount ?? 0}
                         </div>
                       </div>

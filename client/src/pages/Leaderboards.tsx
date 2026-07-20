@@ -245,18 +245,21 @@ export default function Leaderboards() {
                   </span>
                 </div>
 
-                {/* Таблица результатов */}
+                {/* Таблица результатов. Команда/Автомобиль/Дата скрыты на узких экранах —
+                    без max-w+truncate длинные названия команд ("Toyota Gazoo Racing" и т.п.)
+                    переносились на 2-3 строки в своей ячейке, раздувая высоту каждой строки
+                    и вытесняя время круга и отставание за пределы экрана без прокрутки. */}
                 <div className="w-full overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border/60 bg-muted/20 text-[11px] uppercase tracking-wider text-muted-foreground">
                         <th className="w-10 px-4 py-2 text-center">#</th>
                         <th className="px-4 py-2 text-left">Пилот</th>
-                        <th className="px-4 py-2 text-left">Команда</th>
-                        <th className="px-4 py-2 text-left">Автомобиль</th>
+                        <th className="hidden px-4 py-2 text-left sm:table-cell">Команда</th>
+                        <th className="hidden px-4 py-2 text-left md:table-cell">Автомобиль</th>
                         <th className="px-4 py-2 text-right">Время</th>
                         <th className="px-4 py-2 text-right">Отставание</th>
-                        <th className="px-4 py-2 text-right">Дата</th>
+                        <th className="hidden px-4 py-2 text-right lg:table-cell">Дата</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -280,11 +283,14 @@ export default function Leaderboards() {
                               </span>
                             </td>
                             {/* Команда */}
-                            <td className="px-4 py-2.5 text-muted-foreground">
+                            <td className="hidden max-w-[160px] truncate px-4 py-2.5 text-muted-foreground sm:table-cell">
                               {l.team || "—"}
                             </td>
                             {/* Автомобиль */}
-                            <td className="px-4 py-2.5 text-muted-foreground/80" data-testid={`text-car-${l.id}`}>
+                            <td
+                              className="hidden max-w-[160px] truncate px-4 py-2.5 text-muted-foreground/80 md:table-cell"
+                              data-testid={`text-car-${l.id}`}
+                            >
                               {l.car}
                             </td>
                             {/* Время круга */}
@@ -308,7 +314,7 @@ export default function Leaderboards() {
                               )}
                             </td>
                             {/* Дата */}
-                            <td className="px-4 py-2.5 text-right">
+                            <td className="hidden px-4 py-2.5 text-right lg:table-cell">
                               <span className="font-data text-[11px] tabular-nums text-muted-foreground/60">
                                 {recordDate || "—"}
                               </span>
