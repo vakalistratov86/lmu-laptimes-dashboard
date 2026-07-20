@@ -65,13 +65,6 @@ export function normalizeSessionCategory(raw: string | null | undefined): Sessio
   return "practice";
 }
 
-/** Единственный источник отображаемого текста плашки — одинаков во всём приложении. */
-export const SESSION_CATEGORY_LABEL: Record<SessionCategory, string> = {
-  practice: "Тренировка",
-  qualify: "Квалификация",
-  race: "Гонка",
-};
-
 /** Neutral fallback used for any unknown session type. */
 export const SESSION_TYPE_BADGE_FALLBACK =
   "bg-muted/40 text-muted-foreground border-border";

@@ -4,15 +4,19 @@ import { Logo } from "./Logo";
 import { DriverFilterBar } from "./DriverFilterBar";
 import { useState, useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { useLanguage, type Locale } from "@/lib/i18n";
 
-const NAV = [
-  { href: "/", label: "Обзор", icon: LayoutDashboard, testId: "link-overview" },
-  { href: "/leaderboards", label: "Лидерборды", icon: Trophy, testId: "link-leaderboards" },
-  { href: "/tracks", label: "Трассы", icon: Flag, testId: "link-tracks" },
-  { href: "/sessions", label: "Сессии", icon: ListChecks, testId: "link-sessions" },
-  { href: "/events", label: "LMU Events", icon: CalendarDays, testId: "link-events" },
-  { href: "/import", label: "Импорт логов", icon: Upload, testId: "link-import" },
-];
+function useNav() {
+  const { t } = useLanguage();
+  return [
+    { href: "/", label: t("nav.overview"), icon: LayoutDashboard, testId: "link-overview" },
+    { href: "/leaderboards", label: t("nav.leaderboards"), icon: Trophy, testId: "link-leaderboards" },
+    { href: "/tracks", label: t("nav.tracks"), icon: Flag, testId: "link-tracks" },
+    { href: "/sessions", label: t("nav.sessions"), icon: ListChecks, testId: "link-sessions" },
+    { href: "/events", label: t("nav.events"), icon: CalendarDays, testId: "link-events" },
+    { href: "/import", label: t("nav.import"), icon: Upload, testId: "link-import" },
+  ];
+}
 
 function useTheme() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
@@ -26,6 +30,8 @@ function useTheme() {
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const [location] = useLocation();
+  const { t } = useLanguage();
+  const NAV = useNav();
   const isActive = (href: string) =>
     href === "/" ? location === "/" : location.startsWith(href);
 
@@ -38,7 +44,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             LMU<span className="text-primary"> Dashboard</span>
           </div>
           <div className="text-[11px] uppercase tracking-widest text-muted-foreground">
-            Lap Monitoring
+            {t("nav.tagline")}
           </div>
         </div>
       </div>
@@ -67,14 +73,45 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
       <div className="border-t border-sidebar-border p-3 text-[11px] text-muted-foreground">
-        Демо-данные · сезон 2026
+        {t("nav.demoSeason")}
       </div>
     </>
   );
 }
 
+function LanguageSwitcher() {
+  const { locale, setLocale, t } = useLanguage();
+  const options: Locale[] = ["ru", "en"];
+  return (
+    <div
+      className="flex h-9 items-center rounded-md border border-border p-0.5 text-xs font-semibold"
+      role="group"
+      aria-label={t("header.toggleLanguage")}
+    >
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          data-testid={`button-locale-${opt}`}
+          onClick={() => setLocale(opt)}
+          aria-pressed={locale === opt}
+          className={cn(
+            "h-8 min-w-[34px] rounded-[5px] uppercase transition-colors",
+            locale === opt
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover-elevate",
+          )}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { theme, toggle } = useTheme();
+  const { t } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [location] = useLocation();
 
@@ -107,24 +144,27 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <button
             className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground hover-elevate md:hidden"
             onClick={() => setMobileOpen((o) => !o)}
-            aria-label="Меню"
+            aria-label={t("header.menu")}
             data-testid="button-mobile-menu"
           >
             {mobileOpen ? <X size={16} /> : <Menu size={16} />}
           </button>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" />
-            <span className="hidden sm:inline">Мониторинг активен</span>
+            <span className="hidden sm:inline">{t("header.monitoringActive")}</span>
           </div>
         </div>
-        <button
-          data-testid="button-theme-toggle"
-          onClick={toggle}
-          aria-label="Переключить тему"
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground hover-elevate"
-        >
-          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher />
+          <button
+            data-testid="button-theme-toggle"
+            onClick={toggle}
+            aria-label={t("header.toggleTheme")}
+            className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground hover-elevate"
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        </div>
       </header>
 
       {/* Driver filter bar — row 2, sticky below header */}

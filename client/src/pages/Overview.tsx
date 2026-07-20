@@ -2,6 +2,7 @@ import { useLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
 import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap } from "@/lib/format";
 import { normalizeSessionCategory } from "@/lib/classStyles";
+import { useLanguage } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Timer, Flag, Users, Gauge, Trophy, UserCheck, Bot, RefreshCw, Route } from "lucide-react";
@@ -11,14 +12,14 @@ import {
 import { useMemo } from "react";
 
 function KpiCard({
-  icon: Icon, label, value, sub,
-}: { icon: any; label: string; value: string; sub?: string }) {
+  icon: Icon, label, value, sub, testId,
+}: { icon: any; label: string; value: string; sub?: string; testId: string }) {
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between">
         <div>
           <div className="text-xs uppercase tracking-widest text-muted-foreground">{label}</div>
-          <div className="mt-2 font-data text-2xl font-bold tabular-nums" data-testid={`kpi-${label}`}>
+          <div className="mt-2 font-data text-2xl font-bold tabular-nums" data-testid={`kpi-${testId}`}>
             {value}
           </div>
           {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
@@ -31,18 +32,19 @@ function KpiCard({
   );
 }
 
-/** Форматирует дистанцию в метрах: < 1000 → «X м», иначе → «X.XX км» */
-function formatDistance(meters: number): string {
-  if (meters < 1000) return `${Math.round(meters)} м`;
-  return `${(meters / 1000).toFixed(2)} км`;
-}
-
 export default function Overview() {
+  const { t } = useLanguage();
   const { data: laps, isLoading } = useLaps();
   const { data: tracks } = useTracks();
   const { data: drivers } = useDrivers();
   const { data: sessions } = useSessions();
   const { selectedDriverIds, isFiltered } = useDriverFilter();
+
+  /** Форматирует дистанцию в метрах: < 1000 → «X м», иначе → «X.XX км» */
+  const formatDistance = (meters: number): string => {
+    if (meters < 1000) return `${Math.round(meters)} ${t("overview.meters")}`;
+    return `${(meters / 1000).toFixed(2)} ${t("overview.km")}`;
+  };
 
   const filteredLaps = useMemo(() => {
     if (!laps) return [];
@@ -107,7 +109,7 @@ export default function Overview() {
       <div className="space-y-6">
         <PageTitle />
         <p className="py-16 text-center text-sm text-muted-foreground">
-          Нет данных для выбранных пилотов
+          {t("overview.noDataForDrivers")}
         </p>
       </div>
     );
@@ -135,16 +137,24 @@ export default function Overview() {
       {/* Верхний ряд: базовая статистика */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KpiCard
+          testId="distance"
           icon={Route}
-          label="Пройдено расстояния"
+          label={t("overview.kpiDistance")}
           value={formatDistance(totalDistanceM)}
-          sub="во всех сессиях"
+          sub={t("overview.kpiDistanceSub")}
         />
-        <KpiCard icon={Flag} label="Трасс" value={String(tracks?.length ?? 0)} sub="активных" />
-        <KpiCard icon={Users} label="Пилотов" value={String(filteredDriverCount)} sub={isFiltered ? "выбрано" : "в чемпионате"} />
+        <KpiCard testId="tracks" icon={Flag} label={t("overview.kpiTracks")} value={String(tracks?.length ?? 0)} sub={t("overview.kpiTracksSub")} />
         <KpiCard
+          testId="drivers"
+          icon={Users}
+          label={t("overview.kpiDrivers")}
+          value={String(filteredDriverCount)}
+          sub={isFiltered ? t("overview.kpiDriversSubSelected") : t("overview.kpiDriversSubAll")}
+        />
+        <KpiCard
+          testId="best-lap"
           icon={Gauge}
-          label="Лучший круг"
+          label={t("overview.kpiBestLap")}
           value={formatLap(bestLap.lapMs)}
           sub={`${bestLap.driverName} · ${bestLap.trackName} · ${bestLap.car}`}
         />
@@ -152,16 +162,16 @@ export default function Overview() {
 
       {/* Нижний ряд: статистика по гонкам и игрокам */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard icon={Trophy} label="Гонок" value={String(raceCount)} sub="проведено" />
-        <KpiCard icon={UserCheck} label="Реальных игроков" value={String(realPlayerCount)} sub="уникальных" />
-        <KpiCard icon={Bot} label="ИИ игроков" value={String(aiPlayerCount)} sub="уникальных" />
-        <KpiCard icon={RefreshCw} label="Кругов пройдено" value={String(totalLapsCompleted)} sub="во всех сессиях" />
+        <KpiCard testId="races" icon={Trophy} label={t("overview.kpiRaces")} value={String(raceCount)} sub={t("overview.kpiRacesSub")} />
+        <KpiCard testId="real-players" icon={UserCheck} label={t("overview.kpiRealPlayers")} value={String(realPlayerCount)} sub={t("overview.kpiRealPlayersSub")} />
+        <KpiCard testId="ai-players" icon={Bot} label={t("overview.kpiAiPlayers")} value={String(aiPlayerCount)} sub={t("overview.kpiAiPlayersSub")} />
+        <KpiCard testId="laps-completed" icon={RefreshCw} label={t("overview.kpiLapsCompleted")} value={String(totalLapsCompleted)} sub={t("overview.kpiLapsCompletedSub")} />
       </div>
 
       <Card className="p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Лучшее время по трассам</h2>
-          <span className="text-xs text-muted-foreground">рекорд круга, сек</span>
+          <h2 className="text-lg font-semibold">{t("overview.chartTitle")}</h2>
+          <span className="text-xs text-muted-foreground">{t("overview.chartSubtitle")}</span>
         </div>
         <div style={{ height: 340 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -179,7 +189,7 @@ export default function Overview() {
                   border: "1px solid hsl(var(--border))",
                   borderRadius: 8, fontSize: 13,
                 }}
-                formatter={(_v: any, _n: any, p: any) => [p.payload.label, "Круг"]}
+                formatter={(_v: any, _n: any, p: any) => [p.payload.label, t("overview.chartTooltipLap")]}
               />
               <Bar dataKey="seconds" radius={[0, 4, 4, 0]}>
                 {chartData.map((_, i) => (
@@ -195,11 +205,12 @@ export default function Overview() {
 }
 
 function PageTitle() {
+  const { t } = useLanguage();
   return (
     <div>
-      <h1 className="font-display text-xl font-bold tracking-tight">Обзор</h1>
+      <h1 className="font-display text-xl font-bold tracking-tight">{t("overview.title")}</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Сводка по мониторингу времён на трассах LMU
+        {t("overview.subtitle")}
       </p>
     </div>
   );

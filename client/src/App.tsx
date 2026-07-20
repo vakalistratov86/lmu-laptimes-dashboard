@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { DriverFilterProvider } from "@/lib/driverFilter";
+import { LanguageProvider } from "@/lib/i18n";
 import NotFound from "@/pages/not-found";
 import Overview from "@/pages/Overview";
 import Leaderboards from "@/pages/Leaderboards";
@@ -35,16 +36,18 @@ function AppRouter() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <DriverFilterProvider>
-          <Router hook={useHashLocation}>
-            <AppLayout>
-              <AppRouter />
-            </AppLayout>
-          </Router>
-        </DriverFilterProvider>
-      </TooltipProvider>
+      <LanguageProvider>
+        <TooltipProvider>
+          <Toaster />
+          <DriverFilterProvider>
+            <Router hook={useHashLocation}>
+              <AppLayout>
+                <AppRouter />
+              </AppLayout>
+            </Router>
+          </DriverFilterProvider>
+        </TooltipProvider>
+      </LanguageProvider>
     </QueryClientProvider>
   );
 }

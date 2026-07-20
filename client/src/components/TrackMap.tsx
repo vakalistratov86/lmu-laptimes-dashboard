@@ -17,6 +17,8 @@
 // рисовать большинство официальных карт трасс. Маркер S/F и его угол считаются из фактического
 // направления движения в этой точке. Все контуры нормализованы в единый viewBox 0 0 420 250.
 
+import { useLanguage } from "@/lib/i18n";
+
 interface TrackData {
   d: string;
   // Точка старта/финиша [x, y] и угол поворота маркера
@@ -123,6 +125,7 @@ export function TrackMap({
   className?: string;
   showStartFinish?: boolean;
 }) {
+  const { t } = useLanguage();
   const track = TRACKS[name];
   if (!track) return null;
   const { d, startX, startY, startAngle = 0 } = track;
@@ -132,7 +135,7 @@ export function TrackMap({
       viewBox="0 0 420 250"
       className={className}
       fill="none"
-      aria-label={`Схема трассы ${name}`}
+      aria-label={t("tracks.mapAriaLabel", { name })}
       role="img"
       data-testid="track-map"
     >
