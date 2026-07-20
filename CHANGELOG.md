@@ -79,6 +79,7 @@
 - Обновлён `drizzle.config.ts` под PostgreSQL.
 - Обновлён `docker-compose.yml`: сервис PostgreSQL, healthcheck и проброс портов 3000→5000.
 - Доработан `Dockerfile`: генерация миграций drizzle-kit на этапе сборки, использование `app.listen` и привязка к `0.0.0.0`.
+- `TrackMap.tsx`: 11 контуров трасс (Spa, Monza, Bahrain, Portimão, Imola, Interlagos, COTA, Silverstone, Barcelona, Paul Ricard, Lusail) переоцифрованы напрямую из GPS-данных (bacinger/f1-circuits) вместо ручной трассировки — устранены неточности контуров; ориентация сменена с «на север» на каноническую (положение минимального ограничивающего прямоугольника, старт/финиш внизу — как на большинстве официальных карт и в анонсах гонок) для всех 14 трасс.
 
 ### Fixed
 - Унификация стилей badge класса машины в `SessionDetail` и `TrackDetail` через `getClassBadgeClass` (#14)
