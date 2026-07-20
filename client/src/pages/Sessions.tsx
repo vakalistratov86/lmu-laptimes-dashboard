@@ -135,9 +135,14 @@ function SessionSummaryTile({ category, label, value }: SessionSummaryTileProps)
       {/* shrink-0 обязателен: без него на узких плитках (3 в ряд на мобильном) флекс
           сжимал иконку вплоть до 0 ширины при длинной подписи ("Тренировок",
           "Квалификаций"), а короткая "Гонок" не сжималась — иконки отображались
-          непоследовательно, то есть, то нет. */}
+          непоследовательно, то есть, то нет.
+          На мобильном (ниже sm) от подписи остаётся только иконка — с полным текстом
+          в трёх узких колонках "Время тренировок"/"Время квалификаций" переносились
+          на две строки и плитки выглядели неровно; текст остаётся доступен для
+          скринридеров через sr-only. */}
       <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider opacity-80">
-        <Icon size={12} className="shrink-0" /> {label}
+        <Icon size={12} className="shrink-0" />
+        <span className="sr-only sm:not-sr-only">{label}</span>
       </p>
       <p className="font-data text-sm font-semibold tabular-nums truncate">{value}</p>
     </div>
