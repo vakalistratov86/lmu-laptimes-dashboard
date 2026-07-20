@@ -257,9 +257,11 @@ export default function Sessions() {
         </Card>
       )}
 
-      {/* Filter — одна кнопка, разделённая на секции; цвет секции совпадает с плашкой */}
+      {/* Filter — одна кнопка, разделённая на секции; цвет секции совпадает с плашкой.
+          На узких экранах группа целиком не помещается — делаем её горизонтально
+          прокручиваемой вместо того, чтобы обрезать последние секции. */}
       <div
-        className="inline-flex overflow-hidden rounded-lg border border-border"
+        className="flex overflow-x-auto rounded-lg border border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="group"
         aria-label="Фильтр по типу сессии"
       >
@@ -275,7 +277,7 @@ export default function Sessions() {
               onClick={() => setActiveFilter(key)}
               aria-pressed={isActive}
               className={cn(
-                "inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold transition-colors",
+                "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 py-1.5 text-xs font-semibold transition-colors",
                 index > 0 && "border-l border-border",
                 isAll
                   ? isActive
@@ -336,9 +338,15 @@ export default function Sessions() {
         </div>
       )}
 
-      {/* Sessions table */}
+      {/* Sessions table — desktop/tablet. Фиксированные колонки в px (160+170+140+80+110+24)
+          не помещаются на мобильных экранах и обрезались без прокрутки — ниже md эта таблица
+          скрыта в пользу карточного списка. */}
       {!isLoading && hasSessions && hasFiltered && (
-        <div className="overflow-hidden rounded-lg border border-border bg-card" role="table" aria-label="Список сессий">
+        <div
+          className="hidden overflow-hidden rounded-lg border border-border bg-card md:block"
+          role="table"
+          aria-label="Список сессий"
+        >
           {/* Table header */}
           <div
             className="grid border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
@@ -419,6 +427,61 @@ export default function Sessions() {
                 {/* Chevron */}
                 <div className="flex justify-end text-muted-foreground/50" role="cell" aria-hidden="true">
                   <ChevronRight size={15} />
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Sessions list — mobile. Та же информация, что и в десктопной таблице, но
+          в виде стопки карточек: без горизонтальных колонок терять данные не приходится. */}
+      {!isLoading && hasSessions && hasFiltered && (
+        <div className="flex flex-col gap-2.5 md:hidden">
+          {sorted.map((session) => {
+            const bestLap = getBestLapForSession(session);
+            const classes = getSessionClasses(session);
+            const filterParam = activeFilter !== "all"
+              ? `?from_filter=${encodeURIComponent(activeFilter)}`
+              : "";
+            const href = `/sessions/${session.id}${filterParam}`;
+
+            return (
+              <Link
+                key={session.id}
+                href={href}
+                data-testid={`card-session-${session.id}`}
+                className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3.5 active:bg-muted/60 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <SessionTypeBadge sessionType={session.sessionType} />
+                  <span className="shrink-0 text-xs text-muted-foreground">{formatDate(session.dateTime)}</span>
+                </div>
+
+                <div className="truncate font-medium">
+                  {trackDisplayLabel(session.trackName, session.course)}
+                </div>
+
+                {classes.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {classes.map((cls) => (
+                      <Badge
+                        key={cls}
+                        variant="outline"
+                        className={`px-1.5 py-0 text-[10px] ${getClassBadgeClass(cls)}`}
+                      >
+                        {cls}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 border-t border-border/50 pt-2 text-sm text-muted-foreground">
+                  <span className="font-data tabular-nums">
+                    {bestLap ? formatLap(bestLap) : "—"}
+                  </span>
+                  <span>{session.lapCount ?? "—"} круг.</span>
+                  <ChevronRight size={14} className="ml-auto text-muted-foreground/50" aria-hidden="true" />
                 </div>
               </Link>
             );
