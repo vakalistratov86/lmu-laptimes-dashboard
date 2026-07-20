@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Trash2,
 } from "lucide-react";
+import { useLanguage } from "@/lib/i18n";
 
 // ─── Расширяем типизацию input для webkitdirectory ───────────────────────────
 declare module "react" {
@@ -142,6 +143,7 @@ function fileKey(f: File): string {
 
 // ─── Компонент ───────────────────────────────────────────────────────────────
 export default function Import() {
+  const { t } = useLanguage();
   const { toast } = useToast();
   const folderInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef = useRef<HTMLInputElement>(null);
@@ -213,10 +215,10 @@ export default function Import() {
         queryPermission: (d: { mode: string }) => Promise<PermissionState>;
       }).queryPermission({ mode: "read" });
       setDirPerm(perm);
-      addLog("info", `Папка выбрана: ${handle.name}`);
+      addLog("info", t("imp.logFolderPicked", { name: handle.name }));
     } catch (e: unknown) {
       if (e instanceof Error && e.name !== "AbortError") {
-        addLog("error", `Ошибка выбора папки: ${e.message}`);
+        addLog("error", t("imp.logFolderPickError", { msg: e.message }));
       }
     }
   }
@@ -240,7 +242,7 @@ export default function Import() {
     async (files: File[], seenSet?: Set<string>) => {
       const xmlFiles = files.filter((f) => f.name.toLowerCase().endsWith(".xml"));
       if (xmlFiles.length === 0) {
-        addLog("info", "Файлов .xml не найдено");
+        addLog("info", t("imp.logNoXmlFiles"));
         return;
       }
 
@@ -248,16 +250,16 @@ export default function Import() {
       const newFiles = xmlFiles.filter((f) => !localSeen.has(fileKey(f)));
 
       if (newFiles.length === 0) {
-        addLog("info", "Новых файлов нет — всё уже импортировано");
+        addLog("info", t("imp.logNoNewFiles"));
         return;
       }
 
-      addLog("info", `Обнаружено новых файлов: ${newFiles.length}`);
+      addLog("info", t("imp.logNewFilesFound", { n: newFiles.length }));
       setCounters((c) => ({ ...c, total: c.total + newFiles.length, queued: c.queued + newFiles.length }));
       setMode("importing");
 
       for (const file of newFiles) {
-        addLog("info", `Импорт: ${file.name}`);
+        addLog("info", t("imp.logImporting", { name: file.name }));
         try {
           const content = await file.text();
           const res = await apiRequest("POST", "/api/import", {
@@ -267,12 +269,12 @@ export default function Import() {
             await res.json();
           const r = data.results[0];
           if (r?.ok) {
-            addLog("ok", `✓ ${file.name} — ${r.event ?? r.venue ?? ""} · кругов: ${r.laps ?? 0}`);
+            addLog("ok", t("imp.logImportOk", { name: file.name, event: r.event ?? r.venue ?? "", n: r.laps ?? 0 }));
             setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + data.imported }));
           } else {
             // Обрезаем XML из сообщения об ошибке/пропуске — в лог пишем только имя файла и краткую причину
-            const skipMsg = trimErrorMessage(r?.message ?? "пропущен");
-            addLog("skip", `↷ ${file.name} — ${skipMsg}`);
+            const skipMsg = trimErrorMessage(r?.message ?? t("imp.logImportSkipDefault"));
+            addLog("skip", t("imp.logImportSkip", { name: file.name, msg: skipMsg }));
             setCounters((c) => ({ ...c, queued: c.queued - 1, skipped: c.skipped + 1 }));
           }
           localSeen.add(fileKey(file));
@@ -281,7 +283,7 @@ export default function Import() {
           // Никогда не пишем содержимое XML в лог — только имя файла и краткое сообщение
           const rawMsg = e instanceof Error ? e.message : String(e);
           const msg = trimErrorMessage(rawMsg);
-          addLog("error", `✗ ${file.name} — ${msg}`);
+          addLog("error", t("imp.logImportError", { name: file.name, msg }));
           setCounters((c) => ({ ...c, queued: c.queued - 1, failed: c.failed + 1 }));
         }
       }
@@ -291,20 +293,16 @@ export default function Import() {
       queryClient.invalidateQueries({ queryKey: ["/api/tracks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/drivers"] });
       setMode("idle");
-      addLog("info", "Импорт завершён");
+      addLog("info", t("imp.logImportDone"));
     },
-    [addLog, setCounters]
+    [addLog, setCounters, t]
   );
 
   // ─── Очистка БД ───────────────────────────────────────────────────────────
   const clearDatabase = useCallback(async () => {
-    if (
-      !window.confirm(
-        "Удалить все импортированные данные из БД? Будут удалены все сессии, круги, трассы и связанные записи. Это действие необратимо."
-      )
-    ) return;
+    if (!window.confirm(t("imp.confirmClearDb"))) return;
     setClearingDb(true);
-    addLog("info", "Очистка БД…");
+    addLog("info", t("imp.logClearingDb"));
     try {
       await apiRequest("DELETE", "/api/import/all", undefined);
       await dbSaveSeenSet(new Set());
@@ -315,28 +313,28 @@ export default function Import() {
       const reset: Counters = { total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 };
       setCountersState(reset);
       saveCounters(reset);
-      addLog("ok", "✓ БД успешно очищена");
-      toast({ title: "БД очищена", description: "Все импортированные данные удалены." });
+      addLog("ok", t("imp.logDbCleared"));
+      toast({ title: t("imp.toastDbClearedTitle"), description: t("imp.toastDbClearedDesc") });
     } catch (e: unknown) {
       const msg = e instanceof Error ? trimErrorMessage(e.message) : String(e);
-      addLog("error", `✗ Ошибка очистки БД: ${msg}`);
-      toast({ title: "Ошибка", description: msg, variant: "destructive" });
+      addLog("error", t("imp.logDbClearError", { msg }));
+      toast({ title: t("imp.toastErrorTitle"), description: msg, variant: "destructive" });
     } finally {
       setClearingDb(false);
     }
-  }, [addLog, setCountersState, toast]);
+  }, [addLog, setCountersState, toast, t]);
 
   // ─── Скан FSA-папки ───────────────────────────────────────────────────────
   const scanFSAFolder = useCallback(async () => {
     if (!dirHandle) return;
-    addLog("info", `Сканирую папку: ${dirHandle.name}`);
+    addLog("info", t("imp.logScanningFolder", { name: dirHandle.name }));
     setMode("scanning");
     try {
       let perm = dirPerm;
       if (perm !== "granted") {
         const ok = await requestPermission();
         if (!ok) {
-          addLog("error", "Нет разрешения на чтение папки. Нажмите «Разрешить доступ».");
+          addLog("error", t("imp.logNoPermission"));
           setMode("idle");
           return;
         }
@@ -352,16 +350,16 @@ export default function Import() {
           files.push(await fh.getFile());
         }
       }
-      addLog("info", `Найдено .xml файлов: ${files.length}`);
+      addLog("info", t("imp.logXmlFound", { n: files.length }));
       setMode("idle");
       await importFiles(files);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      addLog("error", `Ошибка сканирования: ${msg}`);
+      addLog("error", t("imp.logScanError", { msg }));
       setMode("idle");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirHandle, dirPerm, importFiles]);
+  }, [dirHandle, dirPerm, importFiles, t]);
 
   // ─── Авто-импорт: таймер ─────────────────────────────────────────────────
   useEffect(() => {
@@ -382,7 +380,7 @@ export default function Import() {
   async function handleFileInput(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
     setMode("scanning");
-    addLog("info", `Выбрано файлов: ${fileList.length}`);
+    addLog("info", t("imp.logFilesPicked", { n: fileList.length }));
     const files = Array.from(fileList);
     setMode("idle");
     await importFiles(files);
@@ -397,17 +395,17 @@ export default function Import() {
   }
 
   const modeLabel =
-    mode === "scanning" ? "Сканирование…" : mode === "importing" ? "Импорт…" : "Ожидание";
+    mode === "scanning" ? t("imp.modeScanning") : mode === "importing" ? t("imp.modeImporting") : t("imp.modeIdle");
 
   return (
     <div className="space-y-6">
       {/* Заголовок */}
       <div>
         <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-page-title">
-          Импорт логов игры
+          {t("imp.title")}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Подключите папку с логами результатов LMU. Файлы .xml импортируются поочерёдно.
+          {t("imp.subtitle")}
         </p>
       </div>
 
@@ -417,10 +415,9 @@ export default function Import() {
           <div className="flex gap-3">
             <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-400" />
             <div className="text-sm">
-              <p className="text-card-foreground font-medium">Очистка базы данных</p>
+              <p className="text-card-foreground font-medium">{t("imp.cleanupTitle")}</p>
               <p className="mt-1 text-muted-foreground">
-                Будут удалены все импортированные данные: сессии, круги, трассы и связанные записи.
-                Действие необратимо. После очистки файлы можно импортировать заново.
+                {t("imp.cleanupBody")}
               </p>
             </div>
           </div>
@@ -432,7 +429,7 @@ export default function Import() {
             className="inline-flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/15 px-4 py-2.5 text-sm font-medium text-red-300 hover:bg-red-500/20 hover:text-red-200 disabled:opacity-40"
           >
             {clearingDb ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-            Очистить БД
+            {t("imp.cleanupCta")}
           </button>
         </div>
       </div>
@@ -441,11 +438,10 @@ export default function Import() {
       <div className="flex gap-3 rounded-lg border border-border bg-card/50 p-4 text-sm text-muted-foreground">
         <Info size={18} className="mt-0.5 shrink-0 text-primary" />
         <div>
-          <p className="text-card-foreground">Где лежат логи результатов</p>
-          <p className="mt-1 font-data text-xs">…\Le Mans Ultimate\UserData\Log\Results\*.xml</p>
+          <p className="text-card-foreground">{t("imp.whereTitle")}</p>
+          <p className="mt-1 font-data text-xs">{t("imp.wherePath")}</p>
           <p className="mt-2">
-            Выберите папку — браузер подтянет все .xml файлы. Данные импортируются по одному без
-            загрузки всего содержимого в память. Повторная загрузка пропускается.
+            {t("imp.whereBody")}
           </p>
         </div>
       </div>
@@ -459,7 +455,7 @@ export default function Import() {
               onClick={pickFolderFSA}
               className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover-elevate"
             >
-              <FolderOpen size={16} /> Выбрать папку с логами
+              <FolderOpen size={16} /> {t("imp.pickFolder")}
             </button>
 
             {dirHandle && (
@@ -470,7 +466,7 @@ export default function Import() {
                 className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-card-foreground hover-elevate disabled:opacity-50"
               >
                 <RefreshCw size={16} className={mode !== "idle" ? "animate-spin" : ""} />
-                Сканировать сейчас
+                {t("imp.scanNow")}
               </button>
             )}
 
@@ -488,7 +484,7 @@ export default function Import() {
               onClick={() => filesInputRef.current?.click()}
               className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-card-foreground hover-elevate"
             >
-              <FileUp size={16} /> Выбрать файлы вручную
+              <FileUp size={16} /> {t("imp.pickFiles")}
             </button>
           </div>
 
@@ -504,7 +500,7 @@ export default function Import() {
                   onClick={requestPermission}
                   className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline"
                 >
-                  <AlertTriangle size={13} /> Разрешить доступ
+                  <AlertTriangle size={13} /> {t("imp.allowAccess")}
                 </button>
               )}
             </div>
@@ -518,13 +514,13 @@ export default function Import() {
               disabled={!dirHandle}
               onChange={(e) => {
                 setAutoImport(e.target.checked);
-                addLog("info", e.target.checked ? "Автозагрузка включена" : "Автозагрузка выключена");
+                addLog("info", e.target.checked ? t("imp.logAutoOn") : t("imp.logAutoOff"));
               }}
               className="h-4 w-4 rounded border-border accent-primary"
               data-testid="toggle-auto-import"
             />
-            <span className="text-card-foreground">Автозагрузка логов</span>
-            <span className="text-xs text-muted-foreground">(каждые {AUTO_INTERVAL_MS / 1000} с)</span>
+            <span className="text-card-foreground">{t("imp.autoImport")}</span>
+            <span className="text-xs text-muted-foreground">{t("imp.autoImportInterval", { n: AUTO_INTERVAL_MS / 1000 })}</span>
           </label>
         </div>
       ) : (
@@ -533,8 +529,7 @@ export default function Import() {
           <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
             <p>
-              Автоматическое фоновое сканирование недоступно — требуется браузер на основе Chromium с
-              поддержкой File System Access API. Используйте ручной выбор файлов или папки ниже.
+              {t("imp.noFsaWarning")}
             </p>
           </div>
           <input
@@ -562,14 +557,14 @@ export default function Import() {
               onClick={() => folderInputRef.current?.click()}
               className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover-elevate"
             >
-              <FolderOpen size={16} /> Выбрать папку с логами
+              <FolderOpen size={16} /> {t("imp.pickFolder")}
             </button>
             <button
               data-testid="button-pick-files"
               onClick={() => filesInputRef.current?.click()}
               className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-card-foreground hover-elevate"
             >
-              <FileUp size={16} /> Выбрать отдельные файлы
+              <FileUp size={16} /> {t("imp.pickFilesFallback")}
             </button>
           </div>
         </div>
@@ -577,17 +572,17 @@ export default function Import() {
 
       {/* Счётчики */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <StatCard label="Обнаружено" value={counters.total} tone="muted" />
-        <StatCard label="В очереди" value={counters.queued} tone="muted" />
-        <StatCard label="Импортировано" value={counters.imported} tone="ok" />
-        <StatCard label="Пропущено" value={counters.skipped} tone="muted" />
-        <StatCard label="Ошибки" value={counters.failed} tone="err" />
+        <StatCard label={t("imp.statDetected")} value={counters.total} tone="muted" />
+        <StatCard label={t("imp.statQueued")} value={counters.queued} tone="muted" />
+        <StatCard label={t("imp.statImported")} value={counters.imported} tone="ok" />
+        <StatCard label={t("imp.statSkipped")} value={counters.skipped} tone="muted" />
+        <StatCard label={t("imp.statErrors")} value={counters.failed} tone="err" />
       </div>
 
       {/* Статус режима */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {mode !== "idle" && <Loader2 size={13} className="animate-spin" />}
-        <span>Статус: <span className="text-card-foreground">{modeLabel}</span></span>
+        <span>{t("imp.statusLabel")}: <span className="text-card-foreground">{modeLabel}</span></span>
         {autoImport && <span className="ml-2 rounded bg-primary/20 px-1.5 py-0.5 text-primary text-[10px]">AUTO</span>}
       </div>
 
@@ -595,7 +590,7 @@ export default function Import() {
       {log.length > 0 && (
         <div className="overflow-hidden rounded-lg border border-border">
           <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground">
-            <span>Журнал импорта ({log.length})</span>
+            <span>{t("imp.logTitle", { n: log.length })}</span>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => {
@@ -607,7 +602,7 @@ export default function Import() {
                 }}
                 className="text-xs text-muted-foreground hover:text-card-foreground"
               >
-                Очистить журнал
+                {t("imp.logClear")}
               </button>
             </div>
           </div>

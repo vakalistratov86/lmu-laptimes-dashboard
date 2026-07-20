@@ -73,7 +73,7 @@ export function buildSessionDetailViewModel(
 
     heroStats: buildHeroStats(session),
     results: buildResultRows(session),
-    tabs: buildTabs(hasLapData),
+    tabs: buildTabs(hasLapData, { results: 'Результаты', laps: 'Круги', lapProgress: 'Прогресс' }),
     lapProgress: hasLapData ? buildLapProgressSeries(laps) : [],
     sectors: hasLapData ? buildSectorSummary(laps) : [],
     driverLaps: hasLapData ? buildDriverLapGroups(laps) : [],

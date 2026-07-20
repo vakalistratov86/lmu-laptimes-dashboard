@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 import {
   normalizeSessionCategory,
   getSessionTypeBadgeClass,
-  SESSION_CATEGORY_LABEL,
   type SessionCategory,
 } from "@/lib/classStyles";
+import { useLanguage } from "@/lib/i18n";
 
 const SESSION_CATEGORY_ICON: Record<SessionCategory, typeof Dumbbell> = {
   practice: Dumbbell,
@@ -27,6 +27,7 @@ interface SessionTypeBadgeProps {
  * визуально одного размера независимо от длины слова.
  */
 export function SessionTypeBadge({ sessionType, className }: SessionTypeBadgeProps) {
+  const { t } = useLanguage();
   const category = normalizeSessionCategory(sessionType);
   const Icon = SESSION_CATEGORY_ICON[category];
 
@@ -40,7 +41,7 @@ export function SessionTypeBadge({ sessionType, className }: SessionTypeBadgePro
       )}
     >
       <Icon size={13} />
-      {SESSION_CATEGORY_LABEL[category]}
+      {t(`sessionType.${category}`)}
     </Badge>
   );
 }

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TrackMap, hasTrackMap } from "@/components/TrackMap";
+import { useLanguage } from "@/lib/i18n";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -89,18 +90,9 @@ const CLASS_COLORS: Record<string, string> = {
   LMGT3:       "bg-green-500/15  text-green-600  dark:text-green-400  border-green-500/30",
 };
 
-const MONTH_RU = [
-  "Январь","Февраль","Март","Апрель","Май","Июнь",
-  "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь",
-];
-
-// Родительный падеж — для формата «14 июля» вместо «14 Июль»
-const MONTH_RU_GENITIVE = [
-  "января","февраля","марта","апреля","мая","июня",
-  "июля","августа","сентября","октября","ноября","декабря",
-];
-
-const DAY_RU_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+function capitalize(s: string): string {
+  return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
+}
 
 // Алиасы: имя трассы в календаре LMU → ключ в TrackMap (там, где не совпадает дословно)
 const TRACK_MAP_ALIASES: Record<string, string> = {
@@ -121,39 +113,43 @@ function classColor(cls: string): string {
   return CLASS_COLORS[cls] ?? "bg-muted/40 text-muted-foreground border-border";
 }
 
-/** Компактная дата с днём недели: «Пт, 14 июля» (без года — минималистичный формат). */
-function formatEventDateCompact(dateIso: string): string {
+type T = (key: string, vars?: Record<string, string | number>) => string;
+
+/** Компактная дата с днём недели: «Пт, 14 июля» / «Fri, Jul 14» (без года). Используем Intl —
+    он сам знает падежи (родительный для ru: «14 июля», а не «14 Июль») и порядок день/месяц. */
+function formatEventDateCompact(dateIso: string, intlLocale: string): string {
   const d = new Date(`${dateIso.slice(0, 10)}T00:00:00`);
   if (Number.isNaN(d.getTime())) return dateIso;
-  return `${DAY_RU_SHORT[d.getDay()]}, ${d.getDate()} ${MONTH_RU_GENITIVE[d.getMonth()]}`;
+  const weekday = capitalize(d.toLocaleDateString(intlLocale, { weekday: "short" }));
+  const dayMonth = d.toLocaleDateString(intlLocale, { day: "numeric", month: "long" });
+  return `${weekday}, ${dayMonth}`;
 }
 
 /** Обратный отсчёт: «сегодня» / «завтра» / «через N дн.» / «через N мес.» / «N дн. назад». */
-function formatCountdown(dateIso: string): { label: string; tone: "soon" | "normal" | "past" } {
+function formatCountdown(dateIso: string, t: T): { label: string; tone: "soon" | "normal" | "past" } {
   const target = new Date(`${dateIso.slice(0, 10)}T00:00:00`).getTime();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const diffDays = Math.round((target - today.getTime()) / 86_400_000);
 
-  if (diffDays === 0) return { label: "сегодня", tone: "soon" };
+  if (diffDays === 0) return { label: t("events.today"), tone: "soon" };
   if (diffDays < 0) {
     const abs = Math.abs(diffDays);
-    return { label: abs === 1 ? "вчера" : `${abs} дн. назад`, tone: "past" };
+    return { label: abs === 1 ? t("events.yesterday") : t("events.daysAgo", { n: abs }), tone: "past" };
   }
-  if (diffDays === 1) return { label: "завтра", tone: "soon" };
-  if (diffDays <= 7) return { label: `через ${diffDays} дн.`, tone: "soon" };
-  if (diffDays <= 60) return { label: `через ${diffDays} дн.`, tone: "normal" };
-  return { label: `через ${Math.round(diffDays / 30)} мес.`, tone: "normal" };
+  if (diffDays === 1) return { label: t("events.tomorrow"), tone: "soon" };
+  if (diffDays <= 60) return { label: t("events.inDays", { n: diffDays }), tone: diffDays <= 7 ? "soon" : "normal" };
+  return { label: t("events.inMonths", { n: Math.round(diffDays / 30) }), tone: "normal" };
 }
 
 /** Минималистичная относительная метка времени обновления: «5 мин назад». */
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso: string, t: T): string {
   const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (diffMin < 1) return "только что";
-  if (diffMin < 60) return `${diffMin} мин назад`;
+  if (diffMin < 1) return t("events.justNow");
+  if (diffMin < 60) return t("events.minAgo", { n: diffMin });
   const diffH = Math.round(diffMin / 60);
-  if (diffH < 24) return `${diffH} ч назад`;
-  return `${Math.round(diffH / 24)} дн назад`;
+  if (diffH < 24) return t("events.hoursAgo", { n: diffH });
+  return t("events.daysAgoShort", { n: Math.round(diffH / 24) });
 }
 
 function groupByMonth(events: SpecialEvent[]): Map<string, SpecialEvent[]> {
@@ -203,7 +199,8 @@ const COUNTDOWN_TONE_CLASS: Record<"soon" | "normal" | "past", string> = {
 };
 
 function CountdownChip({ dateIso }: { dateIso: string }) {
-  const { label, tone } = formatCountdown(dateIso);
+  const { t } = useLanguage();
+  const { label, tone } = formatCountdown(dateIso, t);
   return (
     <span
       className={cn(
@@ -219,6 +216,7 @@ function CountdownChip({ dateIso }: { dateIso: string }) {
 // ─── Special Event Card ───────────────────────────────────────────────────────
 
 function EventCard({ ev }: { ev: SpecialEvent }) {
+  const { t, intlLocale } = useLanguage();
   const past = isPast(ev);
 
   return (
@@ -234,7 +232,7 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
     >
       {ev.isFeatured && (
         <div className="absolute -top-2 right-3 flex items-center gap-1 rounded-full bg-yellow-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-yellow-950">
-          <Star size={10} /> Featured
+          <Star size={10} /> {t("events.featured")}
         </div>
       )}
 
@@ -243,9 +241,9 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
           <TrackIcon track={ev.track} trackTba={ev.trackTba} />
           <div>
             <div className={cn("text-sm font-semibold", ev.trackTba ? "text-muted-foreground italic" : "text-foreground")}>
-              {ev.trackTba ? "Трасса TBA" : ev.track}
+              {ev.trackTba ? t("events.trackTba") : ev.track}
             </div>
-            <div className="text-xs text-muted-foreground">{formatEventDateCompact(ev.dateIso)}</div>
+            <div className="text-xs text-muted-foreground">{formatEventDateCompact(ev.dateIso, intlLocale)}</div>
           </div>
         </div>
         <CountdownChip dateIso={ev.dateIso} />
@@ -253,7 +251,7 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
 
       <div className="mt-3 flex flex-wrap gap-1">
         <span className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-          <Clock size={10} /> {ev.duration}ч
+          <Clock size={10} /> {ev.duration}{t("events.hoursSuffix")}
         </span>
         {ev.classes.map((cls) => (
           <span
@@ -271,6 +269,7 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
 // ─── Daily Race Card ──────────────────────────────────────────────────────────
 
 function DailyRaceCard({ race }: { race: DailyRace }) {
+  const { t } = useLanguage();
   return (
     <div className="relative rounded-xl border border-border bg-card p-4 hover:border-primary/50 transition-all">
       <div className="flex items-start justify-between gap-2">
@@ -292,7 +291,7 @@ function DailyRaceCard({ race }: { race: DailyRace }) {
 
       <div className="mt-3 flex flex-wrap gap-1">
         <span className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-          <Clock size={10} /> {race.durationMinutes} мин
+          <Clock size={10} /> {race.durationMinutes} {t("events.minSuffix")}
         </span>
         {race.classes.map((cls) => (
           <span
@@ -313,6 +312,7 @@ type MainTab = "special" | "daily";
 type EventFilter = "all" | "upcoming" | "past";
 
 export default function Events() {
+  const { t, tn, intlLocale } = useLanguage();
   const queryClient = useQueryClient();
   const [mainTab, setMainTab] = useState<MainTab>("special");
   const [filter, setFilter] = useState<EventFilter>("upcoming");
@@ -345,9 +345,9 @@ export default function Events() {
       {/* Заголовок */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight">LMU Events</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">{t("events.title")}</h1>
           <p className="text-sm text-muted-foreground">
-            Официальные гонки Le Mans Ultimate
+            {t("events.subtitle")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -355,7 +355,7 @@ export default function Events() {
           {data?.fetchedAt && (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Clock size={12} />
-              {formatRelativeTime(data.fetchedAt)}
+              {formatRelativeTime(data.fetchedAt, t)}
             </span>
           )}
           <button
@@ -364,7 +364,7 @@ export default function Events() {
             className="flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover-elevate disabled:opacity-50"
           >
             <RefreshCw size={12} className={cn(refresh.isPending && "animate-spin")} />
-            Обновить
+            {t("events.refresh")}
           </button>
           <a
             href={
@@ -394,7 +394,7 @@ export default function Events() {
           )}
         >
           <Trophy size={14} />
-          Special Events
+          {t("events.tabSpecial")}
         </button>
         <button
           onClick={() => setMainTab("daily")}
@@ -406,7 +406,7 @@ export default function Events() {
           )}
         >
           <Zap size={14} />
-          Daily Races
+          {t("events.tabDaily")}
         </button>
       </div>
 
@@ -426,7 +426,7 @@ export default function Events() {
                     : "border-border text-muted-foreground hover:text-foreground"
                 )}
               >
-                {f === "upcoming" ? "Предстоящие" : f === "past" ? "Прошедшие" : "Все"}
+                {f === "upcoming" ? t("events.filterUpcoming") : f === "past" ? t("events.filterPast") : t("events.filterAll")}
                 <span className="ml-1.5 text-[10px] opacity-60">
                   {f === "upcoming"
                     ? events.filter(isUpcoming).length
@@ -440,31 +440,35 @@ export default function Events() {
 
           {isLoading && (
             <div className="flex h-48 items-center justify-center text-muted-foreground">
-              <RefreshCw size={20} className="mr-2 animate-spin" /> Загрузка...
+              <RefreshCw size={20} className="mr-2 animate-spin" /> {t("events.loading")}
             </div>
           )}
 
           {isError && (
             <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-400">
-              <AlertCircle size={16} /> Не удалось загрузить события. Проверьте соединение.
+              <AlertCircle size={16} /> {t("events.loadError")}
             </div>
           )}
 
           {!isLoading && !isError && (
             <div className="space-y-8">
               {grouped.size === 0 ? (
-                <p className="text-center text-muted-foreground">Нет событий</p>
+                <p className="text-center text-muted-foreground">{t("events.noEvents")}</p>
               ) : (
                 Array.from(grouped.entries()).map(([monthKey, evs]) => {
-                  const [year, month] = monthKey.split("-").map(Number);
+                  const monthLabel = capitalize(
+                    new Date(Number(monthKey.slice(0, 4)), Number(monthKey.slice(5, 7)) - 1, 1)
+                      .toLocaleDateString(intlLocale, { month: "long" }),
+                  );
+                  const year = monthKey.slice(0, 4);
                   return (
                     <section key={monthKey}>
                       <div className="mb-3 flex items-center gap-3">
                         <h2 className="font-display text-lg font-semibold">
-                          {MONTH_RU[month - 1]} {year}
+                          {monthLabel} {year}
                         </h2>
                         <div className="h-px flex-1 bg-border" />
-                        <span className="text-xs text-muted-foreground">{evs.length} событий</span>
+                        <span className="text-xs text-muted-foreground">{tn(evs.length, "events")}</span>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         {evs.map((ev) => (
@@ -479,7 +483,7 @@ export default function Events() {
           )}
 
           <p className="text-[11px] text-muted-foreground">
-            Расписание публикуется на{" "}
+            {t("events.footerPrefix")}{" "}
             <a
               href="https://lemansultimate.com"
               target="_blank"
@@ -488,7 +492,7 @@ export default function Events() {
             >
               lemansultimate.com
             </a>
-            . Пт/Сб/Вс — точное время слотов уточняется ближе к дате.
+            {t("events.footerSuffix")}
           </p>
         </div>
       )}
@@ -503,15 +507,14 @@ export default function Events() {
           </div>
 
           <p className="text-[11px] text-muted-foreground">
-            Daily Races — еженедельно обновляемые короткие гонки в мультиплеере LMU.
-            Новая ротация каждый понедельник. Актуальное расписание на{" "}
+            {t("events.dailyFooterPrefix")}{" "}
             <a
               href="https://lemansultimate.com/daily-races/"
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-foreground"
             >
-              сайте LMU
+              {t("events.dailyFooterLinkText")}
             </a>
             .
           </p>

@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { DriverName } from '@/components/DriverName';
 import { StatTile } from '@/components/StatTile';
 import { getClassBadgeClass, getMedalColorClass } from '@/lib/classStyles';
+import { useLanguage } from '@/lib/i18n';
 import type {
   SessionResultRowView,
   DriverLapsGroupView,
@@ -31,6 +32,7 @@ export function SessionDriverDetailCard({
   lapGroup,
   sectorSummary,
 }: SessionDriverDetailCardProps) {
+  const { t } = useLanguage();
   return (
     <Card
       data-testid="card-driver-detail"
@@ -61,47 +63,47 @@ export function SessionDriverDetailCard({
 
       {/* Команда / машина */}
       <div className="flex flex-wrap gap-4 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground">
-        <span>{row.teamName ?? 'Без команды'}</span>
+        <span>{row.teamName ?? t('sessionDetail.noTeam')}</span>
         {row.carModel && <span>{row.carModel}</span>}
         {row.carNumber !== '' && <span>#{row.carNumber}</span>}
       </div>
 
       {/* Статистика */}
       <div className="grid grid-cols-2 gap-2.5 p-4 sm:grid-cols-3 lg:grid-cols-5">
-        <StatTile label="Лучший круг" value={row.bestLapTime} variant="green" />
-        <StatTile label="Отставание" value={row.gap ?? '—'} />
-        <StatTile label="Интервал" value={row.interval ?? '—'} />
+        <StatTile label={t('sessionDetail.bestLap')} value={row.bestLapTime} variant="green" />
+        <StatTile label={t('sessionDetail.gap')} value={row.gap ?? '—'} />
+        <StatTile label={t('sessionDetail.interval')} value={row.interval ?? '—'} />
         <StatTile
-          label="Кругов"
+          label={t('sessionDetail.lapsCol')}
           value={String(row.totalLaps ?? lapGroup?.laps.length ?? '—')}
         />
         <StatTile
-          label="Пит-стопов"
+          label={t('sessionDetail.pitstops')}
           value={String(row.pitStops ?? lapGroup?.pitLapsCount ?? '—')}
         />
 
         {lapGroup && (
           <>
-            <StatTile label="Средний круг" value={lapGroup.avgLapTime} />
-            <StatTile label="Худший круг" value={lapGroup.worstLapTime} variant="red" />
+            <StatTile label={t('sessionDetail.avgLap')} value={lapGroup.avgLapTime} />
+            <StatTile label={t('sessionDetail.worstLap')} value={lapGroup.worstLapTime} variant="red" />
             <StatTile
-              label="Макс. скорость"
+              label={t('sessionDetail.maxSpeed')}
               value={
                 lapGroup.maxSpeedObserved !== '—'
-                  ? `${lapGroup.maxSpeedObserved} км/ч`
+                  ? `${lapGroup.maxSpeedObserved} ${t('sessionDetail.kmh')}`
                   : '—'
               }
             />
             <StatTile
-              label="Топливо (начало → конец)"
+              label={t('sessionDetail.fuel')}
               value={
                 lapGroup.fuelStart !== '—' || lapGroup.fuelEnd !== '—'
-                  ? `${lapGroup.fuelStart} → ${lapGroup.fuelEnd} л`
+                  ? `${lapGroup.fuelStart} → ${lapGroup.fuelEnd} ${t('sessionDetail.liters')}`
                   : '—'
               }
             />
             <StatTile
-              label="Шины"
+              label={t('sessionDetail.tyres')}
               value={
                 lapGroup.tyreTypesUsed.length > 0
                   ? lapGroup.tyreTypesUsed.join(', ')
@@ -114,22 +116,22 @@ export function SessionDriverDetailCard({
         {sectorSummary && (
           <>
             <StatTile
-              label="Сектор 1"
+              label={t('sessionDetail.sector', { n: 1 })}
               value={sectorSummary.bestSectors[0]}
               variant={sectorSummary.sectorAbsoluteBest[0] ? 'purple' : 'green'}
             />
             <StatTile
-              label="Сектор 2"
+              label={t('sessionDetail.sector', { n: 2 })}
               value={sectorSummary.bestSectors[1]}
               variant={sectorSummary.sectorAbsoluteBest[1] ? 'purple' : 'green'}
             />
             <StatTile
-              label="Сектор 3"
+              label={t('sessionDetail.sector', { n: 3 })}
               value={sectorSummary.bestSectors[2]}
               variant={sectorSummary.sectorAbsoluteBest[2] ? 'purple' : 'green'}
             />
             <StatTile
-              label="Теор. лучший круг"
+              label={t('sessionDetail.theoreticalBest')}
               value={sectorSummary.theoreticalBest}
               variant={sectorSummary.hasAbsoluteBest ? 'purple' : 'green'}
             />

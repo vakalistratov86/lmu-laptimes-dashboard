@@ -18,8 +18,10 @@ import {
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { DriverName } from "@/components/DriverName";
+import { useLanguage } from "@/lib/i18n";
 
 export function DriverFilterBar() {
+  const { t, tn } = useLanguage();
   const { data: drivers } = useDrivers();
   const { selectedDriverIds, toggleDriver, setManyDrivers, clearDrivers, isFiltered } =
     useDriverFilter();
@@ -54,7 +56,7 @@ export function DriverFilterBar() {
     >
       <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
         <Users size={13} />
-        <span>Пилоты</span>
+        <span>{t("driverFilter.label")}</span>
       </div>
 
       <Popover open={open} onOpenChange={setOpen}>
@@ -66,30 +68,30 @@ export function DriverFilterBar() {
             className="h-7 min-w-[160px] justify-between px-3 text-xs font-normal"
           >
             {selectedDrivers.length === 0
-              ? "Выбрать пилотов…"
+              ? t("driverFilter.placeholderNone")
               : selectedDrivers.length === 1
               ? selectedDrivers[0].name
-              : `${selectedDrivers.length} пилота выбрано`}
+              : `${tn(selectedDrivers.length, "pilots")} ${t("driverFilter.selectedSuffix")}`}
             <ChevronsUpDown size={12} className="ml-2 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-64 p-0" align="start">
           <Command>
-            <CommandInput placeholder="Поиск пилота…" className="h-8 text-xs" />
+            <CommandInput placeholder={t("driverFilter.searchPlaceholder")} className="h-8 text-xs" />
 
             {/* Переключатели — внутри выпадашки, рядом со списком, который они контролируют */}
             <div className="space-y-1.5 border-b border-border px-3 py-2">
               <label className="flex cursor-pointer items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span className="flex items-center gap-2">
                   <Bot size={13} className="text-amber-400" />
-                  Показать ИИ
+                  {t("driverFilter.showAi")}
                 </span>
                 <Switch checked={!hideAI} onCheckedChange={(checked) => setHideAI(!checked)} />
               </label>
               <label className="flex cursor-pointer items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span className="flex items-center gap-2">
                   <CheckCheck size={13} className="text-muted-foreground" />
-                  Выбрать все
+                  {t("driverFilter.selectAll")}
                 </span>
                 <Switch
                   checked={allVisibleSelected}
@@ -105,11 +107,11 @@ export function DriverFilterBar() {
 
             <CommandList>
               <CommandEmpty className="py-4 text-center text-xs text-muted-foreground">
-                Пилот не найден
+                {t("driverFilter.noResults")}
               </CommandEmpty>
 
               {selectedVisible.length > 0 && (
-                <CommandGroup heading="Выбрано">
+                <CommandGroup heading={t("driverFilter.selected")}>
                   {selectedVisible.map((d) => (
                     <CommandItem
                       key={d.id}
@@ -127,7 +129,7 @@ export function DriverFilterBar() {
               )}
 
               {unselectedPlayers.length > 0 && (
-                <CommandGroup heading="Игроки">
+                <CommandGroup heading={t("driverFilter.players")}>
                   {unselectedPlayers.map((d) => (
                     <CommandItem
                       key={d.id}
@@ -144,7 +146,7 @@ export function DriverFilterBar() {
               )}
 
               {unselectedAI.length > 0 && (
-                <CommandGroup heading="ИИ">
+                <CommandGroup heading={t("driverFilter.ai")}>
                   {unselectedAI.map((d) => (
                     <CommandItem
                       key={d.id}
@@ -170,7 +172,7 @@ export function DriverFilterBar() {
           data-testid="driver-filter-clear"
           className="ml-auto flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
         >
-          <X size={12} /> Сбросить
+          <X size={12} /> {t("driverFilter.reset")}
         </button>
       )}
     </div>

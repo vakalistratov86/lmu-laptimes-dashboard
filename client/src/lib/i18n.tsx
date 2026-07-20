@@ -1,0 +1,741 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+
+export type Locale = "ru" | "en";
+
+const STORAGE_KEY = "lmu-locale";
+
+// Русский язык — «источник истины» по набору ключей. Тип каждого листа — string
+// (а не строковый литерал), поэтому en ниже обязан содержать ровно те же ключи
+// с произвольными английскими значениями — при добавлении/удалении ключа в ru
+// TypeScript немедленно укажет на несовпадение в en.
+const ru = {
+  common: {
+    loading: "Загрузка…",
+    noData: "Нет данных",
+    dash: "—",
+    all: "Все",
+    lap: "круг",
+    laps: "круг.",
+    driver: "Пилот",
+    driversShort: "пилот",
+    team: "Команда",
+    car: "Автомобиль",
+    date: "Дата",
+    time: "Время",
+    gap: "Отставание",
+    position: "Поз.",
+    class: "Класс",
+    classes: "Классы",
+    type: "Тип",
+    track: "Трек",
+    session: "Сессия",
+    close: "Закрыть",
+    back: "Назад",
+    save: "Сохранить",
+    cancel: "Отмена",
+    yes: "Да",
+    no: "Нет",
+  },
+  plural: {
+    // Русское склонение существительных по числу: [1, 2-4, 5+]
+    pilots: ["пилот", "пилота", "пилотов"],
+    sessions: ["сессия", "сессии", "сессий"],
+    laps: ["круг", "круга", "кругов"],
+    events: ["событие", "события", "событий"],
+  },
+  nav: {
+    overview: "Обзор",
+    leaderboards: "Лидерборды",
+    tracks: "Трассы",
+    sessions: "Сессии",
+    events: "LMU Events",
+    import: "Импорт логов",
+    tagline: "Lap Monitoring",
+    demoSeason: "Демо-данные · сезон 2026",
+  },
+  header: {
+    menu: "Меню",
+    monitoringActive: "Мониторинг активен",
+    toggleTheme: "Переключить тему",
+    toggleLanguage: "Переключить язык",
+  },
+  driverFilter: {
+    label: "Пилоты",
+    placeholderNone: "Выбрать пилотов…",
+    selectedSuffix: "выбрано",
+    searchPlaceholder: "Поиск пилота…",
+    showAi: "Показать ИИ",
+    selectAll: "Выбрать все",
+    selected: "Выбрано",
+    players: "Игроки",
+    ai: "ИИ",
+    noResults: "Пилот не найден",
+    reset: "Сбросить",
+  },
+  sessionType: {
+    practice: "Тренировка",
+    qualify: "Квалификация",
+    race: "Гонка",
+  },
+  overview: {
+    title: "Обзор",
+    subtitle: "Сводка по мониторингу времён на трассах LMU",
+    noDataForDrivers: "Нет данных для выбранных пилотов",
+    kpiDistance: "Пройдено расстояния",
+    kpiDistanceSub: "во всех сессиях",
+    kpiTracks: "Трасс",
+    kpiTracksSub: "активных",
+    kpiDrivers: "Пилотов",
+    kpiDriversSubAll: "в чемпионате",
+    kpiDriversSubSelected: "выбрано",
+    kpiBestLap: "Лучший круг",
+    kpiRaces: "Гонок",
+    kpiRacesSub: "проведено",
+    kpiRealPlayers: "Реальных игроков",
+    kpiRealPlayersSub: "уникальных",
+    kpiAiPlayers: "ИИ игроков",
+    kpiAiPlayersSub: "уникальных",
+    kpiLapsCompleted: "Кругов пройдено",
+    kpiLapsCompletedSub: "во всех сессиях",
+    chartTitle: "Лучшее время по трассам",
+    chartSubtitle: "рекорд круга, сек",
+    chartTooltipLap: "Круг",
+    meters: "м",
+    km: "км",
+  },
+  sessions: {
+    title: "Сессии",
+    summaryPractice: "Тренировок",
+    summaryQualify: "Квалификаций",
+    summaryRace: "Гонок",
+    summaryPracticeTime: "Время тренировок",
+    summaryQualifyTime: "Время квалификаций",
+    summaryRaceTime: "Время гонок",
+    filterAria: "Фильтр по типу сессии",
+    tableAria: "Список сессий",
+    colType: "Тип",
+    colTrack: "Трек",
+    colClasses: "Классы",
+    colBestLap: "Лучший круг",
+    colLaps: "Кругов",
+    colDate: "Дата",
+    emptyTitle: "Пока нет импортированных сессий",
+    emptyBody: "Подключите папку с логами игры, чтобы увидеть здесь результаты гонок и практик.",
+    emptyCta: "Импортировать логи",
+    noFilterResultsTitle: "Нет сессий с выбранным типом",
+    noFilterResultsCta: "Показать все сессии",
+  },
+  tracks: {
+    title: "Трассы",
+    subtitle: "Каталог трасс LMU — статистика, рекорды и сессии",
+    record: "Рекорд",
+    sessionsCount: "Сессий",
+    lapsCount: "Кругов",
+    lastSession: "Последняя",
+    km: "км",
+    turns: "пов.",
+    mapAriaLabel: "Схема трассы {{name}}",
+  },
+  trackDetail: {
+    back: "Все трассы",
+    notFoundBack: "Назад к трассам",
+    trivia: "Интересно",
+    schemeTitle: "Схема трассы",
+    lapRecord: "Рекорд круга",
+    avgLap: "Средний круг",
+    drivers: "Пилотов",
+    entries: "Заездов",
+    chartTitle: "Лучший круг по пилотам",
+    chartTooltipLap: "Круг",
+    ratingTitle: "Рейтинг пилотов",
+    colPos: "#",
+    colDriver: "Пилот",
+    colClass: "Класс",
+    colLap: "Круг",
+    colDelta: "Дельта",
+    colSectors: "Секторы",
+    turns: "поворотов",
+    km: "км",
+    noLaps: "Нет заездов для этой трассы",
+    notFound: "Трасса не найдена",
+  },
+  leaderboards: {
+    title: "Лидерборды",
+    subtitle: "Лучшее время каждого пилота по трассам и классам",
+    filterTrack: "Трасса",
+    filterTrackAll: "Все трассы (топ-3 / класс)",
+    filterClass: "Класс",
+    filterClassAll: "Все классы",
+    filterCourse: "Конфигурация",
+    filterCourseAll: "Все конфигурации",
+    colPos: "#",
+    colDriver: "Пилот",
+    colTeam: "Команда",
+    colCar: "Автомобиль",
+    colTime: "Время",
+    colGap: "Отставание",
+    colDate: "Дата",
+    noData: "Нет данных для выбранных фильтров",
+  },
+  events: {
+    title: "LMU Events",
+    subtitle: "Официальные гонки Le Mans Ultimate",
+    refresh: "Обновить",
+    lmuLink: "LMU",
+    tabSpecial: "Special Events",
+    tabDaily: "Daily Races",
+    filterUpcoming: "Предстоящие",
+    filterAll: "Все",
+    filterPast: "Прошедшие",
+    trackTba: "Трасса TBA",
+    featured: "FEATURED",
+    today: "сегодня",
+    tomorrow: "завтра",
+    yesterday: "вчера",
+    daysAgo: "{{n}} дн. назад",
+    inDays: "через {{n}} дн.",
+    inMonths: "через {{n}} мес.",
+    justNow: "только что",
+    minAgo: "{{n}} мин назад",
+    hoursAgo: "{{n}} ч назад",
+    daysAgoShort: "{{n}} дн назад",
+    loading: "Загрузка...",
+    loadError: "Не удалось загрузить события. Проверьте соединение.",
+    noEvents: "Нет событий",
+    hoursSuffix: "ч",
+    minSuffix: "мин",
+    footerPrefix: "Расписание публикуется на",
+    footerSuffix: ". Пт/Сб/Вс — точное время слотов уточняется ближе к дате.",
+    dailyFooterPrefix: "Daily Races — еженедельно обновляемые короткие гонки в мультиплеере LMU. Новая ротация каждый понедельник. Актуальное расписание на",
+    dailyFooterLinkText: "сайте LMU",
+  },
+  sessionDetail: {
+    back: "Все сессии",
+    event: "Событие",
+    drivers: "Пилотов",
+    laps: "Кругов",
+    trackLength: "Длина трассы",
+    gameVersion: "Версия игры",
+    bestLap: "Лучший круг",
+    gap: "Отставание",
+    interval: "Интервал",
+    lapsCol: "Кругов",
+    pitstops: "Пит-стопов",
+    avgLap: "Средний круг",
+    worstLap: "Худший круг",
+    maxSpeed: "Макс. скорость",
+    fuel: "Топливо (начало → конец)",
+    tyres: "Шины",
+    sector: "Сектор {{n}}",
+    theoreticalBest: "Теор. лучший круг",
+    tabResults: "Результаты",
+    tabLaps: "Круги",
+    tabProgress: "Прогресс",
+    colPos: "Поз.",
+    colDriver: "Пилот",
+    colTeamCar: "Команда / машина",
+    colPit: "Пит",
+    colStatus: "Статус",
+    colLaps: "Кругов",
+    notFound: "Сессия не найдена",
+    noLapsData: "Нет данных о кругах",
+    noLapDataForSession: "Данные по кругам недоступны для этой сессии.",
+    noChartData: "Недостаточно данных для графика",
+    noTeam: "Без команды",
+    kmh: "км/ч",
+    liters: "л",
+    colLap: "Круг",
+    colTime: "Время",
+    colMaxSpeed: "Макс. скорость",
+    colFuel: "Топливо",
+    colTyreWear: "Износ шин (FL/FR/RL/RR)",
+    colTyreType: "Тип шин",
+    pitMarker: "П",
+    lapLabel: "Круг {{n}}",
+    tabsAriaLabel: "Разделы сессии",
+    notFoundBody: "Возможно, сессия была удалена или указан неверный идентификатор.",
+    notFoundBack: "Вернуться к списку сессий",
+  },
+  imp: {
+    title: "Импорт логов игры",
+    subtitle: "Подключите папку с логами результатов LMU. Файлы .xml импортируются поочерёдно.",
+    cleanupTitle: "Очистка базы данных",
+    cleanupBody: "Будут удалены все импортированные данные: сессии, круги, трассы и связанные записи. Действие необратимо. После очистки файлы можно импортировать заново.",
+    cleanupCta: "Очистить БД",
+    whereTitle: "Где лежат логи результатов",
+    wherePath: "…\\Le Mans Ultimate\\UserData\\Log\\Results\\*.xml",
+    whereBody: "Выберите папку — браузер подтянет все .xml файлы. Данные импортируются по одному без загрузки всего содержимого в память. Повторная загрузка пропускается.",
+    pickFolder: "Выбрать папку с логами",
+    pickFiles: "Выбрать файлы вручную",
+    pickFilesFallback: "Выбрать отдельные файлы",
+    scanNow: "Сканировать сейчас",
+    allowAccess: "Разрешить доступ",
+    autoImport: "Автозагрузка логов",
+    autoImportInterval: "(каждые {{n}} с)",
+    statDetected: "Обнаружено",
+    statQueued: "В очереди",
+    statImported: "Импортировано",
+    statSkipped: "Пропущено",
+    statErrors: "Ошибки",
+    noFsaWarning: "Автоматическое фоновое сканирование недоступно — требуется браузер на основе Chromium с поддержкой File System Access API. Используйте ручной выбор файлов или папки ниже.",
+    statusLabel: "Статус",
+    modeScanning: "Сканирование…",
+    modeImporting: "Импорт…",
+    modeIdle: "Ожидание",
+    logTitle: "Журнал импорта ({{n}})",
+    logClear: "Очистить журнал",
+    // Записи журнала (динамические сообщения из логики импорта)
+    logFolderPicked: "Папка выбрана: {{name}}",
+    logFolderPickError: "Ошибка выбора папки: {{msg}}",
+    logNoXmlFiles: "Файлов .xml не найдено",
+    logNoNewFiles: "Новых файлов нет — всё уже импортировано",
+    logNewFilesFound: "Обнаружено новых файлов: {{n}}",
+    logImporting: "Импорт: {{name}}",
+    logImportOk: "✓ {{name}} — {{event}} · кругов: {{n}}",
+    logImportSkip: "↷ {{name}} — {{msg}}",
+    logImportSkipDefault: "пропущен",
+    logImportError: "✗ {{name}} — {{msg}}",
+    logImportDone: "Импорт завершён",
+    confirmClearDb: "Удалить все импортированные данные из БД? Будут удалены все сессии, круги, трассы и связанные записи. Это действие необратимо.",
+    logClearingDb: "Очистка БД…",
+    logDbCleared: "✓ БД успешно очищена",
+    toastDbClearedTitle: "БД очищена",
+    toastDbClearedDesc: "Все импортированные данные удалены.",
+    toastErrorTitle: "Ошибка",
+    logDbClearError: "✗ Ошибка очистки БД: {{msg}}",
+    logScanningFolder: "Сканирую папку: {{name}}",
+    logNoPermission: "Нет разрешения на чтение папки. Нажмите «Разрешить доступ».",
+    logXmlFound: "Найдено .xml файлов: {{n}}",
+    logScanError: "Ошибка сканирования: {{msg}}",
+    logFilesPicked: "Выбрано файлов: {{n}}",
+    logAutoOn: "Автозагрузка включена",
+    logAutoOff: "Автозагрузка выключена",
+  },
+} as const;
+
+type DeepString<T> = { [K in keyof T]: T[K] extends string ? string : T[K] extends readonly string[] ? readonly string[] : DeepString<T[K]> };
+type Dict = DeepString<typeof ru>;
+
+const en: Dict = {
+  common: {
+    loading: "Loading…",
+    noData: "No data",
+    dash: "—",
+    all: "All",
+    lap: "lap",
+    laps: "laps",
+    driver: "Driver",
+    driversShort: "driver",
+    team: "Team",
+    car: "Car",
+    date: "Date",
+    time: "Time",
+    gap: "Gap",
+    position: "Pos.",
+    class: "Class",
+    classes: "Classes",
+    type: "Type",
+    track: "Track",
+    session: "Session",
+    close: "Close",
+    back: "Back",
+    save: "Save",
+    cancel: "Cancel",
+    yes: "Yes",
+    no: "No",
+  },
+  plural: {
+    // English has only singular/plural, so all three forms are the same value.
+    pilots: ["driver", "drivers", "drivers"],
+    sessions: ["session", "sessions", "sessions"],
+    laps: ["lap", "laps", "laps"],
+    events: ["event", "events", "events"],
+  },
+  nav: {
+    overview: "Overview",
+    leaderboards: "Leaderboards",
+    tracks: "Tracks",
+    sessions: "Sessions",
+    events: "LMU Events",
+    import: "Import logs",
+    tagline: "Lap Monitoring",
+    demoSeason: "Demo data · 2026 season",
+  },
+  header: {
+    menu: "Menu",
+    monitoringActive: "Monitoring active",
+    toggleTheme: "Toggle theme",
+    toggleLanguage: "Toggle language",
+  },
+  driverFilter: {
+    label: "Drivers",
+    placeholderNone: "Select drivers…",
+    selectedSuffix: "selected",
+    searchPlaceholder: "Search driver…",
+    showAi: "Show AI",
+    selectAll: "Select all",
+    selected: "Selected",
+    players: "Players",
+    ai: "AI",
+    noResults: "No driver found",
+    reset: "Reset",
+  },
+  sessionType: {
+    practice: "Practice",
+    qualify: "Qualify",
+    race: "Race",
+  },
+  overview: {
+    title: "Overview",
+    subtitle: "LMU lap time monitoring summary",
+    noDataForDrivers: "No data for the selected drivers",
+    kpiDistance: "Distance covered",
+    kpiDistanceSub: "across all sessions",
+    kpiTracks: "Tracks",
+    kpiTracksSub: "active",
+    kpiDrivers: "Drivers",
+    kpiDriversSubAll: "in the championship",
+    kpiDriversSubSelected: "selected",
+    kpiBestLap: "Best lap",
+    kpiRaces: "Races",
+    kpiRacesSub: "held",
+    kpiRealPlayers: "Real players",
+    kpiRealPlayersSub: "unique",
+    kpiAiPlayers: "AI players",
+    kpiAiPlayersSub: "unique",
+    kpiLapsCompleted: "Laps completed",
+    kpiLapsCompletedSub: "across all sessions",
+    chartTitle: "Best time by track",
+    chartSubtitle: "lap record, sec",
+    chartTooltipLap: "Lap",
+    meters: "m",
+    km: "km",
+  },
+  sessions: {
+    title: "Sessions",
+    summaryPractice: "Practice",
+    summaryQualify: "Qualifying",
+    summaryRace: "Races",
+    summaryPracticeTime: "Practice time",
+    summaryQualifyTime: "Qualifying time",
+    summaryRaceTime: "Race time",
+    filterAria: "Filter by session type",
+    tableAria: "Session list",
+    colType: "Type",
+    colTrack: "Track",
+    colClasses: "Classes",
+    colBestLap: "Best lap",
+    colLaps: "Laps",
+    colDate: "Date",
+    emptyTitle: "No imported sessions yet",
+    emptyBody: "Connect the game log folder to see race and practice results here.",
+    emptyCta: "Import logs",
+    noFilterResultsTitle: "No sessions of the selected type",
+    noFilterResultsCta: "Show all sessions",
+  },
+  tracks: {
+    title: "Tracks",
+    subtitle: "LMU track catalogue — stats, records and sessions",
+    record: "Record",
+    sessionsCount: "Sessions",
+    lapsCount: "Laps",
+    lastSession: "Last",
+    km: "km",
+    turns: "turns",
+    mapAriaLabel: "{{name}} track layout",
+  },
+  trackDetail: {
+    back: "All tracks",
+    notFoundBack: "Back to tracks",
+    trivia: "Trivia",
+    schemeTitle: "Track layout",
+    lapRecord: "Lap record",
+    avgLap: "Average lap",
+    drivers: "Drivers",
+    entries: "Entries",
+    chartTitle: "Best lap by driver",
+    chartTooltipLap: "Lap",
+    ratingTitle: "Driver rating",
+    colPos: "#",
+    colDriver: "Driver",
+    colClass: "Class",
+    colLap: "Lap",
+    colDelta: "Delta",
+    colSectors: "Sectors",
+    turns: "turns",
+    km: "km",
+    noLaps: "No laps recorded for this track",
+    notFound: "Track not found",
+  },
+  leaderboards: {
+    title: "Leaderboards",
+    subtitle: "Every driver's best time by track and class",
+    filterTrack: "Track",
+    filterTrackAll: "All tracks (top-3 / class)",
+    filterClass: "Class",
+    filterClassAll: "All classes",
+    filterCourse: "Configuration",
+    filterCourseAll: "All configurations",
+    colPos: "#",
+    colDriver: "Driver",
+    colTeam: "Team",
+    colCar: "Car",
+    colTime: "Time",
+    colGap: "Gap",
+    colDate: "Date",
+    noData: "No data for the selected filters",
+  },
+  events: {
+    title: "LMU Events",
+    subtitle: "Official Le Mans Ultimate races",
+    refresh: "Refresh",
+    lmuLink: "LMU",
+    tabSpecial: "Special Events",
+    tabDaily: "Daily Races",
+    filterUpcoming: "Upcoming",
+    filterAll: "All",
+    filterPast: "Past",
+    trackTba: "Track TBA",
+    featured: "FEATURED",
+    today: "today",
+    tomorrow: "tomorrow",
+    yesterday: "yesterday",
+    daysAgo: "{{n}} days ago",
+    inDays: "in {{n}} days",
+    inMonths: "in {{n}} months",
+    justNow: "just now",
+    minAgo: "{{n}} min ago",
+    hoursAgo: "{{n}} h ago",
+    daysAgoShort: "{{n}} d ago",
+    loading: "Loading...",
+    loadError: "Failed to load events. Check your connection.",
+    noEvents: "No events",
+    hoursSuffix: "h",
+    minSuffix: "min",
+    footerPrefix: "Schedule published on",
+    footerSuffix: ". Fri/Sat/Sun — exact slot times are confirmed closer to the date.",
+    dailyFooterPrefix: "Daily Races are short, weekly-updated multiplayer races in LMU. A new rotation goes live every Monday. Current schedule on",
+    dailyFooterLinkText: "the LMU website",
+  },
+  sessionDetail: {
+    back: "All sessions",
+    event: "Event",
+    drivers: "Drivers",
+    laps: "Laps",
+    trackLength: "Track length",
+    gameVersion: "Game version",
+    bestLap: "Best lap",
+    gap: "Gap",
+    interval: "Interval",
+    lapsCol: "Laps",
+    pitstops: "Pit stops",
+    avgLap: "Average lap",
+    worstLap: "Worst lap",
+    maxSpeed: "Top speed",
+    fuel: "Fuel (start → end)",
+    tyres: "Tyres",
+    sector: "Sector {{n}}",
+    theoreticalBest: "Theoretical best",
+    tabResults: "Results",
+    tabLaps: "Laps",
+    tabProgress: "Progress",
+    colPos: "Pos.",
+    colDriver: "Driver",
+    colTeamCar: "Team / car",
+    colPit: "Pit",
+    colStatus: "Status",
+    colLaps: "Laps",
+    notFound: "Session not found",
+    noLapsData: "No lap data",
+    noLapDataForSession: "Lap data is not available for this session.",
+    noChartData: "Not enough data for the chart",
+    noTeam: "No team",
+    kmh: "km/h",
+    liters: "L",
+    colLap: "Lap",
+    colTime: "Time",
+    colMaxSpeed: "Top speed",
+    colFuel: "Fuel",
+    colTyreWear: "Tyre wear (FL/FR/RL/RR)",
+    colTyreType: "Tyre type",
+    pitMarker: "P",
+    lapLabel: "Lap {{n}}",
+    tabsAriaLabel: "Session sections",
+    notFoundBody: "The session may have been deleted, or the ID is incorrect.",
+    notFoundBack: "Back to the session list",
+  },
+  imp: {
+    title: "Import game logs",
+    subtitle: "Connect the LMU results log folder. .xml files are imported one at a time.",
+    cleanupTitle: "Clear database",
+    cleanupBody: "All imported data will be deleted: sessions, laps, tracks and related records. This action is irreversible. Files can be re-imported after clearing.",
+    cleanupCta: "Clear database",
+    whereTitle: "Where result logs are stored",
+    wherePath: "…\\Le Mans Ultimate\\UserData\\Log\\Results\\*.xml",
+    whereBody: "Pick a folder — the browser will pick up all .xml files. Data is imported one record at a time without loading everything into memory. Re-uploads are skipped.",
+    pickFolder: "Select log folder",
+    pickFiles: "Select files manually",
+    pickFilesFallback: "Select individual files",
+    scanNow: "Scan now",
+    allowAccess: "Allow access",
+    autoImport: "Auto-import logs",
+    autoImportInterval: "(every {{n}}s)",
+    statDetected: "Detected",
+    statQueued: "Queued",
+    statImported: "Imported",
+    statSkipped: "Skipped",
+    statErrors: "Errors",
+    noFsaWarning: "Automatic background scanning is unavailable — a Chromium-based browser with File System Access API support is required. Use the manual file or folder picker below.",
+    statusLabel: "Status",
+    modeScanning: "Scanning…",
+    modeImporting: "Importing…",
+    modeIdle: "Idle",
+    logTitle: "Import log ({{n}})",
+    logClear: "Clear log",
+    logFolderPicked: "Folder selected: {{name}}",
+    logFolderPickError: "Folder selection error: {{msg}}",
+    logNoXmlFiles: "No .xml files found",
+    logNoNewFiles: "No new files — everything is already imported",
+    logNewFilesFound: "New files detected: {{n}}",
+    logImporting: "Importing: {{name}}",
+    logImportOk: "✓ {{name}} — {{event}} · laps: {{n}}",
+    logImportSkip: "↷ {{name}} — {{msg}}",
+    logImportSkipDefault: "skipped",
+    logImportError: "✗ {{name}} — {{msg}}",
+    logImportDone: "Import finished",
+    confirmClearDb: "Delete all imported data from the database? All sessions, laps, tracks and related records will be deleted. This action is irreversible.",
+    logClearingDb: "Clearing database…",
+    logDbCleared: "✓ Database cleared successfully",
+    toastDbClearedTitle: "Database cleared",
+    toastDbClearedDesc: "All imported data has been deleted.",
+    toastErrorTitle: "Error",
+    logDbClearError: "✗ Database clear error: {{msg}}",
+    logScanningFolder: "Scanning folder: {{name}}",
+    logNoPermission: "No permission to read the folder. Click \"Allow access\".",
+    logXmlFound: "Found .xml files: {{n}}",
+    logScanError: "Scan error: {{msg}}",
+    logFilesPicked: "Files selected: {{n}}",
+    logAutoOn: "Auto-import enabled",
+    logAutoOff: "Auto-import disabled",
+  },
+};
+
+const DICTS: Record<Locale, Dict> = { ru, en };
+
+function getPath(obj: unknown, path: string): unknown {
+  return path.split(".").reduce<unknown>((acc, key) => {
+    if (acc && typeof acc === "object" && key in (acc as object)) {
+      return (acc as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, obj);
+}
+
+function interpolate(template: string, vars?: Record<string, string | number>): string {
+  if (!vars) return template;
+  return template.replace(/\{\{(\w+)\}\}/g, (_, k) => String(vars[k] ?? ""));
+}
+
+/** Русское склонение существительного по числу: n=1 → forms[0], 2-4 → forms[1], 5+/0 → forms[2]. */
+export function pluralRu(n: number, forms: readonly [string, string, string]): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return forms[1];
+  return forms[2];
+}
+
+// В БД название страны трассы хранится строкой на русском (напр. "Франция") —
+// серверная модель не языкозависима, поэтому переводим только для отображения.
+const COUNTRY_NAMES_EN: Record<string, string> = {
+  "Бахрейн": "Bahrain",
+  "Бельгия": "Belgium",
+  "Бразилия": "Brazil",
+  "Великобритания": "United Kingdom",
+  "Испания": "Spain",
+  "Италия": "Italy",
+  "Катар": "Qatar",
+  "Португалия": "Portugal",
+  "США": "USA",
+  "Франция": "France",
+  "Япония": "Japan",
+};
+
+/** Переводит название страны трассы (данные из БД, всегда на русском) для отображения на en. */
+export function translateCountry(name: string, locale: Locale): string {
+  if (locale === "ru") return name;
+  return COUNTRY_NAMES_EN[name] ?? name;
+}
+
+interface LanguageContextValue {
+  locale: Locale;
+  setLocale: (l: Locale) => void;
+  toggleLocale: () => void;
+  /** Перевод по ключу вида "namespace.key" с опциональной интерполяцией {{var}}. */
+  t: (key: string, vars?: Record<string, string | number>) => string;
+  /** Возвращает число + правильную форму существительного, напр. tn(3, 'pilots') → "3 пилота" / "3 drivers". */
+  tn: (count: number, key: keyof Dict["plural"]) => string;
+  /** BCP-47 локаль для Intl/toLocaleString: "ru-RU" | "en-US". */
+  intlLocale: string;
+}
+
+const LanguageContext = createContext<LanguageContextValue | null>(null);
+
+function detectInitialLocale(): Locale {
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === "ru" || stored === "en") return stored;
+  } catch {
+    // localStorage недоступен (приватный режим и т.п.) — используем язык браузера
+  }
+  return navigator.language?.toLowerCase().startsWith("ru") ? "ru" : "en";
+}
+
+export function LanguageProvider({ children }: { children: ReactNode }) {
+  const [locale, setLocaleState] = useState<Locale>(() => detectInitialLocale());
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, locale);
+    } catch {
+      // ignore
+    }
+  }, [locale]);
+
+  const setLocale = useCallback((l: Locale) => setLocaleState(l), []);
+  const toggleLocale = useCallback(() => setLocaleState((l) => (l === "ru" ? "en" : "ru")), []);
+
+  const value = useMemo<LanguageContextValue>(() => {
+    const dict = DICTS[locale];
+    const t = (key: string, vars?: Record<string, string | number>) => {
+      const raw = getPath(dict, key);
+      if (typeof raw !== "string") {
+        if (import.meta.env.DEV) console.warn(`[i18n] missing key: ${key}`);
+        return key;
+      }
+      return interpolate(raw, vars);
+    };
+    const tn = (count: number, key: keyof Dict["plural"]) => {
+      const forms = dict.plural[key] as readonly [string, string, string];
+      const word = locale === "ru" ? pluralRu(count, forms) : forms[count === 1 ? 0 : 1];
+      return `${count} ${word}`;
+    };
+    return {
+      locale,
+      setLocale,
+      toggleLocale,
+      t,
+      tn,
+      intlLocale: locale === "ru" ? "ru-RU" : "en-US",
+    };
+  }, [locale, setLocale, toggleLocale]);
+
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
+}
+
+export function useLanguage(): LanguageContextValue {
+  const ctx = useContext(LanguageContext);
+  if (!ctx) throw new Error("useLanguage must be used within LanguageProvider");
+  return ctx;
+}

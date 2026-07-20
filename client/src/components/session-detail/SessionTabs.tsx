@@ -6,6 +6,7 @@
  * результаты» убран, вкладки сами обозначают текущий раздел).
  */
 import type { SessionTabItem, SessionTabKey } from './types';
+import { useLanguage } from '@/lib/i18n';
 
 interface SessionTabsProps {
   tabs: SessionTabItem[];
@@ -14,10 +15,11 @@ interface SessionTabsProps {
 }
 
 export function SessionTabs({ tabs, active, onChange }: SessionTabsProps) {
+  const { t } = useLanguage();
   return (
     <nav
       role="tablist"
-      aria-label="Разделы сессии"
+      aria-label={t('sessionDetail.tabsAriaLabel')}
       className="flex gap-1 border-b border-border bg-secondary/40 px-2 pt-2"
     >
       {tabs.map((tab) => {

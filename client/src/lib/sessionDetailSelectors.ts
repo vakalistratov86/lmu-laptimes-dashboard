@@ -625,11 +625,14 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Формирует список вкладок страницы с учётом наличия данных о кругах. */
-export function buildTabs(hasLapData: boolean): SessionTabItem[] {
+export function buildTabs(
+  hasLapData: boolean,
+  labels: { results: string; laps: string; lapProgress: string },
+): SessionTabItem[] {
   const allTabs: SessionTabItem[] = [
-    { key: 'results', label: 'Результаты' },
-    { key: 'laps', label: 'Круги', requiresLapData: true },
-    { key: 'lapProgress', label: 'Прогресс', requiresLapData: true },
+    { key: 'results', label: labels.results },
+    { key: 'laps', label: labels.laps, requiresLapData: true },
+    { key: 'lapProgress', label: labels.lapProgress, requiresLapData: true },
   ];
   return allTabs.filter((t) => !t.requiresLapData || hasLapData);
 }

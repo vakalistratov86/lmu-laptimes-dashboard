@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { LapProgressSeries } from './types';
+import { useLanguage } from '@/lib/i18n';
 
 /** Палитра цветов для серий (до 10 пилотов). */
 const SERIES_COLORS = [
@@ -43,10 +44,11 @@ interface SessionLapProgressChartProps {
 }
 
 export function SessionLapProgressChart({ series }: SessionLapProgressChartProps) {
+  const { t } = useLanguage();
   if (series.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
-        Недостаточно данных для построения графика.
+        {t('sessionDetail.noChartData')}
       </p>
     );
   }
@@ -79,7 +81,7 @@ export function SessionLapProgressChart({ series }: SessionLapProgressChartProps
           <XAxis
             dataKey="lap"
             tick={{ fontSize: 11 }}
-            label={{ value: 'Круг', position: 'insideBottomRight', offset: -4, fontSize: 11 }}
+            label={{ value: t('sessionDetail.colLap'), position: 'insideBottomRight', offset: -4, fontSize: 11 }}
           />
           <YAxis
             tickFormatter={fmtYAxis}
@@ -91,7 +93,7 @@ export function SessionLapProgressChart({ series }: SessionLapProgressChartProps
               series.find((s) => s.driverName === name)?.points.find((p) => p.timeSeconds === value)?.timeFormatted ?? fmtYAxis(value),
               name,
             ]}
-            labelFormatter={(label) => `Круг ${label}`}
+            labelFormatter={(label) => t('sessionDetail.lapLabel', { n: label })}
             contentStyle={{ fontSize: 12 }}
           />
           <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />

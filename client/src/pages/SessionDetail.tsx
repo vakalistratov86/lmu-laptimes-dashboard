@@ -34,11 +34,12 @@ import {
   SessionLapProgressChart,
 } from '@/components/session-detail';
 import type { SessionTabKey } from '@/components/session-detail';
+import { useLanguage } from '@/lib/i18n';
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, intlLocale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('ru-RU', {
+  return d.toLocaleString(intlLocale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -48,6 +49,7 @@ function formatDate(iso: string): string {
 }
 
 export default function SessionDetail() {
+  const { t, intlLocale } = useLanguage();
   const [, params] = useRoute('/sessions/:id');
   const searchString = useSearch();
   const backFilter = new URLSearchParams(searchString).get('from_filter');
@@ -67,7 +69,10 @@ export default function SessionDetail() {
   // ── Вычисляемые данные ────────────────────────────────────────────────────
   const hasLapData = (laps?.length ?? 0) > 0;
 
-  const tabs = useMemo(() => buildTabs(hasLapData), [hasLapData]);
+  const tabs = useMemo(
+    () => buildTabs(hasLapData, { results: t('sessionDetail.tabResults'), laps: t('sessionDetail.tabLaps'), lapProgress: t('sessionDetail.tabProgress') }),
+    [hasLapData, t],
+  );
 
   const resultRows = useMemo(
     () => (session ? buildResultRows(session) : []),
@@ -147,7 +152,7 @@ export default function SessionDetail() {
         trackName={String(s.trackName ?? '')}
         courseLabel={courseLabel}
         sessionType={String(s.sessionType ?? '')}
-        dateFormatted={formatDate(String(s.dateTime ?? ''))}
+        dateFormatted={formatDate(String(s.dateTime ?? ''), intlLocale)}
         backHref={backHref}
         event={s.event}
         driverCount={s.driverCount}
@@ -190,7 +195,7 @@ export default function SessionDetail() {
               <DriverLapTable laps={selectedLapGroup.laps} />
             ) : (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                Данные по кругам недоступны для этой сессии.
+                {t('sessionDetail.noLapDataForSession')}
               </p>
             )
           )}

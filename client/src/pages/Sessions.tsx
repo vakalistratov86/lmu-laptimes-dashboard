@@ -10,27 +10,30 @@ import { Upload, Dumbbell, Timer, Trophy, ChevronRight, type LucideIcon } from "
 import {
   normalizeSessionCategory,
   getSessionTypeBadgeClass,
-  SESSION_CATEGORY_LABEL,
   SESSION_TYPE_ORDER,
   CLASS_ORDER,
   getClassBadgeClass,
   type SessionCategory,
 } from "@/lib/classStyles";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
+import { useLanguage } from "@/lib/i18n";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, intlLocale: string): string {
   if (!iso) return "";
   const datePart = iso.slice(0, 10);
   const parts = datePart.split("-");
   if (parts.length === 3) {
     const [year, month, day] = parts;
-    return `${day}.${month}.${year}`;
+    // en-US читает дату как MM/DD/YYYY по умолчанию — для стабильного вида
+    // везде используем формат "год-месяц-день" через toLocaleString.
+    const d2 = new Date(Number(year), Number(month) - 1, Number(day));
+    return d2.toLocaleDateString(intlLocale, { day: "2-digit", month: "2-digit", year: "numeric" });
   }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return d.toLocaleDateString(intlLocale, { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 function trackDisplayLabel(trackName: string, course: string | null | undefined): string {
@@ -106,12 +109,15 @@ const FILTER_ICON: Record<SessionCategory, LucideIcon> = {
   race: Trophy,
 };
 
-const FILTER_OPTIONS: { key: "all" | SessionCategory; label: string }[] = [
-  { key: "all", label: "Все" },
-  { key: "practice", label: SESSION_CATEGORY_LABEL.practice },
-  { key: "qualify", label: SESSION_CATEGORY_LABEL.qualify },
-  { key: "race", label: SESSION_CATEGORY_LABEL.race },
-];
+function useFilterOptions(): { key: "all" | SessionCategory; label: string }[] {
+  const { t } = useLanguage();
+  return [
+    { key: "all", label: t("common.all") },
+    { key: "practice", label: t("sessionType.practice") },
+    { key: "qualify", label: t("sessionType.qualify") },
+    { key: "race", label: t("sessionType.race") },
+  ];
+}
 
 // ─── Summary tile ───────────────────────────────────────────────────────────────
 // Та же стилистика, что и у активной секции фильтра: та же иконка и те же
@@ -177,6 +183,8 @@ function SessionsTableSkeleton() {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Sessions() {
+  const { t, locale, intlLocale } = useLanguage();
+  const FILTER_OPTIONS = useFilterOptions();
   const { data: sessions, isLoading } = useSessions();
   const searchString = useSearch();
   const [, navigate] = useLocation();
@@ -247,7 +255,7 @@ export default function Sessions() {
       {/* Page header */}
       <div>
         <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-page-title">
-          Сессии
+          {t("sessions.title")}
         </h1>
       </div>
 
@@ -256,12 +264,12 @@ export default function Sessions() {
       {hasSessions && (
         <Card className="overflow-hidden">
           <div className="grid grid-cols-3 gap-2.5 p-4 sm:grid-cols-6">
-            <SessionSummaryTile category="practice" label="Тренировок" value={String(summary.practice.count)} />
-            <SessionSummaryTile category="qualify" label="Квалификаций" value={String(summary.qualify.count)} />
-            <SessionSummaryTile category="race" label="Гонок" value={String(summary.race.count)} />
-            <SessionSummaryTile category="practice" label="Время тренировок" value={formatDurationMin(summary.practice.minutes)} />
-            <SessionSummaryTile category="qualify" label="Время квалификаций" value={formatDurationMin(summary.qualify.minutes)} />
-            <SessionSummaryTile category="race" label="Время гонок" value={formatDurationMin(summary.race.minutes)} />
+            <SessionSummaryTile category="practice" label={t("sessions.summaryPractice")} value={String(summary.practice.count)} />
+            <SessionSummaryTile category="qualify" label={t("sessions.summaryQualify")} value={String(summary.qualify.count)} />
+            <SessionSummaryTile category="race" label={t("sessions.summaryRace")} value={String(summary.race.count)} />
+            <SessionSummaryTile category="practice" label={t("sessions.summaryPracticeTime")} value={formatDurationMin(summary.practice.minutes, locale)} />
+            <SessionSummaryTile category="qualify" label={t("sessions.summaryQualifyTime")} value={formatDurationMin(summary.qualify.minutes, locale)} />
+            <SessionSummaryTile category="race" label={t("sessions.summaryRaceTime")} value={formatDurationMin(summary.race.minutes, locale)} />
           </div>
         </Card>
       )}
@@ -272,7 +280,7 @@ export default function Sessions() {
       <div
         className="flex overflow-x-auto rounded-lg border border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="group"
-        aria-label="Фильтр по типу сессии"
+        aria-label={t("sessions.filterAria")}
       >
         {FILTER_OPTIONS.map(({ key, label }, index) => {
           const isAll = key === "all";
@@ -316,9 +324,9 @@ export default function Sessions() {
             <Upload size={22} />
           </div>
           <div>
-            <p className="font-semibold">Пока нет импортированных сессий</p>
+            <p className="font-semibold">{t("sessions.emptyTitle")}</p>
             <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">
-              Подключите папку с логами игры, чтобы увидеть здесь результаты гонок и практик.
+              {t("sessions.emptyBody")}
             </p>
           </div>
           <Link
@@ -326,7 +334,7 @@ export default function Sessions() {
             data-testid="link-import-empty"
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
           >
-            <Upload size={16} /> Импортировать логи
+            <Upload size={16} /> {t("sessions.emptyCta")}
           </Link>
         </div>
       )}
@@ -335,14 +343,14 @@ export default function Sessions() {
       {!isLoading && hasSessions && !hasFiltered && (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-card p-12 text-center">
           <p className="font-semibold text-muted-foreground">
-            Нет сессий с выбранным типом
+            {t("sessions.noFilterResultsTitle")}
           </p>
           <button
             type="button"
             onClick={() => setActiveFilter("all")}
             className="text-sm text-primary underline-offset-4 hover:underline"
           >
-            Показать все сессии
+            {t("sessions.noFilterResultsCta")}
           </button>
         </div>
       )}
@@ -350,26 +358,28 @@ export default function Sessions() {
       {/* Sessions table. Колонки фиксированной ширины (160+170+140+80+110+24px = 684px) шире,
           чем мобильный экран — раньше внешний контейнер был overflow-hidden и просто обрезал
           Трек/Лучший круг/Кругов/Дату без возможности их увидеть. Теперь контейнер
-          overflow-x-auto, а строки min-w-[684px] — на мобильном таблица целиком листается
-          горизонтально свайпом, ни одна колонка не пропадает. */}
+          overflow-x-auto, а строки min-w-[864px] — на мобильном таблица целиком листается
+          горизонтально свайпом, ни одна колонка не пропадает. Колонка "Трек" —
+          minmax(180px,1fr), т.к. чистый 1fr в контейнере с min-w ровно по сумме
+          остальных колонок схлопывается в 0 и текст наезжает на соседнюю колонку. */}
       {!isLoading && hasSessions && hasFiltered && (
         <div
           className="overflow-x-auto rounded-lg border border-border bg-card"
           role="table"
-          aria-label="Список сессий"
+          aria-label={t("sessions.tableAria")}
         >
           {/* Table header */}
           <div
-            className="grid min-w-[684px] border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            style={{ gridTemplateColumns: "160px 1fr 170px 140px 80px 110px 24px" }}
+            className="grid min-w-[864px] border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            style={{ gridTemplateColumns: "160px minmax(180px,1fr) 170px 140px 80px 110px 24px" }}
             role="row"
           >
-            <div role="columnheader">Тип</div>
-            <div role="columnheader">Трек</div>
-            <div role="columnheader">Классы</div>
-            <div role="columnheader" className="text-right">Лучший круг</div>
-            <div role="columnheader" className="text-right">Кругов</div>
-            <div role="columnheader" className="text-right">Дата</div>
+            <div role="columnheader">{t("sessions.colType")}</div>
+            <div role="columnheader">{t("sessions.colTrack")}</div>
+            <div role="columnheader">{t("sessions.colClasses")}</div>
+            <div role="columnheader" className="text-right">{t("sessions.colBestLap")}</div>
+            <div role="columnheader" className="text-right">{t("sessions.colLaps")}</div>
+            <div role="columnheader" className="text-right">{t("sessions.colDate")}</div>
             <div role="columnheader" />
           </div>
 
@@ -388,10 +398,10 @@ export default function Sessions() {
                 key={session.id}
                 href={href}
                 data-testid={`row-session-${session.id}`}
-                className="grid min-w-[684px] cursor-pointer items-center border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                style={{ gridTemplateColumns: "160px 1fr 170px 140px 80px 110px 24px" }}
+                className="grid min-w-[864px] cursor-pointer items-center border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                style={{ gridTemplateColumns: "160px minmax(180px,1fr) 170px 140px 80px 110px 24px" }}
                 role="row"
-                aria-label={`${SESSION_CATEGORY_LABEL[cat]} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime)}`}
+                aria-label={`${t(`sessionType.${cat}`)} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime, intlLocale)}`}
               >
                 {/* Type badge */}
                 <div role="cell">
@@ -432,7 +442,7 @@ export default function Sessions() {
 
                 {/* Date */}
                 <div className="text-right text-sm text-muted-foreground" role="cell">
-                  {formatDate(session.dateTime)}
+                  {formatDate(session.dateTime, intlLocale)}
                 </div>
 
                 {/* Chevron */}

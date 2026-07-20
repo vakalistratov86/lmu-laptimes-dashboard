@@ -11,6 +11,7 @@ import { Medal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DriverName } from '@/components/DriverName';
 import { getMedalColorClass } from '@/lib/classStyles';
+import { useLanguage } from '@/lib/i18n';
 import type { SessionResultRowView } from './types';
 
 // ─── Row ───────────────────────────────────────────────────────────────────────
@@ -122,19 +123,20 @@ export function SessionResultsTable({
   selectedDriver,
   onSelectDriver,
 }: SessionResultsTableProps) {
+  const { t } = useLanguage();
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-            <th className="px-4 py-2.5 w-12">Поз.</th>
-            <th className="px-4 py-2.5">Пилот</th>
-            <th className="hidden px-4 py-2.5 sm:table-cell">Команда / машина</th>
-            <th className="px-4 py-2.5">Статус</th>
-            <th className="px-4 py-2.5 text-right">Кругов</th>
-            <th className="hidden px-4 py-2.5 text-right md:table-cell">Пит</th>
-            <th className="px-4 py-2.5 text-right">Лучший круг</th>
-            <th className="hidden px-4 py-2.5 text-right lg:table-cell">Отставание</th>
+            <th className="px-4 py-2.5 w-12">{t('sessionDetail.colPos')}</th>
+            <th className="px-4 py-2.5">{t('sessionDetail.colDriver')}</th>
+            <th className="hidden px-4 py-2.5 sm:table-cell">{t('sessionDetail.colTeamCar')}</th>
+            <th className="px-4 py-2.5">{t('sessionDetail.colStatus')}</th>
+            <th className="px-4 py-2.5 text-right">{t('sessionDetail.colLaps')}</th>
+            <th className="hidden px-4 py-2.5 text-right md:table-cell">{t('sessionDetail.colPit')}</th>
+            <th className="px-4 py-2.5 text-right">{t('sessionDetail.bestLap')}</th>
+            <th className="hidden px-4 py-2.5 text-right lg:table-cell">{t('sessionDetail.gap')}</th>
           </tr>
         </thead>
         <tbody>

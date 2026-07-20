@@ -9,6 +9,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { SessionTypeBadge } from '@/components/SessionTypeBadge';
 import { StatTile } from '@/components/StatTile';
+import { useLanguage } from '@/lib/i18n';
 
 interface SessionInfoCardProps {
   trackName: string;
@@ -35,6 +36,7 @@ export function SessionInfoCard({
   trackLengthKm,
   gameVersion,
 }: SessionInfoCardProps) {
+  const { t } = useLanguage();
   return (
     <Card className="overflow-hidden">
       <div className="space-y-3 border-b border-border px-4 py-3">
@@ -43,7 +45,7 @@ export function SessionInfoCard({
           data-testid="link-back"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft size={15} /> Все сессии
+          <ArrowLeft size={15} /> {t('sessionDetail.back')}
         </Link>
 
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -64,11 +66,11 @@ export function SessionInfoCard({
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 p-4 sm:grid-cols-3 lg:grid-cols-5">
-        {event && <StatTile label="Событие" value={event} />}
-        {driverCount != null && <StatTile label="Пилотов" value={String(driverCount)} />}
-        {lapCount != null && <StatTile label="Кругов" value={String(lapCount)} />}
-        {trackLengthKm && <StatTile label="Длина трассы" value={`${trackLengthKm} км`} />}
-        {gameVersion && <StatTile label="Версия игры" value={gameVersion} />}
+        {event && <StatTile label={t('sessionDetail.event')} value={event} />}
+        {driverCount != null && <StatTile label={t('sessionDetail.drivers')} value={String(driverCount)} />}
+        {lapCount != null && <StatTile label={t('sessionDetail.laps')} value={String(lapCount)} />}
+        {trackLengthKm && <StatTile label={t('sessionDetail.trackLength')} value={`${trackLengthKm} ${t('tracks.km')}`} />}
+        {gameVersion && <StatTile label={t('sessionDetail.gameVersion')} value={gameVersion} />}
       </div>
     </Card>
   );
