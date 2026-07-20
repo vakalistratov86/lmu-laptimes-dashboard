@@ -1,6 +1,7 @@
 import { useLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
 import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap } from "@/lib/format";
+import { normalizeSessionCategory } from "@/lib/classStyles";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Timer, Flag, Users, Gauge, Trophy, UserCheck, Bot, RefreshCw, Route } from "lucide-react";
@@ -49,10 +50,12 @@ export default function Overview() {
     return laps.filter((l) => selectedDriverIds.has(l.driverId));
   }, [laps, selectedDriverIds, isFiltered]);
 
-  // Количество гонок (сессий типа Race)
+  // Количество гонок (сессий типа Race). sessionType хранится как составная строка
+  // вида "Гонка (Race1)" — категорию определяет тот же нормализатор, что и везде
+  // в приложении (Sessions, SessionTypeBadge), а не точное сравнение с "race".
   const raceCount = useMemo(() => {
     if (!sessions) return 0;
-    return sessions.filter((s) => s.sessionType?.toLowerCase() === "race").length;
+    return sessions.filter((s) => normalizeSessionCategory(s.sessionType) === "race").length;
   }, [sessions]);
 
   // Реальные и ИИ игроки из результатов сессий
