@@ -54,10 +54,23 @@ function formatRecordDate(dateStr: string | undefined, intlLocale: string): stri
   }
 }
 
+/**
+ * A session's course only identifies a distinct track layout when it actually
+ * differs from the venue name. Some LMU logs write the course tag as a plain
+ * copy of the venue (or leave it blank) while others record it for the same
+ * physical track — without this, those sessions split into a second,
+ * near-identical leaderboard card for the same track.
+ */
+function normalizeCourse(course: string | null | undefined, trackName: string): string | null {
+  const trimmed = course?.trim();
+  if (!trimmed) return null;
+  return trimmed.toLowerCase() === trackName.trim().toLowerCase() ? null : trimmed;
+}
+
 function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
   const byBoard = new Map<string, { displayName: string; laps: LapRow[] }>();
   for (const l of laps) {
-    const course = l.sessionCourse ?? null;
+    const course = normalizeCourse(l.sessionCourse, l.trackName);
     const boardKey = course ? `${l.trackName}|||${course}` : l.trackName;
     const displayName = course ? `${l.trackName} · ${course}` : l.trackName;
     if (!byBoard.has(boardKey)) byBoard.set(boardKey, { displayName, laps: [] });
@@ -121,7 +134,8 @@ export default function Leaderboards() {
     if (!laps) return [];
     const set = new Set<string>();
     for (const l of laps as LapRow[]) {
-      if (l.sessionCourse) set.add(l.sessionCourse);
+      const course = normalizeCourse(l.sessionCourse, l.trackName);
+      if (course) set.add(course);
     }
     return Array.from(set).sort();
   }, [laps]);
@@ -138,7 +152,7 @@ export default function Leaderboards() {
     }
 
     if (courseFilter !== "all") {
-      filtered = filtered.filter((l: LapRow) => l.sessionCourse === courseFilter);
+      filtered = filtered.filter((l: LapRow) => normalizeCourse(l.sessionCourse, l.trackName) === courseFilter);
     }
 
     if (globalFiltered) {
