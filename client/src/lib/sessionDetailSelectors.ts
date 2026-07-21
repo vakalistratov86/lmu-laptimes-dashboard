@@ -72,15 +72,6 @@ function formatSpeed(raw: unknown): string {
 }
 
 /**
- * SD-18: Форматирует остаток топлива в строку «X.XX» (л) или «—».
- */
-function formatFuel(raw: unknown): string {
-  const v = Number(raw);
-  if (!Number.isFinite(v) || v < 0) return '—';
-  return `${v.toFixed(2)}`;
-}
-
-/**
  * Форматирует остаток топлива в строку «XX» (% от полного бака) или «—».
  * LMU хранит fuelLevel как долю бака 0–1 (fuel="0.690" в логе) — не литры,
  * поэтому пересчитываем в процент, а не подставляем сырое значение.
@@ -199,7 +190,11 @@ function parseTyreType(lap: Record<string, any>): string {
     lap.compound ?? lap.tyre ?? lap.tire ?? null;
 
   if (raw == null || raw === '') return '—';
-  return String(raw);
+  const str = String(raw);
+  // Часть логов хранит компаунд в формате «0,Medium» (индекс,название) —
+  // берём часть после запятой, если она есть.
+  const cleaned = str.includes(',') ? str.split(',').pop()!.trim() : str.trim();
+  return cleaned || '—';
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -623,8 +618,8 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
         Number.isFinite(maxSpeedRawAgg) ? maxSpeedRawAgg : null,
       ),
       tyreTypesUsed: Array.from(tyreTypesUsed),
-      fuelStart: formatFuel(fuelStartRaw),
-      fuelEnd: formatFuel(fuelEndRaw),
+      fuelStart: formatFuelPercent(fuelStartRaw),
+      fuelEnd: formatFuelPercent(fuelEndRaw),
       pitLapsCount,
     });
   }

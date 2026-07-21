@@ -98,7 +98,7 @@ export function SessionDriverDetailCard({
               label={t('sessionDetail.fuel')}
               value={
                 lapGroup.fuelStart !== '—' || lapGroup.fuelEnd !== '—'
-                  ? `${lapGroup.fuelStart} → ${lapGroup.fuelEnd} ${t('sessionDetail.liters')}`
+                  ? `${lapGroup.fuelStart}% → ${lapGroup.fuelEnd}%`
                   : '—'
               }
             />

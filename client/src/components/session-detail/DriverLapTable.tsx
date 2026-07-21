@@ -18,14 +18,10 @@ const COMPOUND_BADGE_CLASS: Record<string, string> = {
   H: 'bg-muted-foreground/15 text-muted-foreground border-border',
 };
 
-/**
- * Извлекает букву компаунда шин (S/M/H/…) из сырого названия. Устойчиво
- * к формату «0,Medium» (индекс,название), встречающемуся в части логов.
- */
-function getCompoundLetter(raw: string): string | null {
-  if (!raw || raw === '—') return null;
-  const name = raw.includes(',') ? raw.split(',').pop()!.trim() : raw.trim();
-  const first = name.charAt(0);
+/** Извлекает букву компаунда шин (S/M/H/…) из названия («Medium» → «M»). */
+function getCompoundLetter(name: string): string | null {
+  if (!name || name === '—') return null;
+  const first = name.trim().charAt(0);
   return first ? first.toUpperCase() : null;
 }
 
