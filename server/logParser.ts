@@ -334,7 +334,8 @@ export function parseRaceResults(xml: string): ParsedSession | null {
 
   const venue = tagValue(xml, "TrackVenue") ?? tagValue(xml, "TrackCourse") ?? "Неизвестная трасса";
   const course = tagValue(xml, "TrackCourse");  // null если тег отсутствует
-  const event = tagValue(xml, "TrackEvent") ?? venue;
+  // fix: "||" (not "??") — a present-but-empty <TrackEvent></TrackEvent> must also fall back to venue
+  const event = tagValue(xml, "TrackEvent") || venue;
   const gameVersion = tagValue(xml, "GameVersion");
 
   // #50 — trackLengthM

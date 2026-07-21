@@ -203,6 +203,29 @@ describe('eventsParser', () => {
 
       const result = await getSpecialEvents();
       expect(result.events.length).toBeGreaterThan(0);
+      expect(result.source).toBe('live');
+    });
+
+    it('распознаёт строки с длинным тире (—) вместо короткого (–)', async () => {
+      const fakeHtml = `
+        <html><body>
+          <p>w/c 14/7 — 6 Hours Interlagos — Hypercar, LMGT3</p>
+          <p>w/c 28/7 — 4 Hours Silverstone — Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 20/10 — 24 Hours Le Mans — Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 8/9 — 6 Hours COTA — Hypercar, LMGT3</p>
+          <p>w/c 6/10 — 10 Hours TBA — Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 10/11 — 8 Hours Bahrain — Hypercar, LMGT3</p>
+        </body></html>
+      `;
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => fakeHtml,
+      }));
+
+      const result = await getSpecialEvents();
+      const jul28 = result.events.find((e) => e.dateIso.endsWith('-07-28'));
+      expect(jul28?.track).toBe('Silverstone');
+      expect(jul28?.trackTba).toBe(false);
     });
 
     it('при HTTP-ошибке (не ok) fallback на статику', async () => {
@@ -214,6 +237,7 @@ describe('eventsParser', () => {
 
       const result = await getSpecialEvents();
       expect(result.events.length).toBeGreaterThan(0);
+      expect(result.source).toBe('static');
     });
 
     it('при слишком малом числе распознанных событий fallback на статику', async () => {
@@ -227,6 +251,7 @@ describe('eventsParser', () => {
       const result = await getSpecialEvents();
       // Должны получить статику (>= 5 событий)
       expect(result.events.length).toBeGreaterThanOrEqual(5);
+      expect(result.source).toBe('static');
     });
   });
 });

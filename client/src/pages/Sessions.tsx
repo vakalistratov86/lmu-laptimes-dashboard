@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import { useSessions } from "@/lib/api";
-import { formatLap, formatDurationMin } from "@/lib/format";
+import { formatLap } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +16,7 @@ import {
   type SessionCategory,
 } from "@/lib/classStyles";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
+import { ActivityTile } from "@/components/ActivityTile";
 import { useLanguage } from "@/lib/i18n";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -39,6 +40,12 @@ function formatDate(iso: string, intlLocale: string): string {
 function trackDisplayLabel(trackName: string, course: string | null | undefined): string {
   if (!course || course.toLowerCase() === trackName.toLowerCase()) return trackName;
   return `${trackName} · ${course}`;
+}
+
+/** Конфигурация трассы для отдельного столбца — «—», если не задана или совпадает с названием трассы. */
+function configLabel(trackName: string, course: string | null | undefined): string {
+  if (!course || course.toLowerCase() === trackName.toLowerCase()) return "—";
+  return course;
 }
 
 type SessionItem = {
@@ -117,42 +124,6 @@ function useFilterOptions(): { key: "all" | SessionCategory; label: string }[] {
     { key: "qualify", label: t("sessionType.qualify") },
     { key: "race", label: t("sessionType.race") },
   ];
-}
-
-// ─── Summary tile ───────────────────────────────────────────────────────────────
-// Та же стилистика, что и у активной секции фильтра: та же иконка и те же
-// цветовые классы (getSessionTypeBadgeClass), только в виде плитки.
-
-interface SessionSummaryTileProps {
-  category: SessionCategory;
-  label: string;
-  value: string;
-}
-
-function SessionSummaryTile({ category, label, value }: SessionSummaryTileProps) {
-  const Icon = FILTER_ICON[category];
-  return (
-    <div
-      className={cn(
-        "rounded-lg border px-3.5 py-2.5 space-y-0.5",
-        getSessionTypeBadgeClass(category),
-      )}
-    >
-      {/* shrink-0 обязателен: без него на узких плитках (3 в ряд на мобильном) флекс
-          сжимал иконку вплоть до 0 ширины при длинной подписи ("Тренировок",
-          "Квалификаций"), а короткая "Гонок" не сжималась — иконки отображались
-          непоследовательно, то есть, то нет.
-          На мобильном (ниже sm) от подписи остаётся только иконка — с полным текстом
-          в трёх узких колонках "Время тренировок"/"Время квалификаций" переносились
-          на две строки и плитки выглядели неровно; текст остаётся доступен для
-          скринридеров через sr-only. */}
-      <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider opacity-80">
-        <Icon size={12} className="shrink-0" />
-        <span className="sr-only sm:not-sr-only">{label}</span>
-      </p>
-      <p className="font-data text-sm font-semibold tabular-nums truncate">{value}</p>
-    </div>
-  );
 }
 
 // ─── Loading Skeleton ─────────────────────────────────────────────────────────
@@ -260,16 +231,13 @@ export default function Sessions() {
       </div>
 
       {/* Сводка по всем сессиям — количество и суммарное время по категориям.
-          Стилистика плиток совпадает с активной секцией фильтра ниже. */}
+          Та же плитка ActivityTile, что и на Обзоре. */}
       {hasSessions && (
-        <Card className="overflow-hidden">
-          <div className="grid grid-cols-3 gap-2.5 p-4 sm:grid-cols-6">
-            <SessionSummaryTile category="practice" label={t("sessions.summaryPractice")} value={String(summary.practice.count)} />
-            <SessionSummaryTile category="qualify" label={t("sessions.summaryQualify")} value={String(summary.qualify.count)} />
-            <SessionSummaryTile category="race" label={t("sessions.summaryRace")} value={String(summary.race.count)} />
-            <SessionSummaryTile category="practice" label={t("sessions.summaryPracticeTime")} value={formatDurationMin(summary.practice.minutes, locale)} />
-            <SessionSummaryTile category="qualify" label={t("sessions.summaryQualifyTime")} value={formatDurationMin(summary.qualify.minutes, locale)} />
-            <SessionSummaryTile category="race" label={t("sessions.summaryRaceTime")} value={formatDurationMin(summary.race.minutes, locale)} />
+        <Card className="p-4">
+          <div className="grid grid-cols-3 gap-2.5">
+            <ActivityTile category="practice" label={t("sessionType.practice")} count={summary.practice.count} minutes={summary.practice.minutes} locale={locale} />
+            <ActivityTile category="qualify" label={t("sessionType.qualify")} count={summary.qualify.count} minutes={summary.qualify.minutes} locale={locale} />
+            <ActivityTile category="race" label={t("sessionType.race")} count={summary.race.count} minutes={summary.race.minutes} locale={locale} />
           </div>
         </Card>
       )}
@@ -355,13 +323,14 @@ export default function Sessions() {
         </div>
       )}
 
-      {/* Sessions table. Колонки фиксированной ширины (160+170+140+80+110+24px = 684px) шире,
-          чем мобильный экран — раньше внешний контейнер был overflow-hidden и просто обрезал
-          Трек/Лучший круг/Кругов/Дату без возможности их увидеть. Теперь контейнер
-          overflow-x-auto, а строки min-w-[864px] — на мобильном таблица целиком листается
-          горизонтально свайпом, ни одна колонка не пропадает. Колонка "Трек" —
-          minmax(180px,1fr), т.к. чистый 1fr в контейнере с min-w ровно по сумме
-          остальных колонок схлопывается в 0 и текст наезжает на соседнюю колонку. */}
+      {/* Sessions table. Колонки фиксированной ширины (160+140+170+140+80+110+24 = 824px)
+          плюс gap-x-3 между 8 колонками (84px) = 908px, шире, чем мобильный экран — раньше
+          внешний контейнер был overflow-hidden и просто обрезал Трек/Лучший круг/Кругов/Дату
+          без возможности их увидеть. Теперь контейнер overflow-x-auto, а строки
+          min-w-[1068px] (с запасом под "Трек" minmax(160px,…)) — на мобильном таблица целиком
+          листается горизонтально свайпом, ни одна колонка не пропадает. Между колонками
+          обязателен gap — без него длинная конфигурация трассы (напр. "Circuit de la Sarthe")
+          вплотную примыкает к соседней колонке, т.к. у ячеек нет собственных отступов. */}
       {!isLoading && hasSessions && hasFiltered && (
         <div
           className="overflow-x-auto rounded-lg border border-border bg-card"
@@ -370,12 +339,13 @@ export default function Sessions() {
         >
           {/* Table header */}
           <div
-            className="grid min-w-[864px] border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            style={{ gridTemplateColumns: "160px minmax(180px,1fr) 170px 140px 80px 110px 24px" }}
+            className="grid min-w-[1068px] gap-x-3 border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            style={{ gridTemplateColumns: "160px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px" }}
             role="row"
           >
             <div role="columnheader">{t("sessions.colType")}</div>
             <div role="columnheader">{t("sessions.colTrack")}</div>
+            <div role="columnheader">{t("sessions.colConfig")}</div>
             <div role="columnheader">{t("sessions.colClasses")}</div>
             <div role="columnheader" className="text-right">{t("sessions.colBestLap")}</div>
             <div role="columnheader" className="text-right">{t("sessions.colLaps")}</div>
@@ -398,8 +368,8 @@ export default function Sessions() {
                 key={session.id}
                 href={href}
                 data-testid={`row-session-${session.id}`}
-                className="grid min-w-[864px] cursor-pointer items-center border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                style={{ gridTemplateColumns: "160px minmax(180px,1fr) 170px 140px 80px 110px 24px" }}
+                className="grid min-w-[1068px] cursor-pointer items-center gap-x-3 border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                style={{ gridTemplateColumns: "160px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px" }}
                 role="row"
                 aria-label={`${t(`sessionType.${cat}`)} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime, intlLocale)}`}
               >
@@ -409,8 +379,13 @@ export default function Sessions() {
                 </div>
 
                 {/* Track */}
-                <div className="truncate font-medium" role="cell">
-                  {trackDisplayLabel(session.trackName, session.course)}
+                <div className="min-w-0 truncate font-medium" role="cell">
+                  {session.trackName}
+                </div>
+
+                {/* Configuration */}
+                <div className="min-w-0 truncate text-muted-foreground" role="cell">
+                  {configLabel(session.trackName, session.course)}
                 </div>
 
                 {/* Classes */}

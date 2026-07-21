@@ -30,7 +30,7 @@ export function DriverFilterBar() {
 
   if (!drivers || drivers.length === 0) return null;
 
-  // isPlayer === 1 → реальный игрок; isPlayer === 0 → ИИ; isPlayer === null → demo (без данных сессий)
+  // isPlayer === 1 → реальный игрок; isPlayer === 0 → ИИ; isPlayer === null → пилот без данных сессий (защитный фолбэк)
   const visibleDrivers = hideAI ? drivers.filter((d) => d.isPlayer === 1) : drivers;
 
   const selectedDrivers = drivers.filter((d) => selectedDriverIds.has(d.id));

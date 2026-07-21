@@ -5,7 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
 import { runMigrations } from "./migrate";
-import { seedIfEmpty, ensureCatalogTracks } from "./storage";
+import { ensureCatalogTracks } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -67,7 +67,6 @@ app.use((req, res, next) => {
 (async () => {
   // Run DB migrations before starting the server
   await runMigrations();
-  await seedIfEmpty();
   await ensureCatalogTracks();
 
   await registerRoutes(httpServer, app);

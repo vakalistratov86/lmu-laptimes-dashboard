@@ -10,7 +10,7 @@
 |--------|---------|------------|
 | Справочники | `tracks`, `drivers` | Статические данные о трассах и пилотах |
 | Сессии | `sessions`, `session_results`, `session_laps`, `session_incidents`, `session_sector_bests`, `session_track_limits` | Данные, импортированные из XML-логов игры rFactor2 / LMU |
-| Ручные замеры | `lap_times` | Времена кругов, введённые вручную или из demo-данных |
+| Ручные замеры | `lap_times` | «Плоские» времена кругов, импортированные из XML-логов |
 
 ---
 
@@ -48,7 +48,7 @@
 
 ### `lap_times` — Времена кругов
 
-Основная таблица для хранения замеров времени кругов. Поддерживает как demo-данные (`source = "demo"`), так и записи, импортированные из XML-лога (`source = "import"`).
+Основная таблица для хранения замеров времени кругов, импортированных из XML-лога. Используется на Overview/Leaderboards/Tracks независимо от таблиц сессий ниже.
 
 | Колонка | Тип | Ограничение | Описание |
 |---------|-----|-------------|----------|
@@ -64,8 +64,7 @@
 | `conditions` | TEXT | NOT NULL | Условия: `"Сухо"`, `"Дождь"`, `"Смешанно"` |
 | `tyre` | TEXT | NOT NULL | Тип шин: `Soft`, `Medium`, `Hard`, `Wet` |
 | `date` | TEXT | NOT NULL | Дата заезда (ISO 8601) |
-| `source` | TEXT | NOT NULL, default `"demo"` | Источник: `demo` или `import` |
-| `session_id` | INTEGER | nullable, FK → `sessions.id` | Ссылка на сессию (только для `source=import`) |
+| `session_id` | INTEGER | nullable, FK → `sessions.id` | Ссылка на сессию, из импорта которой получен круг |
 
 ---
 

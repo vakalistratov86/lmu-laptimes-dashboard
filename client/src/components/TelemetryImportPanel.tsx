@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from "react";
 import { API_BASE } from "@/lib/queryClient";
+import { promptAdminToken, clearStoredAdminToken } from "@/lib/adminToken";
 import { useToast } from "@/hooks/use-toast";
 import {
   FolderOpen,
@@ -221,10 +222,15 @@ export default function TelemetryImportPanel() {
 
   const clearTelemetry = useCallback(async () => {
     if (!window.confirm(t("telemetry.confirmClear"))) return;
+    const token = promptAdminToken(t("telemetry.adminTokenPrompt"));
+    if (!token) return;
     setClearing(true);
     addLog("info", t("telemetry.logClearing"));
     try {
-      const res = await fetch(`${API_BASE}/api/import/telemetry/all`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/api/import/telemetry/all`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
       await dbSaveSeenSet(new Set());
       const reset: Counters = { ...DEFAULT_COUNTERS };
@@ -234,6 +240,7 @@ export default function TelemetryImportPanel() {
       toast({ title: t("telemetry.toastClearedTitle"), description: t("telemetry.toastClearedDesc") });
     } catch (e: unknown) {
       const msg = e instanceof Error ? trimErrorMessage(e.message) : String(e);
+      if (msg.startsWith("401")) clearStoredAdminToken();
       addLog("error", t("telemetry.logClearError", { msg }));
       toast({ title: t("imp.toastErrorTitle"), description: msg, variant: "destructive" });
     } finally {

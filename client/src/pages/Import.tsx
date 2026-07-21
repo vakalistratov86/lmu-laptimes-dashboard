@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { promptAdminToken, clearStoredAdminToken } from "@/lib/adminToken";
 import type { ImportFileResult } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -308,10 +309,12 @@ export default function Import() {
   // ─── Очистка БД ───────────────────────────────────────────────────────────
   const clearDatabase = useCallback(async () => {
     if (!window.confirm(t("imp.confirmClearDb"))) return;
+    const token = promptAdminToken(t("imp.adminTokenPrompt"));
+    if (!token) return;
     setClearingDb(true);
     addLog("info", t("imp.logClearingDb"));
     try {
-      await apiRequest("DELETE", "/api/import/all", undefined);
+      await apiRequest("DELETE", "/api/import/all", undefined, { Authorization: `Bearer ${token}` });
       await dbSaveSeenSet(new Set());
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/laps"] });
@@ -324,6 +327,7 @@ export default function Import() {
       toast({ title: t("imp.toastDbClearedTitle"), description: t("imp.toastDbClearedDesc") });
     } catch (e: unknown) {
       const msg = e instanceof Error ? trimErrorMessage(e.message) : String(e);
+      if (msg.startsWith("401")) clearStoredAdminToken();
       addLog("error", t("imp.logDbClearError", { msg }));
       toast({ title: t("imp.toastErrorTitle"), description: msg, variant: "destructive" });
     } finally {

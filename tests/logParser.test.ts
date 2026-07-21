@@ -211,12 +211,26 @@ describe('parseRaceResults', () => {
   // Граничные случаи / невалидный ввод
   // -------------------------------------------------------------------------
   describe('граничные случаи', () => {
-    it('возвращает null для пустой строки', () => {
-      expect(parseRaceResults('')).toBeNull();
+    it('бросает UNSUPPORTED_LOG_VERSION для пустой строки (#7 — версия не определена)', () => {
+      expect(() => parseRaceResults('')).toThrow();
+      let error: (Error & { code?: string }) | undefined;
+      try {
+        parseRaceResults('');
+      } catch (e) {
+        error = e as Error & { code?: string };
+      }
+      expect(error?.code).toBe('UNSUPPORTED_LOG_VERSION');
     });
 
-    it('возвращает null для произвольного текста без маркеров LMU/rFactor', () => {
-      expect(parseRaceResults('<html><body>Hello</body></html>')).toBeNull();
+    it('бросает UNSUPPORTED_LOG_VERSION для произвольного текста без маркеров LMU/rFactor', () => {
+      expect(() => parseRaceResults('<html><body>Hello</body></html>')).toThrow();
+      let error: (Error & { code?: string }) | undefined;
+      try {
+        parseRaceResults('<html><body>Hello</body></html>');
+      } catch (e) {
+        error = e as Error & { code?: string };
+      }
+      expect(error?.code).toBe('UNSUPPORTED_LOG_VERSION');
     });
 
     it('возвращает null если нет ни одного валидного <Driver>', () => {
@@ -234,6 +248,23 @@ describe('parseRaceResults', () => {
       const xml = makeXml().replace('<TrackLength>13626.0</TrackLength>', '');
       const result = parseRaceResults(xml)!;
       expect(result.trackLengthM).toBeNull();
+    });
+
+    it('event — берётся значение TrackEvent, если оно задано', () => {
+      const result = parseRaceResults(makeXml())!;
+      expect(result.event).toBe('6 Hours of Le Mans');
+    });
+
+    it('event fallback — берётся venue, если тега TrackEvent нет вовсе', () => {
+      const xml = makeXml().replace('<TrackEvent>6 Hours of Le Mans</TrackEvent>', '');
+      const result = parseRaceResults(xml)!;
+      expect(result.event).toBe(result.venue);
+    });
+
+    it('event fallback — берётся venue, если TrackEvent присутствует, но пуст', () => {
+      const xml = makeXml().replace('<TrackEvent>6 Hours of Le Mans</TrackEvent>', '<TrackEvent></TrackEvent>');
+      const result = parseRaceResults(xml)!;
+      expect(result.event).toBe(result.venue);
     });
   });
 

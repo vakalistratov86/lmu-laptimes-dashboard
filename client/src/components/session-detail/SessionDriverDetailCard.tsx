@@ -51,7 +51,6 @@ export function SessionDriverDetailCard({
         {row.carClass && (
           <Badge variant="outline" className={getClassBadgeClass(row.carClass)}>
             {row.carClass}
-            {row.classPosition ? ` · #${row.classPosition}` : ''}
           </Badge>
         )}
         {row.finishStatus && (
@@ -98,7 +97,7 @@ export function SessionDriverDetailCard({
               label={t('sessionDetail.fuel')}
               value={
                 lapGroup.fuelStart !== '—' || lapGroup.fuelEnd !== '—'
-                  ? `${lapGroup.fuelStart} → ${lapGroup.fuelEnd} ${t('sessionDetail.liters')}`
+                  ? `${lapGroup.fuelStart}% → ${lapGroup.fuelEnd}%`
                   : '—'
               }
             />

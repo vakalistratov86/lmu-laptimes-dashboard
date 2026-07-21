@@ -35,7 +35,6 @@ export const lapTimes = pgTable("lap_times", {
   conditions: text("conditions").notNull(),
   tyre: text("tyre").notNull(),
   date: text("date").notNull(),
-  source: text("source").notNull().default("demo"),
   sessionId: integer("session_id"),
 });
 
@@ -254,7 +253,12 @@ export const insertTrackSchema = createInsertSchema(tracks).omit({ id: true });
 export const insertDriverSchema = createInsertSchema(drivers).omit({ id: true });
 export const insertLapTimeSchema = createInsertSchema(lapTimes).omit({ id: true });
 export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true });
-export const insertSessionResultSchema = createInsertSchema(sessionResults).omit({ id: true });
+// isPlayer: full ZodType override (not a refine callback) so that .default()
+// actually applies on parse() — drizzle-zod wraps refine-callback results in
+// an extra .optional(), which would otherwise swallow the default.
+export const insertSessionResultSchema = createInsertSchema(sessionResults, {
+  isPlayer: z.number().int().default(0),
+}).omit({ id: true });
 export const insertSessionLapSchema = createInsertSchema(sessionLaps).omit({ id: true });
 export const insertSessionIncidentSchema = createInsertSchema(sessionIncidents).omit({ id: true });
 export const insertSessionSectorBestSchema = createInsertSchema(sessionSectorBests).omit({ id: true });

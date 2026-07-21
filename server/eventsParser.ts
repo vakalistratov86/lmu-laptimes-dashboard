@@ -1,6 +1,8 @@
 // Парсер Special Events с официального сайта Le Mans Ultimate
 // Источник: https://lemansultimate.com/special-events-calendar-q3-4-2026/
 
+import { logger } from "./logger";
+
 export interface SpecialEvent {
   id: string;
   weekOf: string;       // «w/c DD/MM» из оригинала
@@ -18,6 +20,14 @@ interface ParsedRaw {
   events: SpecialEvent[];
   fetchedAt: string;
   sourceUrl: string;
+  /**
+   * "live" — успешно распарсено с сайта; "static" — сеть/парсинг подвели,
+   * отданы захардкоженные STATIC_EVENTS_2026. Без этого поля со стороны
+   * пользователя нет способа отличить свежие данные от замороженного
+   * фоллбэка — кнопка «Обновить» выглядит нерабочей, хотя на деле каждый
+   * раз стабильно не удаётся достучаться до источника.
+   */
+  source: "live" | "static";
 }
 
 const SOURCE_URL = "https://lemansultimate.com/special-events-calendar-q3-4-2026/";
@@ -64,14 +74,22 @@ export async function getSpecialEvents(): Promise<ParsedRaw> {
   try {
     cache = await fetchAndParse();
     cacheExpiry = now + CACHE_TTL_MS;
-  } catch {
+  } catch (err) {
     // При любой ошибке сети возвращаем статические данные,
     // но выставляем короткий TTL чтобы система быстро восстановилась (#52)
+    // Логируем, иначе живой скрейп может молча не работать сколь угодно
+    // долго, показывая устаревший захардкоженный STATIC_EVENTS_2026 без
+    // единого следа в логах.
+    logger.error(
+      { sourceUrl: SOURCE_URL, error: err instanceof Error ? err.message : String(err) },
+      "Не удалось получить/распарсить Special Events — используются статические данные"
+    );
     const fetchedAt = new Date().toISOString();
     cache = {
       events: STATIC_EVENTS_2026.map((e) => ({ ...e, fetchedAt, sourceUrl: SOURCE_URL })),
       fetchedAt,
       sourceUrl: SOURCE_URL,
+      source: "static",
     };
     cacheExpiry = now + CACHE_TTL_ERROR_MS;
   }
@@ -103,7 +121,9 @@ async function fetchAndParse(): Promise<ParsedRaw> {
 
   // Простой регулярный парсинг структуры страницы
   // Паттерн: «w/c DD/MM – N Hours Track – Classes»
-  const lineRe = /w\/c\s+(\d+\/(\d+))\s*[–\-]\s*(\d+)\s*Hours\s+([^–\-<\n]+?)\s*[–\-]\s*([^<\n]+)/gi;
+  // Тире может быть коротким (–), длинным (—) или обычным дефисом (-) —
+  // WordPress-редакторы нередко подменяют символ при правках страницы.
+  const lineRe = /w\/c\s+(\d+\/(\d+))\s*[–—\-]\s*(\d+)\s*Hours\s+([^–—\-<\n]+?)\s*[–—\-]\s*([^<\n]+)/gi;
   const events: SpecialEvent[] = [];
   let match;
 
@@ -128,16 +148,23 @@ async function fetchAndParse(): Promise<ParsedRaw> {
     });
   }
 
-  // Если парсинг не дал результатов — fallback на статику
+  // Если парсинг не дал результатов — fallback на статику.
+  // Страница ответила 200, но разметка календаря, судя по всему, изменилась
+  // и наш регэксп больше не находит строки событий — это тоже стоит видеть в логах.
   if (events.length < 5) {
+    logger.warn(
+      { sourceUrl: SOURCE_URL, matchedEvents: events.length },
+      "Special Events: регэксп нашёл меньше 5 строк — похоже, разметка страницы изменилась; используются статические данные"
+    );
     return {
       events: STATIC_EVENTS_2026.map((e) => ({ ...e, fetchedAt, sourceUrl: SOURCE_URL })),
       fetchedAt,
       sourceUrl: SOURCE_URL,
+      source: "static",
     };
   }
 
-  return { events, fetchedAt, sourceUrl: SOURCE_URL };
+  return { events, fetchedAt, sourceUrl: SOURCE_URL, source: "live" };
 }
 
 export function invalidateCache() {

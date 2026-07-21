@@ -4,7 +4,7 @@ import { formatLap, formatSector, formatDelta } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, MapPin, Ruler, RotateCw, Timer, Users, Lightbulb } from "lucide-react";
+import { ChevronLeft, MapPin, Ruler, RotateCw, Timer, Users, Lightbulb, History } from "lucide-react";
 import { TrackMap, hasTrackMap, resolveTrackMapName } from "@/components/TrackMap";
 import { DriverName } from "@/components/DriverName";
 import { useMemo } from "react";
@@ -46,6 +46,205 @@ const TRACK_FACTS: Record<Locale, Record<string, string>> = {
     "Le Mans": "The 24-hour race has run since 1923; winners can cover up to 5,800 km in a day.",
     "Fuji Speedway": "Designed in 1966 with a drainage gradient — the track is tilted 3°.",
     "Sebring": "Racing since 1950 on a former airbase — asphalt laid over the old runway concrete.",
+  },
+};
+
+interface TrackHistoryEntry {
+  builtYear: number;
+  openedNote?: string;
+  renovations: { year: number; note: string }[];
+}
+
+const TRACK_HISTORY: Record<Locale, Record<string, TrackHistoryEntry>> = {
+  ru: {
+    "Le Mans": {
+      builtYear: 1923,
+      openedNote: "Первая гонка 24 Heures du Mans",
+      renovations: [
+        { year: 1932, note: "Спрямлена шпилька Pontlieue, построена новая пит-стрит" },
+        { year: 1990, note: "На Mulsanne Straight добавлены две шиканы для безопасности" },
+        { year: 2002, note: "Перепрофилированы Porsche Curves и шикана Dunlop" },
+      ],
+    },
+    "Spa-Francorchamps": {
+      builtYear: 1921,
+      renovations: [
+        { year: 1979, note: "Трасса сокращена с 14 до 7 км, убраны участки по открытым дорогам" },
+        { year: 2022, note: "Расширены зоны вылета на Eau Rouge/Raidillon после аварий" },
+      ],
+    },
+    "Monza": {
+      builtYear: 1922,
+      renovations: [
+        { year: 1955, note: "Построен высокоскоростной банкинг (сейчас не используется)" },
+        { year: 1972, note: "Установлены первые шиканы для снижения скоростей" },
+      ],
+    },
+    "Bahrain": {
+      builtYear: 2004,
+      renovations: [
+        { year: 2010, note: "Добавлена внешняя трасса для длинной (Endurance) конфигурации" },
+      ],
+    },
+    "Portimão": {
+      builtYear: 2008,
+      openedNote: "Дебют в календаре Ф1 состоялся в 2020 году",
+      renovations: [],
+    },
+    "Imola": {
+      builtYear: 1953,
+      renovations: [
+        { year: 1972, note: "Добавлены первые шиканы для снижения скоростей" },
+        { year: 1995, note: "Масштабная реконструкция Tamburello и Villeneuve после трагедии 1994 года" },
+      ],
+    },
+    "Interlagos": {
+      builtYear: 1940,
+      renovations: [
+        { year: 1990, note: "Трасса сокращена с 7.8 км до текущей конфигурации" },
+      ],
+    },
+    "COTA": {
+      builtYear: 2012,
+      renovations: [
+        { year: 2019, note: "Полная переукладка асфальтового покрытия" },
+      ],
+    },
+    "Silverstone": {
+      builtYear: 1948,
+      openedNote: "Бывший военный аэродром, первый Гран-при Великобритании",
+      renovations: [
+        { year: 1991, note: "Реконфигурированы повороты Becketts и Chapel" },
+        { year: 2010, note: "Добавлен новый комплекс Arena и пит-комплекс Wing" },
+      ],
+    },
+    "Barcelona": {
+      builtYear: 1991,
+      renovations: [
+        { year: 2004, note: "Перед финишной прямой добавлена медленная шикана" },
+        { year: 2021, note: "Изменена конфигурация последнего сектора" },
+      ],
+    },
+    "Paul Ricard": {
+      builtYear: 1970,
+      renovations: [
+        { year: 1986, note: "На Mistral Straight добавлена шикана после гибели Элио де Анджелиса" },
+        { year: 2018, note: "Модернизация зон вылета перед возвращением в календарь Ф1" },
+      ],
+    },
+    "Lusail": {
+      builtYear: 2004,
+      openedNote: "Изначально построена для мотогонок",
+      renovations: [
+        { year: 2021, note: "Реконфигурация трассы под требования Формулы 1" },
+      ],
+    },
+    "Fuji Speedway": {
+      builtYear: 1966,
+      renovations: [
+        { year: 2005, note: "Масштабная реконструкция по проекту Германа Тильке" },
+      ],
+    },
+    "Sebring": {
+      builtYear: 1950,
+      openedNote: "Гонки проходят на бывшей авиабазе времён Второй мировой",
+      renovations: [],
+    },
+  },
+  en: {
+    "Le Mans": {
+      builtYear: 1923,
+      openedNote: "First running of the 24 Heures du Mans",
+      renovations: [
+        { year: 1932, note: "Pontlieue hairpin bypassed, new pit straight built" },
+        { year: 1990, note: "Two chicanes added on the Mulsanne Straight for safety" },
+        { year: 2002, note: "Porsche Curves and Dunlop chicane reprofiled" },
+      ],
+    },
+    "Spa-Francorchamps": {
+      builtYear: 1921,
+      renovations: [
+        { year: 1979, note: "Circuit shortened from 14 km to 7 km, public-road sections removed" },
+        { year: 2022, note: "Runoff areas widened at Eau Rouge/Raidillon after accidents" },
+      ],
+    },
+    "Monza": {
+      builtYear: 1922,
+      renovations: [
+        { year: 1955, note: "High-speed banked oval built (now disused)" },
+        { year: 1972, note: "First chicanes installed to reduce speeds" },
+      ],
+    },
+    "Bahrain": {
+      builtYear: 2004,
+      renovations: [
+        { year: 2010, note: "Outer circuit added for the longer Endurance layout" },
+      ],
+    },
+    "Portimão": {
+      builtYear: 2008,
+      openedNote: "Made its F1 debut in 2020",
+      renovations: [],
+    },
+    "Imola": {
+      builtYear: 1953,
+      renovations: [
+        { year: 1972, note: "First chicanes added to reduce speeds" },
+        { year: 1995, note: "Tamburello and Villeneuve rebuilt after the 1994 tragedy" },
+      ],
+    },
+    "Interlagos": {
+      builtYear: 1940,
+      renovations: [
+        { year: 1990, note: "Circuit shortened from 7.8 km to its current configuration" },
+      ],
+    },
+    "COTA": {
+      builtYear: 2012,
+      renovations: [
+        { year: 2019, note: "Full asphalt resurfacing" },
+      ],
+    },
+    "Silverstone": {
+      builtYear: 1948,
+      openedNote: "A former WWII airfield, host of the first British Grand Prix",
+      renovations: [
+        { year: 1991, note: "Becketts and Chapel corners reconfigured" },
+        { year: 2010, note: "New Arena complex and Wing pit building added" },
+      ],
+    },
+    "Barcelona": {
+      builtYear: 1991,
+      renovations: [
+        { year: 2004, note: "Slow chicane added before the start/finish straight" },
+        { year: 2021, note: "Final sector reconfigured" },
+      ],
+    },
+    "Paul Ricard": {
+      builtYear: 1970,
+      renovations: [
+        { year: 1986, note: "Mistral Straight chicane added after Elio de Angelis's fatal testing crash" },
+        { year: 2018, note: "Runoff areas modernized ahead of its F1 return" },
+      ],
+    },
+    "Lusail": {
+      builtYear: 2004,
+      openedNote: "Originally built for motorcycle racing",
+      renovations: [
+        { year: 2021, note: "Circuit reconfigured to Formula 1 requirements" },
+      ],
+    },
+    "Fuji Speedway": {
+      builtYear: 1966,
+      renovations: [
+        { year: 2005, note: "Extensively rebuilt to a Hermann Tilke design" },
+      ],
+    },
+    "Sebring": {
+      builtYear: 1950,
+      openedNote: "Racing takes place on a former WWII-era airbase",
+      renovations: [],
+    },
   },
 };
 
@@ -97,6 +296,9 @@ export default function TrackDetail() {
   }
 
   const fact = TRACK_FACTS[locale][track.name];
+  const history = TRACK_HISTORY[locale][track.name];
+  const showMap = hasTrackMap(resolveTrackMapName(track));
+  const showInfoColumn = Boolean(history || fact);
 
   return (
     <div className="space-y-5">
@@ -105,39 +307,68 @@ export default function TrackDetail() {
         <ChevronLeft size={16} /> {t("trackDetail.back")}
       </Link>
 
-      <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
-        <div>
-          <h1 className="font-display text-xl font-bold tracking-tight">{track.name}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+      <Card className="overflow-hidden">
+        <div className="border-b border-border bg-secondary/40 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-display text-xl font-bold tracking-tight">{track.name}</h1>
+            {history && (
+              <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
+                {t("trackDetail.sinceBadge", { year: history.builtYear })}
+              </Badge>
+            )}
+          </div>
+          <div className="mt-1 text-sm text-muted-foreground">{track.layout}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="flex items-center gap-1"><MapPin size={14} /> {translateCountry(track.country, locale)}</span>
             <span className="flex items-center gap-1"><Ruler size={14} /> {track.lengthKm} {t("trackDetail.km")}</span>
             <span className="flex items-center gap-1"><RotateCw size={14} /> {track.turns} {t("trackDetail.turns")}</span>
-            <Badge variant="outline">{track.layout}</Badge>
           </div>
         </div>
-      </div>
 
-      {fact && (
-        <Card className="flex items-start gap-3 px-4 py-3 bg-primary/5 border-primary/20">
-          <Lightbulb size={16} className="mt-0.5 shrink-0 text-primary" />
-          <div>
-            <span className="text-xs font-semibold uppercase tracking-widest text-primary">{t("trackDetail.trivia")}</span>
-            <p className="mt-0.5 text-sm text-foreground">{fact}</p>
-          </div>
-        </Card>
-      )}
+        {(showInfoColumn || showMap) && (
+          <div className={showInfoColumn && showMap ? "grid md:grid-cols-[1.05fr_1fr]" : "grid"}>
+            {showInfoColumn && (
+              <div className={`p-5 ${showMap ? "order-2 border-t border-border md:order-none md:border-t-0 md:border-r" : ""}`}>
+                {history && (
+                  <>
+                    <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                      <History size={13} /> {t("trackDetail.history")}
+                    </div>
+                    <ul className="mb-1">
+                      <li className="relative border-l-2 border-border py-0 pb-3.5 pl-5 text-sm before:absolute before:-left-[5px] before:top-1 before:h-2 before:w-2 before:rounded-full before:bg-primary before:content-['']">
+                        <span className="font-data font-bold">{history.builtYear}</span>{" "}
+                        <span className="text-muted-foreground">{history.openedNote ?? t("trackDetail.trackOpened")}</span>
+                      </li>
+                      {history.renovations.map((r, i) => (
+                        <li key={r.year} className={`relative border-l-2 py-0 pl-5 text-sm ${i === history.renovations.length - 1 ? "border-transparent pb-0" : "border-border pb-3.5"} before:absolute before:-left-[5px] before:top-1 before:h-2 before:w-2 before:rounded-full before:bg-primary before:content-['']`}>
+                          <span className="font-data font-bold">{r.year}</span>{" "}
+                          <span className="text-muted-foreground">{r.note}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
 
-      {hasTrackMap(resolveTrackMapName(track)) && (
-        <Card className="overflow-hidden">
-          <div className="flex items-center justify-between border-b border-border bg-secondary/40 px-4 py-3">
-            <h2 className="font-semibold">{t("trackDetail.schemeTitle")}</h2>
-            <span className="text-xs text-muted-foreground">{track.lengthKm} {t("trackDetail.km")} · {track.turns} {t("trackDetail.turns")}</span>
+                {fact && (
+                  <div className={`flex items-start gap-3 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 ${history ? "mt-5" : ""}`}>
+                    <Lightbulb size={16} className="mt-0.5 shrink-0 text-primary" />
+                    <div>
+                      <span className="text-xs font-semibold uppercase tracking-widest text-primary">{t("trackDetail.trivia")}</span>
+                      <p className="mt-0.5 text-sm text-foreground">{fact}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showMap && (
+              <div className="order-1 flex items-center justify-center bg-gradient-to-b from-card to-secondary/20 p-6 md:order-none">
+                <TrackMap name={resolveTrackMapName(track)} className="h-56 w-full max-w-xl text-primary" />
+              </div>
+            )}
           </div>
-          <div className="flex items-center justify-center bg-gradient-to-b from-card to-secondary/20 p-6">
-            <TrackMap name={resolveTrackMapName(track)} className="h-56 w-full max-w-xl text-primary" />
-          </div>
-        </Card>
-      )}
+        )}
+      </Card>
 
       {stats ? (
         <>

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "wouter";
 import { useLaps, useTracks } from "@/lib/api";
 import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap, formatDelta } from "@/lib/format";
@@ -8,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Trophy, Medal } from "lucide-react";
+import { Trophy, Medal, Upload } from "lucide-react";
 import { CLASS_ORDER, getClassBadgeClass, getClassAccentClass } from "@/lib/classStyles";
 import { DriverName } from "@/components/DriverName";
 import { useLanguage } from "@/lib/i18n";
@@ -54,10 +55,23 @@ function formatRecordDate(dateStr: string | undefined, intlLocale: string): stri
   }
 }
 
+/**
+ * A session's course only identifies a distinct track layout when it actually
+ * differs from the venue name. Some LMU logs write the course tag as a plain
+ * copy of the venue (or leave it blank) while others record it for the same
+ * physical track — without this, those sessions split into a second,
+ * near-identical leaderboard card for the same track.
+ */
+function normalizeCourse(course: string | null | undefined, trackName: string): string | null {
+  const trimmed = course?.trim();
+  if (!trimmed) return null;
+  return trimmed.toLowerCase() === trackName.trim().toLowerCase() ? null : trimmed;
+}
+
 function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
   const byBoard = new Map<string, { displayName: string; laps: LapRow[] }>();
   for (const l of laps) {
-    const course = l.sessionCourse ?? null;
+    const course = normalizeCourse(l.sessionCourse, l.trackName);
     const boardKey = course ? `${l.trackName}|||${course}` : l.trackName;
     const displayName = course ? `${l.trackName} · ${course}` : l.trackName;
     if (!byBoard.has(boardKey)) byBoard.set(boardKey, { displayName, laps: [] });
@@ -121,7 +135,8 @@ export default function Leaderboards() {
     if (!laps) return [];
     const set = new Set<string>();
     for (const l of laps as LapRow[]) {
-      if (l.sessionCourse) set.add(l.sessionCourse);
+      const course = normalizeCourse(l.sessionCourse, l.trackName);
+      if (course) set.add(course);
     }
     return Array.from(set).sort();
   }, [laps]);
@@ -138,7 +153,7 @@ export default function Leaderboards() {
     }
 
     if (courseFilter !== "all") {
-      filtered = filtered.filter((l: LapRow) => l.sessionCourse === courseFilter);
+      filtered = filtered.filter((l: LapRow) => normalizeCourse(l.sessionCourse, l.trackName) === courseFilter);
     }
 
     if (globalFiltered) {
@@ -332,7 +347,27 @@ export default function Leaderboards() {
       </div>
 
       {!isLoading && boards.length === 0 && (
-        <p className="py-12 text-center text-sm text-muted-foreground">{t("leaderboards.noData")}</p>
+        (laps?.length ?? 0) === 0 ? (
+          <div className="flex flex-col items-center gap-4 rounded-lg border border-border bg-card p-14 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Upload size={22} />
+            </div>
+            <div>
+              <p className="font-semibold">{t("leaderboards.emptyTitle")}</p>
+              <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">
+                {t("leaderboards.emptyBody")}
+              </p>
+            </div>
+            <Link
+              href="/import"
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <Upload size={16} /> {t("leaderboards.emptyCta")}
+            </Link>
+          </div>
+        ) : (
+          <p className="py-12 text-center text-sm text-muted-foreground">{t("leaderboards.noData")}</p>
+        )
       )}
     </div>
   );

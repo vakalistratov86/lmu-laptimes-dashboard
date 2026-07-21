@@ -72,25 +72,28 @@ function formatSpeed(raw: unknown): string {
 }
 
 /**
- * SD-18: Форматирует остаток топлива в строку «X.XX» (л) или «—».
+ * Форматирует остаток топлива в строку «XX» (% от полного бака) или «—».
+ * LMU хранит fuelLevel как долю бака 0–1 (fuel="0.690" в логе) — не литры,
+ * поэтому пересчитываем в процент, а не подставляем сырое значение.
  */
-function formatFuel(raw: unknown): string {
+function formatFuelPercent(raw: unknown): string {
   const v = Number(raw);
   if (!Number.isFinite(v) || v < 0) return '—';
-  return `${v.toFixed(2)}`;
+  const pct = v > 1 ? v : v * 100;
+  return `${Math.round(pct)}`;
 }
 
 /**
- * SD-18: Парсит значение состояния/износа шины в строку «XX.X%» или «—».
+ * SD-18: Парсит значение состояния/износа шины в строку «XX» (целый %) или «—».
  * LMU хранит condition как долю 0–1 (1.0 = новая шина).
- * Отображаем как процент оставшегося ресурса: 1.0 → 100%, 0.75 → 75%.
+ * Отображаем как процент оставшегося ресурса: 1.0 → 100, 0.75 → 75.
  */
 function formatWear(raw: unknown): string {
   const v = Number(raw);
   if (!Number.isFinite(v)) return '—';
   // Значение может быть 0–1 (доля) или 0–100 (проценты)
   const pct = v > 1 ? v : v * 100;
-  return `${pct.toFixed(1)}%`;
+  return `${Math.round(pct)}`;
 }
 
 /**
@@ -187,7 +190,11 @@ function parseTyreType(lap: Record<string, any>): string {
     lap.compound ?? lap.tyre ?? lap.tire ?? null;
 
   if (raw == null || raw === '') return '—';
-  return String(raw);
+  const str = String(raw);
+  // Часть логов хранит компаунд в формате «0,Medium» (индекс,название) —
+  // берём часть после запятой, если она есть.
+  const cleaned = str.includes(',') ? str.split(',').pop()!.trim() : str.trim();
+  return cleaned || '—';
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -328,9 +335,6 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
     const carClass: string | null =
       (r.carClass && String(r.carClass).trim()) ? String(r.carClass).trim() : null;
 
-    const classPosition: number | null =
-      typeof r.classPosition === 'number' ? r.classPosition : null;
-
     return {
       position: r.position ?? idx + 1,
       driverName: String(r.driverName ?? r.driver ?? '—'),
@@ -345,7 +349,6 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       finishStatus,
       isPlayer: r.isPlayer ?? null,
       carClass,
-      classPosition,
     };
   });
 }
@@ -549,7 +552,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
           isPitLap: Boolean(lap.isPitLap ?? lap.pitLap ?? false),
           // SD-18: Новые поля — имена взяты из реальной схемы session_laps
           maxSpeed: formatSpeed(maxSpeedRaw),
-          fuelRemaining: formatFuel(fuelRaw),
+          fuelRemaining: formatFuelPercent(fuelRaw),
           tyreWear: parseTyreWear(lap),
           tyreType: parseTyreType(lap),
         };
@@ -611,8 +614,8 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
         Number.isFinite(maxSpeedRawAgg) ? maxSpeedRawAgg : null,
       ),
       tyreTypesUsed: Array.from(tyreTypesUsed),
-      fuelStart: formatFuel(fuelStartRaw),
-      fuelEnd: formatFuel(fuelEndRaw),
+      fuelStart: formatFuelPercent(fuelStartRaw),
+      fuelEnd: formatFuelPercent(fuelEndRaw),
       pitLapsCount,
     });
   }

@@ -73,9 +73,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           );
         })}
       </nav>
-      <div className="border-t border-sidebar-border p-3 text-[11px] text-muted-foreground">
-        {t("nav.demoSeason")}
-      </div>
     </>
   );
 }
