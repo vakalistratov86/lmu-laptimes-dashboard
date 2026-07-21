@@ -175,6 +175,11 @@ const CATALOG_TRACKS: InsertTrack[] = [
   { name: "Fuji Speedway", country: "Япония", lengthKm: 4.563, turns: 16, layout: "GP" },
   { name: "Sebring", country: "США", lengthKm: 6.019, turns: 17, layout: "International" },
   { name: "Bahrain", country: "Бахрейн", lengthKm: 5.412, turns: 15, layout: "GP" },
+  // Отдельная физическая конфигурация той же трассы (тот же "name", как и
+  // при реальном импорте — см. findOrCreateTrack() в importWorker.ts), она
+  // же "короткая" — резолвится в отдельную схему через resolveTrackMapName()
+  // (TrackMap.tsx) по подстроке "outer" в layout.
+  { name: "Bahrain", country: "Бахрейн", lengthKm: 3.543, turns: 11, layout: "Outer Circuit" },
   { name: "Imola", country: "Италия", lengthKm: 4.909, turns: 19, layout: "GP" },
   { name: "Portimão", country: "Португалия", lengthKm: 4.653, turns: 15, layout: "GP" },
   { name: "Interlagos", country: "Бразилия", lengthKm: 4.309, turns: 15, layout: "GP" },
@@ -185,18 +190,33 @@ const CATALOG_TRACKS: InsertTrack[] = [
   { name: "Lusail", country: "Катар", lengthKm: 5.380, turns: 16, layout: "GP" },
 ];
 
+// Тот же допуск, что и TRACK_LENGTH_MATCH_TOLERANCE_KM в importWorker.ts —
+// одна физическая трасса считается той же, если длина отличается меньше,
+// чем на эту величину; разные реальные конфигурации (напр. Bahrain GP 5.4км
+// и Bahrain Outer Circuit 3.5км) отличаются на километры, далеко за порогом.
+const CATALOG_LENGTH_MATCH_TOLERANCE_KM = 0.05;
+
 /**
  * Гарантирует, что все трассы каталога присутствуют в БД — даже если по ним
  * ещё не было ни одной сессии/заезда. Идемпотентна: при повторных запусках
  * добавляет только реально отсутствующие строки. Выполняется при каждом
  * старте сервера (в отличие от seedIfEmpty, которая работает один раз на
  * пустой БД).
+ *
+ * Сравнение по имени И длине трассы (а не только по имени) — иначе каталог
+ * не смог бы содержать две разные физические конфигурации одной трассы
+ * (напр. Bahrain GP и Bahrain Outer Circuit): вторая запись с тем же
+ * названием считалась бы дублем первой и никогда не вставлялась.
  */
 export async function ensureCatalogTracks() {
   const existing = await db.select().from(tracks);
-  const existingNames = new Set(existing.map((t) => t.name.toLowerCase()));
 
-  const missing = CATALOG_TRACKS.filter((t) => !existingNames.has(t.name.toLowerCase()));
+  const missing = CATALOG_TRACKS.filter((catalogTrack) => {
+    const sameName = existing.filter((t) => t.name.toLowerCase() === catalogTrack.name.toLowerCase());
+    return !sameName.some(
+      (t) => Math.abs(t.lengthKm - catalogTrack.lengthKm) < CATALOG_LENGTH_MATCH_TOLERANCE_KM,
+    );
+  });
   if (missing.length === 0) return;
 
   await db.insert(tracks).values(missing);
