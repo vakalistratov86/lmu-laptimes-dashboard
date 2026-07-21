@@ -84,9 +84,8 @@ describe("toUTCIsoString", () => {
     expect(result).toBe("2025-06-10T12:00:00.000Z");
   });
 
-  it("возвращает строку как есть при невалидной дате", () => {
-    const result = toUTCIsoString("not-a-date");
-    expect(result).toBe("not-a-date");
+  it("бросает ошибку при невалидной дате (fix #75, вместо silent fallback)", () => {
+    expect(() => toUTCIsoString("not-a-date")).toThrow('Невалидная дата: "not-a-date"');
   });
 });
 

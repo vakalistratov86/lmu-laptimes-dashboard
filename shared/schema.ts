@@ -252,9 +252,16 @@ export const telemetrySamples = pgTable("telemetry_samples", {
 
 export const insertTrackSchema = createInsertSchema(tracks).omit({ id: true });
 export const insertDriverSchema = createInsertSchema(drivers).omit({ id: true });
-export const insertLapTimeSchema = createInsertSchema(lapTimes).omit({ id: true });
+// source/isPlayer: full ZodType overrides (not refine callbacks) so that
+// .default() actually applies on parse() — drizzle-zod wraps refine-callback
+// results in an extra .optional(), which would otherwise swallow the default.
+export const insertLapTimeSchema = createInsertSchema(lapTimes, {
+  source: z.string().default("demo"),
+}).omit({ id: true });
 export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true });
-export const insertSessionResultSchema = createInsertSchema(sessionResults).omit({ id: true });
+export const insertSessionResultSchema = createInsertSchema(sessionResults, {
+  isPlayer: z.number().int().default(0),
+}).omit({ id: true });
 export const insertSessionLapSchema = createInsertSchema(sessionLaps).omit({ id: true });
 export const insertSessionIncidentSchema = createInsertSchema(sessionIncidents).omit({ id: true });
 export const insertSessionSectorBestSchema = createInsertSchema(sessionSectorBests).omit({ id: true });

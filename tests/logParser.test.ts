@@ -211,12 +211,26 @@ describe('parseRaceResults', () => {
   // Граничные случаи / невалидный ввод
   // -------------------------------------------------------------------------
   describe('граничные случаи', () => {
-    it('возвращает null для пустой строки', () => {
-      expect(parseRaceResults('')).toBeNull();
+    it('бросает UNSUPPORTED_LOG_VERSION для пустой строки (#7 — версия не определена)', () => {
+      expect(() => parseRaceResults('')).toThrow();
+      let error: (Error & { code?: string }) | undefined;
+      try {
+        parseRaceResults('');
+      } catch (e) {
+        error = e as Error & { code?: string };
+      }
+      expect(error?.code).toBe('UNSUPPORTED_LOG_VERSION');
     });
 
-    it('возвращает null для произвольного текста без маркеров LMU/rFactor', () => {
-      expect(parseRaceResults('<html><body>Hello</body></html>')).toBeNull();
+    it('бросает UNSUPPORTED_LOG_VERSION для произвольного текста без маркеров LMU/rFactor', () => {
+      expect(() => parseRaceResults('<html><body>Hello</body></html>')).toThrow();
+      let error: (Error & { code?: string }) | undefined;
+      try {
+        parseRaceResults('<html><body>Hello</body></html>');
+      } catch (e) {
+        error = e as Error & { code?: string };
+      }
+      expect(error?.code).toBe('UNSUPPORTED_LOG_VERSION');
     });
 
     it('возвращает null если нет ни одного валидного <Driver>', () => {
