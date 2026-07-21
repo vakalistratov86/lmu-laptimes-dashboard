@@ -20,6 +20,14 @@ interface ParsedRaw {
   events: SpecialEvent[];
   fetchedAt: string;
   sourceUrl: string;
+  /**
+   * "live" — успешно распарсено с сайта; "static" — сеть/парсинг подвели,
+   * отданы захардкоженные STATIC_EVENTS_2026. Без этого поля со стороны
+   * пользователя нет способа отличить свежие данные от замороженного
+   * фоллбэка — кнопка «Обновить» выглядит нерабочей, хотя на деле каждый
+   * раз стабильно не удаётся достучаться до источника.
+   */
+  source: "live" | "static";
 }
 
 const SOURCE_URL = "https://lemansultimate.com/special-events-calendar-q3-4-2026/";
@@ -81,6 +89,7 @@ export async function getSpecialEvents(): Promise<ParsedRaw> {
       events: STATIC_EVENTS_2026.map((e) => ({ ...e, fetchedAt, sourceUrl: SOURCE_URL })),
       fetchedAt,
       sourceUrl: SOURCE_URL,
+      source: "static",
     };
     cacheExpiry = now + CACHE_TTL_ERROR_MS;
   }
@@ -151,10 +160,11 @@ async function fetchAndParse(): Promise<ParsedRaw> {
       events: STATIC_EVENTS_2026.map((e) => ({ ...e, fetchedAt, sourceUrl: SOURCE_URL })),
       fetchedAt,
       sourceUrl: SOURCE_URL,
+      source: "static",
     };
   }
 
-  return { events, fetchedAt, sourceUrl: SOURCE_URL };
+  return { events, fetchedAt, sourceUrl: SOURCE_URL, source: "live" };
 }
 
 export function invalidateCache() {

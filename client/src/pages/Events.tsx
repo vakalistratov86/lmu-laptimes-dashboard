@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Star,
   AlertCircle,
+  AlertTriangle,
   Trophy,
   Zap,
 } from "lucide-react";
@@ -34,6 +35,7 @@ interface EventsResponse {
   events: SpecialEvent[];
   fetchedAt: string;
   sourceUrl: string;
+  source: "live" | "static";
 }
 
 interface DailyRace {
@@ -381,6 +383,16 @@ export default function Events() {
           </a>
         </div>
       </div>
+
+      {/* Предупреждение: сайт LMU недоступен, показаны сохранённые данные —
+          без этого у пользователя нет способа понять, почему «Обновить»
+          ничего не меняет на экране. */}
+      {mainTab === "special" && data?.source === "static" && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <p>{t("events.staleSourceWarning")}</p>
+        </div>
+      )}
 
       {/* Основные табы */}
       <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1 w-fit">

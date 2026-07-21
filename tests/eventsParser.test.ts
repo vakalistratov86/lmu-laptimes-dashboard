@@ -203,6 +203,7 @@ describe('eventsParser', () => {
 
       const result = await getSpecialEvents();
       expect(result.events.length).toBeGreaterThan(0);
+      expect(result.source).toBe('live');
     });
 
     it('распознаёт строки с длинным тире (—) вместо короткого (–)', async () => {
@@ -236,6 +237,7 @@ describe('eventsParser', () => {
 
       const result = await getSpecialEvents();
       expect(result.events.length).toBeGreaterThan(0);
+      expect(result.source).toBe('static');
     });
 
     it('при слишком малом числе распознанных событий fallback на статику', async () => {
@@ -249,6 +251,7 @@ describe('eventsParser', () => {
       const result = await getSpecialEvents();
       // Должны получить статику (>= 5 событий)
       expect(result.events.length).toBeGreaterThanOrEqual(5);
+      expect(result.source).toBe('static');
     });
   });
 });

@@ -397,7 +397,7 @@ export async function registerRoutes(
   app.post("/api/special-events/refresh", asyncRoute(async (_req, res) => {
     invalidateCache();
     const data = await getSpecialEvents();
-    res.json({ ok: true, fetchedAt: data.fetchedAt, count: data.events.length });
+    res.json({ ok: true, fetchedAt: data.fetchedAt, count: data.events.length, source: data.source });
   }));
 
   return httpServer;
