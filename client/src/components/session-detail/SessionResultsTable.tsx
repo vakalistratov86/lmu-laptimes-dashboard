@@ -10,7 +10,7 @@
 import { Medal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DriverName } from '@/components/DriverName';
-import { getMedalColorClass } from '@/lib/classStyles';
+import { getMedalColorClass, getClassBadgeClass } from '@/lib/classStyles';
 import { useLanguage } from '@/lib/i18n';
 import type { SessionResultRowView } from './types';
 
@@ -58,6 +58,17 @@ export function SessionResultsRow({
         </div>
       </td>
 
+      {/* Класс машины */}
+      <td className="px-4 py-2.5">
+        {row.carClass ? (
+          <Badge variant="outline" className={`text-xs ${getClassBadgeClass(row.carClass)}`}>
+            {row.carClass}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+
       {/* Команда / машина */}
       <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
         <div className="truncate">{row.teamName ?? '—'}</div>
@@ -67,7 +78,7 @@ export function SessionResultsRow({
         </div>
       </td>
 
-      {/* Класс */}
+      {/* Статус финиша */}
       <td className="px-4 py-2.5">
         {row.finishStatus ? (
           <Badge variant="outline" className="text-xs text-muted-foreground">
@@ -131,6 +142,7 @@ export function SessionResultsTable({
           <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <th className="px-4 py-2.5 w-12">{t('sessionDetail.colPos')}</th>
             <th className="px-4 py-2.5">{t('sessionDetail.colDriver')}</th>
+            <th className="px-4 py-2.5">{t('sessionDetail.colClass')}</th>
             <th className="hidden px-4 py-2.5 sm:table-cell">{t('sessionDetail.colTeamCar')}</th>
             <th className="px-4 py-2.5">{t('sessionDetail.colStatus')}</th>
             <th className="px-4 py-2.5 text-right">{t('sessionDetail.colLaps')}</th>
