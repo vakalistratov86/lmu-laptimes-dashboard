@@ -42,6 +42,12 @@ function trackDisplayLabel(trackName: string, course: string | null | undefined)
   return `${trackName} · ${course}`;
 }
 
+/** Конфигурация трассы для отдельного столбца — «—», если не задана или совпадает с названием трассы. */
+function configLabel(trackName: string, course: string | null | undefined): string {
+  if (!course || course.toLowerCase() === trackName.toLowerCase()) return "—";
+  return course;
+}
+
 type SessionItem = {
   id: number;
   trackName: string;
@@ -317,13 +323,14 @@ export default function Sessions() {
         </div>
       )}
 
-      {/* Sessions table. Колонки фиксированной ширины (160+170+140+80+110+24px = 684px) шире,
-          чем мобильный экран — раньше внешний контейнер был overflow-hidden и просто обрезал
-          Трек/Лучший круг/Кругов/Дату без возможности их увидеть. Теперь контейнер
-          overflow-x-auto, а строки min-w-[864px] — на мобильном таблица целиком листается
-          горизонтально свайпом, ни одна колонка не пропадает. Колонка "Трек" —
-          minmax(180px,1fr), т.к. чистый 1fr в контейнере с min-w ровно по сумме
-          остальных колонок схлопывается в 0 и текст наезжает на соседнюю колонку. */}
+      {/* Sessions table. Колонки фиксированной ширины (160+140+170+140+80+110+24 = 824px)
+          плюс gap-x-3 между 8 колонками (84px) = 908px, шире, чем мобильный экран — раньше
+          внешний контейнер был overflow-hidden и просто обрезал Трек/Лучший круг/Кругов/Дату
+          без возможности их увидеть. Теперь контейнер overflow-x-auto, а строки
+          min-w-[1068px] (с запасом под "Трек" minmax(160px,…)) — на мобильном таблица целиком
+          листается горизонтально свайпом, ни одна колонка не пропадает. Между колонками
+          обязателен gap — без него длинная конфигурация трассы (напр. "Circuit de la Sarthe")
+          вплотную примыкает к соседней колонке, т.к. у ячеек нет собственных отступов. */}
       {!isLoading && hasSessions && hasFiltered && (
         <div
           className="overflow-x-auto rounded-lg border border-border bg-card"
@@ -332,12 +339,13 @@ export default function Sessions() {
         >
           {/* Table header */}
           <div
-            className="grid min-w-[864px] border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            style={{ gridTemplateColumns: "160px minmax(180px,1fr) 170px 140px 80px 110px 24px" }}
+            className="grid min-w-[1068px] gap-x-3 border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            style={{ gridTemplateColumns: "160px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px" }}
             role="row"
           >
             <div role="columnheader">{t("sessions.colType")}</div>
             <div role="columnheader">{t("sessions.colTrack")}</div>
+            <div role="columnheader">{t("sessions.colConfig")}</div>
             <div role="columnheader">{t("sessions.colClasses")}</div>
             <div role="columnheader" className="text-right">{t("sessions.colBestLap")}</div>
             <div role="columnheader" className="text-right">{t("sessions.colLaps")}</div>
@@ -360,8 +368,8 @@ export default function Sessions() {
                 key={session.id}
                 href={href}
                 data-testid={`row-session-${session.id}`}
-                className="grid min-w-[864px] cursor-pointer items-center border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                style={{ gridTemplateColumns: "160px minmax(180px,1fr) 170px 140px 80px 110px 24px" }}
+                className="grid min-w-[1068px] cursor-pointer items-center gap-x-3 border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                style={{ gridTemplateColumns: "160px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px" }}
                 role="row"
                 aria-label={`${t(`sessionType.${cat}`)} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime, intlLocale)}`}
               >
@@ -371,8 +379,13 @@ export default function Sessions() {
                 </div>
 
                 {/* Track */}
-                <div className="truncate font-medium" role="cell">
-                  {trackDisplayLabel(session.trackName, session.course)}
+                <div className="min-w-0 truncate font-medium" role="cell">
+                  {session.trackName}
+                </div>
+
+                {/* Configuration */}
+                <div className="min-w-0 truncate text-muted-foreground" role="cell">
+                  {configLabel(session.trackName, session.course)}
                 </div>
 
                 {/* Classes */}
