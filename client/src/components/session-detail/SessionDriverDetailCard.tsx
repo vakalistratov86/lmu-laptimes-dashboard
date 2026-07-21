@@ -51,7 +51,6 @@ export function SessionDriverDetailCard({
         {row.carClass && (
           <Badge variant="outline" className={getClassBadgeClass(row.carClass)}>
             {row.carClass}
-            {row.classPosition ? ` · #${row.classPosition}` : ''}
           </Badge>
         )}
         {row.finishStatus && (

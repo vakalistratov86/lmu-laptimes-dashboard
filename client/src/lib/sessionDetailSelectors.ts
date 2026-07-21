@@ -335,9 +335,6 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
     const carClass: string | null =
       (r.carClass && String(r.carClass).trim()) ? String(r.carClass).trim() : null;
 
-    const classPosition: number | null =
-      typeof r.classPosition === 'number' ? r.classPosition : null;
-
     return {
       position: r.position ?? idx + 1,
       driverName: String(r.driverName ?? r.driver ?? '—'),
@@ -352,7 +349,6 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       finishStatus,
       isPlayer: r.isPlayer ?? null,
       carClass,
-      classPosition,
     };
   });
 }

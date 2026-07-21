@@ -50,8 +50,6 @@ export interface SessionResultRowView {
   isPlayer?: number | null;
   /** Класс машины (Hypercar / LMP2 / GT3…). */
   carClass?: string | null;
-  /** Позиция внутри класса. */
-  classPosition?: number | null;
 }
 
 // ── Круги по пилотам ─────────────────────────────────────────────────────────
