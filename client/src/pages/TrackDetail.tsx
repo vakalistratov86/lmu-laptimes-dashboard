@@ -308,16 +308,12 @@ export default function TrackDetail() {
       </Link>
 
       <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border bg-secondary/40 px-5 py-4">
-          <div>
-            <h1 className="font-display text-xl font-bold tracking-tight">{track.name}</h1>
-            <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1"><MapPin size={14} /> {translateCountry(track.country, locale)}</span>
-              <span className="flex items-center gap-1"><Ruler size={14} /> {track.lengthKm} {t("trackDetail.km")}</span>
-              <span className="flex items-center gap-1"><RotateCw size={14} /> {track.turns} {t("trackDetail.turns")}</span>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="border-b border-border bg-secondary/40 px-5 py-4">
+          <h1 className="font-display text-xl font-bold tracking-tight">{track.name}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1"><MapPin size={14} /> {translateCountry(track.country, locale)}</span>
+            <span className="flex items-center gap-1"><Ruler size={14} /> {track.lengthKm} {t("trackDetail.km")}</span>
+            <span className="flex items-center gap-1"><RotateCw size={14} /> {track.turns} {t("trackDetail.turns")}</span>
             {history && (
               <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
                 {t("trackDetail.sinceBadge", { year: history.builtYear })}
@@ -330,7 +326,7 @@ export default function TrackDetail() {
         {(showInfoColumn || showMap) && (
           <div className={showInfoColumn && showMap ? "grid md:grid-cols-[1.05fr_1fr]" : "grid"}>
             {showInfoColumn && (
-              <div className={`p-5 ${showMap ? "order-2 border-t border-border md:order-none md:border-t-0 md:border-r" : ""}`}>
+              <div className={`p-5 ${showMap ? "order-2 md:order-none" : ""}`}>
                 {history && (
                   <>
                     <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -364,7 +360,7 @@ export default function TrackDetail() {
             )}
 
             {showMap && (
-              <div className="order-1 flex items-center justify-center bg-gradient-to-b from-card to-secondary/20 p-6 md:order-none">
+              <div className="order-1 flex items-center justify-center p-6 md:order-none">
                 <TrackMap name={resolveTrackMapName(track)} className="h-56 w-full max-w-xl text-primary" />
               </div>
             )}
