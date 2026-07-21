@@ -515,23 +515,9 @@ describe('API Routes', () => {
     });
   });
 
-  // ── DELETE /api/demo ──────────────────────────────────────────────────────
-  describe('DELETE /api/demo', () => {
-    it('возвращает 200 с ok=true', async () => {
-      const res = await makeRequest(app, 'DELETE', '/api/demo', undefined, authHeader);
-      expect(res.status).toBe(200);
-      expect((res.body as { ok: boolean }).ok).toBe(true);
-    });
-
-    it('ответ содержит message', async () => {
-      const res = await makeRequest(app, 'DELETE', '/api/demo', undefined, authHeader);
-      expect(res.body).toHaveProperty('message');
-    });
-  });
-
   // ── Admin auth (issue #122) ───────────────────────────────────────────────
   describe('Admin-защита деструктивных роутов', () => {
-    const protectedRoutes = ['/api/demo', '/api/import/all', '/api/import/telemetry/all'];
+    const protectedRoutes = ['/api/import/all', '/api/import/telemetry/all'];
 
     for (const path of protectedRoutes) {
       it(`DELETE ${path} возвращает 401 без токена`, async () => {
@@ -548,7 +534,7 @@ describe('API Routes', () => {
     it('возвращает 503, если ADMIN_TOKEN не настроен на сервере', async () => {
       delete process.env.ADMIN_TOKEN;
       try {
-        const res = await makeRequest(app, 'DELETE', '/api/demo', undefined, authHeader);
+        const res = await makeRequest(app, 'DELETE', '/api/import/all', undefined, authHeader);
         expect(res.status).toBe(503);
       } finally {
         process.env.ADMIN_TOKEN = TEST_ADMIN_TOKEN;

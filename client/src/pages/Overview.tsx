@@ -11,7 +11,7 @@ import { SessionTypeBadge } from "@/components/SessionTypeBadge";
 import { ActivityTile } from "@/components/ActivityTile";
 import { Link } from "wouter";
 import {
-  Gauge, Route, Flag, Users, RefreshCw, Car, User, Bot, History, ChevronRight,
+  Gauge, Route, Flag, Users, RefreshCw, Car, User, Bot, History, ChevronRight, Upload,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
@@ -149,6 +149,31 @@ export default function Overview() {
         </div>
         <Skeleton className="h-80" />
         <Skeleton className="h-64" />
+      </div>
+    );
+  }
+
+  if (laps.length === 0) {
+    return (
+      <div className="space-y-6">
+        <PageTitle />
+        <div className="flex flex-col items-center gap-4 rounded-lg border border-border bg-card p-14 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Upload size={22} />
+          </div>
+          <div>
+            <p className="font-semibold">{t("overview.emptyTitle")}</p>
+            <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">
+              {t("overview.emptyBody")}
+            </p>
+          </div>
+          <Link
+            href="/import"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            <Upload size={16} /> {t("overview.emptyCta")}
+          </Link>
+        </div>
       </div>
     );
   }

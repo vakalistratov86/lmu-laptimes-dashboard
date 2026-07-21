@@ -70,7 +70,6 @@ function createTestDb() {
       conditions TEXT NOT NULL DEFAULT '',
       tyre TEXT NOT NULL DEFAULT '',
       date TEXT NOT NULL DEFAULT '',
-      source TEXT NOT NULL DEFAULT 'demo',
       session_id INTEGER
     );
     CREATE TABLE session_results (
@@ -107,12 +106,12 @@ describe('getLaps() — sessionCourse via JOIN', () => {
     testDb = createTestDb();
   });
 
-  it('возвращает sessionCourse=null для demo-кругов (sessionId=null)', async () => {
+  it('возвращает sessionCourse=null для круга без привязки к сессии (sessionId=null)', async () => {
     // Вставляем трассу и пилота
     const track = testDb.insert(tracks).values({ name: 'Le Mans', country: 'FR', lengthKm: 13.6, turns: 38, layout: 'Full' }).returning().get();
     const driver = testDb.insert(drivers).values({ name: 'Test Driver', team: 'Team A', country: 'XX' }).returning().get();
 
-    // Demo-круг (sessionId = null)
+    // Круг без привязки к сессии (sessionId = null)
     testDb.insert(lapTimes).values({
       trackId: track.id,
       driverId: driver.id,
@@ -125,7 +124,6 @@ describe('getLaps() — sessionCourse via JOIN', () => {
       conditions: 'Сухо',
       tyre: 'Medium',
       date: '2026-07-15',
-      source: 'demo',
       sessionId: null,
     }).run();
 
@@ -172,7 +170,6 @@ describe('getLaps() — sessionCourse via JOIN', () => {
       conditions: 'Сухо',
       tyre: 'Medium',
       date: '2026-07-14',
-      source: 'import',
       sessionId: session.id,
     }).run();
 
@@ -186,7 +183,7 @@ describe('getLaps() — sessionCourse via JOIN', () => {
     expect(rows[0].sessionCourse).toBe('Full Course');
   });
 
-  it('смешанный сценарий: demo и import-круги в одном наборе', async () => {
+  it('смешанный сценарий: круги с привязкой к сессии и без неё в одном наборе', async () => {
     const { eq } = await import('drizzle-orm');
 
     const track = testDb.insert(tracks).values({ name: 'Monza', country: 'IT', lengthKm: 5.8, turns: 11, layout: 'GP' }).returning().get();
@@ -204,18 +201,18 @@ describe('getLaps() — sessionCourse via JOIN', () => {
       lapCount: 0,
     }).returning().get();
 
-    // Demo-круг
+    // Круг без привязки к сессии
     testDb.insert(lapTimes).values({
       trackId: track.id, driverId: driver.id, carClass: 'GT3', car: 'Ferrari 488',
       lapMs: 94000, sector1Ms: 31000, sector2Ms: 32000, sector3Ms: 31000,
-      conditions: 'Сухо', tyre: 'Soft', date: '2026-05-01', source: 'demo', sessionId: null,
+      conditions: 'Сухо', tyre: 'Soft', date: '2026-05-01', sessionId: null,
     }).run();
 
-    // Import-круг
+    // Круг, привязанный к сессии
     testDb.insert(lapTimes).values({
       trackId: track.id, driverId: driver.id, carClass: 'GT3', car: 'Ferrari 488',
       lapMs: 95000, sector1Ms: 31500, sector2Ms: 32000, sector3Ms: 31500,
-      conditions: 'Сухо', tyre: 'Medium', date: '2026-06-01', source: 'import', sessionId: session.id,
+      conditions: 'Сухо', tyre: 'Medium', date: '2026-06-01', sessionId: session.id,
     }).run();
 
     const rows = testDb
@@ -225,10 +222,10 @@ describe('getLaps() — sessionCourse via JOIN', () => {
       .all();
 
     expect(rows).toHaveLength(2);
-    const demoCourse = rows.find((r) => r.lap.source === 'demo')?.sessionCourse;
-    const importCourse = rows.find((r) => r.lap.source === 'import')?.sessionCourse;
-    expect(demoCourse).toBeNull();
-    expect(importCourse).toBe('Short Course');
+    const noSessionCourse = rows.find((r) => r.lap.sessionId == null)?.sessionCourse;
+    const withSessionCourse = rows.find((r) => r.lap.sessionId != null)?.sessionCourse;
+    expect(noSessionCourse).toBeNull();
+    expect(withSessionCourse).toBe('Short Course');
   });
 
   it('разные сессии с разными course правильно сопоставляются', async () => {
@@ -252,13 +249,13 @@ describe('getLaps() — sessionCourse via JOIN', () => {
     testDb.insert(lapTimes).values({
       trackId: track.id, driverId: driver.id, carClass: 'Hypercar', car: 'Toyota GR010',
       lapMs: 204000, sector1Ms: 67000, sector2Ms: 69000, sector3Ms: 68000,
-      conditions: 'Сухо', tyre: 'Hard', date: '2026-06-10', source: 'import', sessionId: sessA.id,
+      conditions: 'Сухо', tyre: 'Hard', date: '2026-06-10', sessionId: sessA.id,
     }).run();
 
     testDb.insert(lapTimes).values({
       trackId: track.id, driverId: driver.id, carClass: 'Hypercar', car: 'Toyota GR010',
       lapMs: 100000, sector1Ms: 33000, sector2Ms: 34000, sector3Ms: 33000,
-      conditions: 'Сухо', tyre: 'Soft', date: '2026-06-11', source: 'import', sessionId: sessB.id,
+      conditions: 'Сухо', tyre: 'Soft', date: '2026-06-11', sessionId: sessB.id,
     }).run();
 
     const rows = testDb

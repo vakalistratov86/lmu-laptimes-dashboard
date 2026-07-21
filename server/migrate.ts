@@ -86,10 +86,15 @@ export async function runMigrations(): Promise<void> {
         conditions  TEXT NOT NULL,
         tyre        TEXT NOT NULL,
         date        TEXT NOT NULL,
-        source      TEXT NOT NULL DEFAULT 'demo',
         session_id  INTEGER
       )
     `;
+
+    // Убираем демо-данные и больше не различающую ничего колонку source:
+    // приложение больше не сеет фейковые заезды при пустой БД (issue-запрос
+    // "избавиться от демо-данных"), поэтому все круги в lap_times теперь
+    // всегда из реального импорта.
+    await migrationClient`ALTER TABLE lap_times DROP COLUMN IF EXISTS source`;
 
     // Fix: allow NULL sector times for incomplete/formation laps from LMU XML.
     // Older databases were created with NOT NULL on sector columns; drop those constraints.

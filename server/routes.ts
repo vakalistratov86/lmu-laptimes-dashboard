@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from 'node:http';
 import { storage, type LapFilter, db } from "./storage";
 import { importJobs, importErrors, tracks, drivers, lapTimes, sessions, sessionResults, sessionLaps, sessionIncidents, sessionSectorBests, sessionTrackLimits, telemetryImportJobs, telemetrySessions, telemetryChannels, telemetrySamples } from '@shared/schema';
-import { eq, notInArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
 import { computeFileHash, generateId, getJobStatus, getJobErrors, runImport } from "./importWorker";
 import { computeFileHashBinary, runTelemetryImport } from "./telemetryImportWorker";
@@ -51,7 +51,6 @@ export async function registerRoutes(
     if (req.query.driverId) filter.driverId = Number(req.query.driverId);
     if (req.query.carClass) filter.carClass = String(req.query.carClass);
     if (req.query.conditions) filter.conditions = String(req.query.conditions);
-    if (req.query.source) filter.source = String(req.query.source);
     if (req.query.sessionId) filter.sessionId = Number(req.query.sessionId);
     res.json(await storage.getLaps(filter));
   }));
@@ -356,37 +355,6 @@ export async function registerRoutes(
       totalErrors: errors.length,
       errors,
     });
-  }));
-
-  // ── Demo Data ────────────────────────────────────────────────────
-  app.delete("/api/demo", requireAdminToken, asyncRoute(async (_req, res) => {
-    await db.delete(lapTimes).where(eq(lapTimes.source, "demo"));
-
-    const usedTrackRows = await db.select({ id: lapTimes.trackId }).from(lapTimes);
-    const sessionTrackRows = await db.select({ id: sessions.trackId }).from(sessions);
-    const keepTrackIds = [...new Set([
-      ...usedTrackRows.map((r) => r.id),
-      ...sessionTrackRows.map((r) => r.id),
-    ])];
-    if (keepTrackIds.length > 0) {
-      await db.delete(tracks).where(notInArray(tracks.id, keepTrackIds));
-    } else {
-      await db.delete(tracks);
-    }
-
-    const usedDriverRows = await db.select({ id: lapTimes.driverId }).from(lapTimes);
-    const sessionDriverRows = await db.select({ id: sessionResults.driverId }).from(sessionResults);
-    const keepDriverIds = [...new Set([
-      ...usedDriverRows.map((r) => r.id),
-      ...sessionDriverRows.map((r) => r.id),
-    ])];
-    if (keepDriverIds.length > 0) {
-      await db.delete(drivers).where(notInArray(drivers.id, keepDriverIds));
-    } else {
-      await db.delete(drivers);
-    }
-
-    res.json({ ok: true, message: "Демо-данные удалены" });
   }));
 
   // ── Special Events ──────────────────────────────────────────────

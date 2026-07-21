@@ -3,9 +3,8 @@ import {
 } from '@shared/schema';
 import type {
   Track, InsertTrack,
-  Driver, InsertDriver,
+  Driver,
   DriverEnriched,
-  InsertLapTime,
   LapTimeEnriched,
   Session, SessionEnriched,
 } from '@shared/schema';
@@ -21,7 +20,6 @@ export interface LapFilter {
   driverId?: number;
   carClass?: string;
   conditions?: string;
-  source?: string;
   sessionId?: number;
   sessionCourse?: string;
 }
@@ -85,7 +83,6 @@ export class DatabaseStorage implements IStorage {
     if (filter.driverId != null) conditions.push(eq(lapTimes.driverId, filter.driverId));
     if (filter.carClass) conditions.push(eq(lapTimes.carClass, filter.carClass));
     if (filter.conditions) conditions.push(eq(lapTimes.conditions, filter.conditions));
-    if (filter.source) conditions.push(eq(lapTimes.source, filter.source));
     if (filter.sessionId != null) conditions.push(eq(lapTimes.sessionId, filter.sessionId));
     if (filter.sessionCourse) conditions.push(eq(sessions.course, filter.sessionCourse));
 
@@ -164,114 +161,6 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
-
-export async function seedIfEmpty() {
-  const existing = await db.select().from(tracks);
-  if (existing.length > 0) return;
-
-  const trackData: InsertTrack[] = [
-    { name: "Le Mans", country: "Франция", lengthKm: 13.626, turns: 38, layout: "Circuit de la Sarthe" },
-    { name: "Spa-Francorchamps", country: "Бельгия", lengthKm: 7.004, turns: 20, layout: "GP" },
-    { name: "Monza", country: "Италия", lengthKm: 5.793, turns: 11, layout: "GP" },
-    { name: "Fuji Speedway", country: "Япония", lengthKm: 4.563, turns: 16, layout: "GP" },
-    { name: "Sebring", country: "США", lengthKm: 6.019, turns: 17, layout: "International" },
-    { name: "Bahrain", country: "Бахрейн", lengthKm: 5.412, turns: 15, layout: "GP" },
-    { name: "Imola", country: "Италия", lengthKm: 4.909, turns: 19, layout: "GP" },
-    { name: "Portimão", country: "Португалия", lengthKm: 4.653, turns: 15, layout: "GP" },
-  ];
-
-  const insertedTracks: Track[] = [];
-  for (const t of trackData) {
-    const inserted = await db.insert(tracks).values(t).returning();
-    insertedTracks.push(inserted[0]);
-  }
-
-  const driverData: InsertDriver[] = [
-    { name: "Алекс Волков", team: "Toyota Gazoo Racing", country: "RU" },
-    { name: "Marco Rossi", team: "Ferrari AF Corse", country: "IT" },
-    { name: "James Carter", team: "Porsche Penske", country: "GB" },
-    { name: "Kenji Tanaka", team: "Toyota Gazoo Racing", country: "JP" },
-    { name: "Lucas Meyer", team: "Peugeot TotalEnergies", country: "FR" },
-    { name: "Дмитрий Орлов", team: "Cadillac Racing", country: "RU" },
-    { name: "Sofia Blanc", team: "Alpine Endurance", country: "FR" },
-    { name: "Tom Wagner", team: "BMW M Team", country: "DE" },
-  ];
-
-  const insertedDrivers: Driver[] = [];
-  for (const d of driverData) {
-    const inserted = await db.insert(drivers).values(d).returning();
-    insertedDrivers.push(inserted[0]);
-  }
-
-  const classes = ["Hypercar", "LMP2", "GTE"];
-  const carByClass: Record<string, string[]> = {
-    Hypercar: ["Toyota GR010", "Ferrari 499P", "Porsche 963", "Peugeot 9X8", "Cadillac V-Series.R"],
-    LMP2: ["Oreca 07", "Ligier JS P217"],
-    GTE: ["Porsche 911 RSR", "Ferrari 488 GTE", "Corvette C8.R"],
-  };
-  const conditionsList = ["Сухо", "Дождь", "Смешанно"];
-  const tyres = ["Soft", "Medium", "Hard", "Wet"];
-
-  const baseLapByTrack: Record<string, number> = {
-    "Le Mans": 3 * 60000 + 24000,
-    "Spa-Francorchamps": 2 * 60000 + 3000,
-    "Monza": 1 * 60000 + 34000,
-    "Fuji Speedway": 1 * 60000 + 28000,
-    "Sebring": 1 * 60000 + 47000,
-    "Bahrain": 1 * 60000 + 44000,
-    "Imola": 1 * 60000 + 30000,
-    "Portimão": 1 * 60000 + 24000,
-  };
-
-  let seed = 42;
-  const rand = () => {
-    seed = (seed * 9301 + 49297) % 233280;
-    return seed / 233280;
-  };
-
-  const lapRows: any[] = [];
-  for (const track of insertedTracks) {
-    const base = baseLapByTrack[track.name] ?? 90000;
-    for (const driver of insertedDrivers) {
-      const runs = 2 + Math.floor(rand() * 3);
-      for (let i = 0; i < runs; i++) {
-        const carClass = classes[Math.floor(rand() * classes.length)];
-        const classPenalty = carClass === "Hypercar" ? 0 : carClass === "LMP2" ? 4500 : 9000;
-        const cond = conditionsList[Math.floor(rand() * conditionsList.length)];
-        const condPenalty = cond === "Дождь" ? 12000 : cond === "Смешанно" ? 5000 : 0;
-        const variation = Math.floor(rand() * 4000);
-        const lapMs = base + classPenalty + condPenalty + variation;
-        const s1 = Math.round(lapMs * 0.33);
-        const s2 = Math.round(lapMs * 0.34);
-        const s3 = lapMs - s1 - s2;
-        const day = 1 + Math.floor(rand() * 28);
-        const month = 4 + Math.floor(rand() * 3);
-        const tyre = cond === "Дождь" ? "Wet" : tyres[Math.floor(rand() * 3)];
-        const cars = carByClass[carClass];
-
-        lapRows.push({
-          trackId: track.id,
-          driverId: driver.id,
-          carClass,
-          car: cars[Math.floor(rand() * cars.length)],
-          lapMs,
-          sector1Ms: s1,
-          sector2Ms: s2,
-          sector3Ms: s3,
-          conditions: cond,
-          tyre,
-          date: `2026-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-          source: "demo",
-          sessionId: null,
-        });
-      }
-    }
-  }
-
-  if (lapRows.length > 0) {
-    await db.insert(lapTimes).values(lapRows);
-  }
-}
 
 /**
  * Полный каталог трасс LMU, для которых в приложении есть готовая схема

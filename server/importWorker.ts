@@ -401,7 +401,6 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
             conditions: lap.conditions ?? "Сухо",
             tyre: lap.frontCompound ?? "Medium",
             date: dateOnly,
-            source: "import",
             sessionId: session.id,
           });
           validLapsCount++;

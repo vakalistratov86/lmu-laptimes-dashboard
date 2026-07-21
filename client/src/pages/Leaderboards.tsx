@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "wouter";
 import { useLaps, useTracks } from "@/lib/api";
 import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap, formatDelta } from "@/lib/format";
@@ -8,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Trophy, Medal } from "lucide-react";
+import { Trophy, Medal, Upload } from "lucide-react";
 import { CLASS_ORDER, getClassBadgeClass, getClassAccentClass } from "@/lib/classStyles";
 import { DriverName } from "@/components/DriverName";
 import { useLanguage } from "@/lib/i18n";
@@ -346,7 +347,27 @@ export default function Leaderboards() {
       </div>
 
       {!isLoading && boards.length === 0 && (
-        <p className="py-12 text-center text-sm text-muted-foreground">{t("leaderboards.noData")}</p>
+        (laps?.length ?? 0) === 0 ? (
+          <div className="flex flex-col items-center gap-4 rounded-lg border border-border bg-card p-14 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Upload size={22} />
+            </div>
+            <div>
+              <p className="font-semibold">{t("leaderboards.emptyTitle")}</p>
+              <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">
+                {t("leaderboards.emptyBody")}
+              </p>
+            </div>
+            <Link
+              href="/import"
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <Upload size={16} /> {t("leaderboards.emptyCta")}
+            </Link>
+          </div>
+        ) : (
+          <p className="py-12 text-center text-sm text-muted-foreground">{t("leaderboards.noData")}</p>
+        )
       )}
     </div>
   );

@@ -112,16 +112,6 @@ describe('Zod-схемы (shared/schema)', () => {
       expect(() => insertLapTimeSchema.parse(validLap)).not.toThrow();
     });
 
-    it('source по умолчанию = "demo"', () => {
-      const result = insertLapTimeSchema.parse(validLap);
-      expect(result.source).toBe('demo');
-    });
-
-    it('source можно переопределить на "import"', () => {
-      const result = insertLapTimeSchema.parse({ ...validLap, source: 'import' });
-      expect(result.source).toBe('import');
-    });
-
     it('отклоняет lapMs как строку', () => {
       expect(() => insertLapTimeSchema.parse({ ...validLap, lapMs: '101907' })).toThrow();
     });
