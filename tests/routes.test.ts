@@ -4,6 +4,33 @@ import http from 'node:http';
 import { registerRoutes } from '../server/routes';
 
 // ---------------------------------------------------------------------------
+// Мок db (drizzle-orm/postgres-js): каждый метод возвращает "thenable"-цепочку,
+// которую можно как await-ить напрямую (db.select().from(x)), так и продолжить
+// чейнить (.where(), .set(), .values(), .returning()) — как настоящий drizzle
+// query builder на postgres-js (в отличие от better-sqlite3, тут нет .all()).
+// ---------------------------------------------------------------------------
+const { db, chain } = vi.hoisted(() => {
+  function chain(result: unknown = undefined): any {
+    const promise = Promise.resolve(result);
+    return Object.assign(promise, {
+      from: vi.fn(() => chain(result)),
+      where: vi.fn(() => chain(result)),
+      values: vi.fn(() => chain(result)),
+      set: vi.fn(() => chain(result)),
+      returning: vi.fn(() => chain(result)),
+    });
+  }
+  const db = {
+    select: vi.fn(() => chain([])),
+    insert: vi.fn(() => chain(undefined)),
+    update: vi.fn(() => chain(undefined)),
+    delete: vi.fn(() => chain(undefined)),
+    transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(db)),
+  };
+  return { db, chain };
+});
+
+// ---------------------------------------------------------------------------
 // Мок хранилища
 // ---------------------------------------------------------------------------
 vi.mock('../server/storage', () => ({
@@ -16,17 +43,17 @@ vi.mock('../server/storage', () => ({
     getSessions: vi.fn().mockResolvedValue([]),
     getSession:  vi.fn(),
   },
-  db: {
-    delete:  vi.fn(() => ({ where: vi.fn(() => ({ run: vi.fn() })), run: vi.fn() })),
-    select:  vi.fn(() => ({ from: vi.fn(() => ({ all: vi.fn(() => []) })) })),
-  },
+  db,
 }));
 
 // ---------------------------------------------------------------------------
-// Мок importWorker (async-import, #5)
+// Мок importWorker — POST /api/import синхронный (routes.ts вызывает
+// runImport() напрямую и ждёт результат; очередь enqueueImport удалена).
 // ---------------------------------------------------------------------------
 vi.mock('../server/importWorker', () => ({
-  enqueueImport: vi.fn().mockReturnValue('mock-job-id'),
+  computeFileHash: vi.fn((content: string) => `hash-${content}`),
+  generateId: vi.fn(() => 'mock-job-id'),
+  runImport: vi.fn().mockResolvedValue({ sessionId: 1, totalLaps: 5, validLaps: 5, errorLaps: 0 }),
   getJobStatus:  vi.fn(),
   getJobErrors:  vi.fn().mockReturnValue([]),
 }));
@@ -257,7 +284,10 @@ describe('API Routes', () => {
   });
 
   // ── POST /api/import ──────────────────────────────────────────────────────
-  // Async-import (#5): роут ставит задачу в очередь и возвращает 202 + importId
+  // Синхронный импорт: роут вызывает runImport() напрямую и ждёт результат
+  // (комментарий в routes.ts — PostgreSQL транзакция для типового файла
+  // укладывается в <500мс, поэтому очередь не нужна). Idempotency (#6)
+  // проверяется через прямой SELECT по import_jobs.file_hash.
   // ---------------------------------------------------------------------------
   describe('POST /api/import', () => {
     it('возвращает 400 если files не передан', async () => {
@@ -270,24 +300,25 @@ describe('API Routes', () => {
       expect(res.status).toBe(400);
     });
 
-    it('возвращает 202 и queued=1 при корректном файле', async () => {
+    it('возвращает 200 и imported=1 при корректном файле', async () => {
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'test.xml', content: '<rFactorXML>valid</rFactorXML>' }],
       });
-      expect(res.status).toBe(202);
-      const body = res.body as { queued: number; total: number; results: unknown[] };
-      expect(body.queued).toBe(1);
+      expect(res.status).toBe(200);
+      const body = res.body as { imported: number; total: number; results: unknown[] };
+      expect(body.imported).toBe(1);
       expect(body.total).toBe(1);
       expect(Array.isArray(body.results)).toBe(true);
     });
 
-    it('результат содержит importId для поставленного в очередь файла', async () => {
+    it('результат содержит importId и sessionId для импортированного файла', async () => {
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'test.xml', content: '<rFactorXML>valid</rFactorXML>' }],
       });
-      const results = (res.body as { results: { importId: string; ok: boolean }[] }).results;
+      const results = (res.body as { results: { importId: string; sessionId: number; ok: boolean }[] }).results;
       expect(results[0].ok).toBe(true);
       expect(results[0].importId).toBe('mock-job-id');
+      expect(results[0].sessionId).toBe(1);
     });
 
     it('пустой content возвращает ok=false и status=409', async () => {
@@ -299,26 +330,25 @@ describe('API Routes', () => {
       expect(results[0].status).toBe(409);
     });
 
-    it('дублирующий файл (DUPLICATE_FILE) возвращает ok=false и status=409', async () => {
-      const dupErr = new Error('Файл уже был импортирован') as any;
-      dupErr.code = 'DUPLICATE_FILE';
-      dupErr.importId = 'existing-id';
-      dupErr.status = 'completed';
-      (importWorker.enqueueImport as ReturnType<typeof vi.fn>).mockImplementationOnce(() => { throw dupErr; });
+    it('дублирующий файл (уже есть в import_jobs) возвращает ok=false и status=409', async () => {
+      (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        chain([{ id: 'existing-id', status: 'completed' }]),
+      );
 
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'dup.xml', content: '<rFactorXML>dup</rFactorXML>' }],
       });
-      const results = (res.body as { results: { ok: boolean; status: number; importId: string }[] }).results;
+      const results = (res.body as { results: { ok: boolean; status: number; importId: string; importStatus: string }[] }).results;
       expect(results[0].ok).toBe(false);
       expect(results[0].status).toBe(409);
       expect(results[0].importId).toBe('existing-id');
+      expect(results[0].importStatus).toBe('completed');
     });
 
-    it('произвольная ошибка enqueueImport возвращает ok=false и status=500', async () => {
-      (importWorker.enqueueImport as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
-        throw new Error('internal error');
-      });
+    it('произвольная ошибка runImport возвращает ok=false и status=500', async () => {
+      (importWorker.runImport as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('internal error'),
+      );
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'bad.xml', content: '<rFactorXML>bad</rFactorXML>' }],
       });
@@ -328,24 +358,40 @@ describe('API Routes', () => {
       expect(results[0].message).toBe('internal error');
     });
 
-    it('queued=0 если все файлы упали с ошибкой', async () => {
-      (importWorker.enqueueImport as ReturnType<typeof vi.fn>).mockImplementation(() => {
-        throw new Error('err');
-      });
+    it('imported=0 и статус 400 если все файлы упали с ошибкой', async () => {
+      (importWorker.runImport as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('err'));
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'x.xml', content: '<rFactorXML>x</rFactorXML>' }],
       });
-      const body = res.body as { queued: number };
-      expect(body.queued).toBe(0);
+      expect(res.status).toBe(400);
+      const body = res.body as { imported: number };
+      expect(body.imported).toBe(0);
     });
 
-    it('вызывает enqueueImport с правильными аргументами', async () => {
+    it('файл с 0 кругов (ZERO_LAPS) помечается как пропущенный, а не ошибка', async () => {
+      const zeroLapsErr = new Error('Файл пропущен: 0 кругов') as Error & { code?: string };
+      zeroLapsErr.code = 'ZERO_LAPS';
+      (importWorker.runImport as ReturnType<typeof vi.fn>).mockRejectedValueOnce(zeroLapsErr);
+
+      const res = await makeRequest(app, 'POST', '/api/import', {
+        files: [{ fileName: 'nolaps.xml', content: '<rFactorXML>nolaps</rFactorXML>' }],
+      });
+      expect(res.status).toBe(200);
+      const results = (res.body as { results: { ok: boolean; skipped: boolean; status: number }[] }).results;
+      expect(results[0].ok).toBe(true);
+      expect(results[0].skipped).toBe(true);
+      expect(results[0].status).toBe(200);
+    });
+
+    it('вызывает runImport с правильными аргументами', async () => {
       await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'race.xml', content: '<rFactorXML>data</rFactorXML>' }],
       });
-      expect(importWorker.enqueueImport).toHaveBeenCalledWith(
-        'race.xml',
-        '<rFactorXML>data</rFactorXML>',
+      expect(importWorker.runImport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileName: 'race.xml',
+          content: '<rFactorXML>data</rFactorXML>',
+        }),
       );
     });
   });
