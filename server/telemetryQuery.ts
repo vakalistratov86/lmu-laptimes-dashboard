@@ -7,9 +7,11 @@
  * и карты трассы одного круга (GPS + педали + скорость). Частоты каналов разные
  * (GPS 10 Гц, педали 50 Гц, скорость обычно 100 Гц) — базовой временной сеткой
  * выбирается САМЫЙ частый из используемых каналов, а остальные подтягиваются
- * методом ближайшего соседа по `ts`. Это даёт полную детализацию самому
- * быстрому каналу и не теряет точность у остальных (не выдумываем новых
- * данных — только переиспользуем уже известные значения на более плотной сетке).
+ * линейной интерполяцией между двумя ближайшими реальными сэмплами по `ts`.
+ * Это даёт полную детализацию самому быстрому каналу и честно восстанавливает
+ * промежуточные значения остальных каналов между их реальными точками — без
+ * фильтрации/сглаживания данных и без ступенчатых дублей (как было бы при
+ * простом копировании ближайшего сэмпла).
  */
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db } from "./storage";
@@ -138,16 +140,12 @@ export async function getLapSeries(
     })
   );
 
-  const latJoined = nearestJoin(base, lat);
-  const lonJoined = nearestJoin(base, lon);
-  const lapDistJoined = nearestJoin(base, lapDist);
-  // Медианный фильтр убирает одно-двухсэмпловые выбросы газа (кратковременные
-  // провалы до 0% посреди полного открытия) — это сенсорный шум, а не реальные
-  // отпускания педали. Медиана (в отличие от скользящего среднего) не размазывает
-  // настоящие резкие нажатия/отпускания педали, только вырезает единичные всплески.
-  const throttleJoined = medianFilter(nearestJoin(base, throttle), 2);
-  const brakeJoined = nearestJoin(base, brake);
-  const speedJoined = nearestJoin(base, speed);
+  const latJoined = linearInterpolateJoin(base, lat);
+  const lonJoined = linearInterpolateJoin(base, lon);
+  const lapDistJoined = linearInterpolateJoin(base, lapDist);
+  const throttleJoined = linearInterpolateJoin(base, throttle);
+  const brakeJoined = linearInterpolateJoin(base, brake);
+  const speedJoined = linearInterpolateJoin(base, speed);
 
   const points: TelemetryLapPoint[] = base.map((row, i) => ({
     seq: i,
@@ -215,52 +213,41 @@ async function fetchChannelSamples(channelId: number, startTs: number, endTs: nu
 }
 
 /**
- * Сопоставляет каждой точке базовой сетки (`base`, отсортирована по ts) ближайшее
- * по времени значение из `other` (тоже отсортирована по ts). Оба массива идут по
- * возрастанию ts, поэтому используется двухуказательный проход за O(n+m).
+ * Сопоставляет каждой точке базовой сетки (`base`, отсортирована по ts) значение
+ * из `other`, линейно интерполированное между двумя ближайшими реальными сэмплами
+ * `other` по времени. За пределами диапазона `other` — берётся крайнее известное
+ * значение (без экстраполяции). Оба массива идут по возрастанию ts, поэтому
+ * используется двухуказательный проход за O(n+m).
  */
-function nearestJoin(base: SampleRow[], other: SampleRow[]): (number | null)[] {
+function linearInterpolateJoin(base: SampleRow[], other: SampleRow[]): (number | null)[] {
+  const valid = other.filter(
+    (r): r is { ts: number; value1: number } => r.ts != null && r.value1 != null
+  );
+
   const result: (number | null)[] = [];
   let j = 0;
   for (const row of base) {
-    if (other.length === 0 || row.ts == null) {
+    if (valid.length === 0 || row.ts == null) {
       result.push(null);
       continue;
     }
-    while (
-      j < other.length - 1 &&
-      other[j + 1].ts != null &&
-      Math.abs((other[j + 1].ts as number) - row.ts) <= Math.abs((other[j].ts as number) - row.ts)
-    ) {
-      j++;
-    }
-    result.push(other[j]?.value1 ?? null);
-  }
-  return result;
-}
 
-/**
- * Медианный фильтр со скользящим окном радиуса `radius` (окно = 2*radius+1 точек).
- * В отличие от скользящего среднего не размазывает реальные резкие перепады —
- * единичный выброс (значение, которого нет больше нигде в окне) просто
- * перекрывается медианой соседних точек, а настоящий устойчивый перепад
- * (когда бОльшая часть окна уже сменилась) проходит через фильтр как есть.
- */
-function medianFilter(values: (number | null)[], radius: number): (number | null)[] {
-  const result: (number | null)[] = new Array(values.length);
-  for (let i = 0; i < values.length; i++) {
-    const window: number[] = [];
-    for (let j = Math.max(0, i - radius); j <= Math.min(values.length - 1, i + radius); j++) {
-      const v = values[j];
-      if (v != null) window.push(v);
-    }
-    if (window.length === 0) {
-      result[i] = null;
+    while (j < valid.length - 1 && valid[j + 1].ts <= row.ts) j++;
+
+    if (row.ts <= valid[0].ts) {
+      result.push(valid[0].value1);
       continue;
     }
-    window.sort((a, b) => a - b);
-    const mid = Math.floor(window.length / 2);
-    result[i] = window.length % 2 === 0 ? (window[mid - 1] + window[mid]) / 2 : window[mid];
+    if (j === valid.length - 1) {
+      result.push(valid[j].value1);
+      continue;
+    }
+
+    const a = valid[j];
+    const b = valid[j + 1];
+    const span = b.ts - a.ts;
+    const frac = span > 0 ? (row.ts - a.ts) / span : 0;
+    result.push(a.value1 + (b.value1 - a.value1) * frac);
   }
   return result;
 }

@@ -368,10 +368,12 @@ const ru = {
     lapLabel: "Круг {{n}}",
     lapPickerAria: "Выбор круга",
     trackMapAria: "Схема трассы по данным телеметрии круга",
-    axisDistance: "Дистанция, м",
+    axisLapTime: "Время круга, с",
     seriesThrottle: "Газ",
     seriesBrake: "Тормоз",
     seriesSpeed: "Скорость",
+    zoomIn: "Увеличить",
+    zoomOut: "Уменьшить",
   },
 } as const;
 
@@ -737,10 +739,12 @@ const en: Dict = {
     lapLabel: "Lap {{n}}",
     lapPickerAria: "Lap selector",
     trackMapAria: "Track shape from lap telemetry data",
-    axisDistance: "Distance, m",
+    axisLapTime: "Lap time, s",
     seriesThrottle: "Throttle",
     seriesBrake: "Brake",
     seriesSpeed: "Speed",
+    zoomIn: "Zoom in",
+    zoomOut: "Zoom out",
   },
 };
 
