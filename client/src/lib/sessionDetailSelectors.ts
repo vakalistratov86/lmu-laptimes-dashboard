@@ -81,16 +81,28 @@ function formatFuel(raw: unknown): string {
 }
 
 /**
- * SD-18: Парсит значение состояния/износа шины в строку «XX.X%» или «—».
+ * Форматирует остаток топлива в строку «XX» (% от полного бака) или «—».
+ * LMU хранит fuelLevel как долю бака 0–1 (fuel="0.690" в логе) — не литры,
+ * поэтому пересчитываем в процент, а не подставляем сырое значение.
+ */
+function formatFuelPercent(raw: unknown): string {
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v < 0) return '—';
+  const pct = v > 1 ? v : v * 100;
+  return `${Math.round(pct)}`;
+}
+
+/**
+ * SD-18: Парсит значение состояния/износа шины в строку «XX» (целый %) или «—».
  * LMU хранит condition как долю 0–1 (1.0 = новая шина).
- * Отображаем как процент оставшегося ресурса: 1.0 → 100%, 0.75 → 75%.
+ * Отображаем как процент оставшегося ресурса: 1.0 → 100, 0.75 → 75.
  */
 function formatWear(raw: unknown): string {
   const v = Number(raw);
   if (!Number.isFinite(v)) return '—';
   // Значение может быть 0–1 (доля) или 0–100 (проценты)
   const pct = v > 1 ? v : v * 100;
-  return `${pct.toFixed(1)}%`;
+  return `${Math.round(pct)}`;
 }
 
 /**
@@ -549,7 +561,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
           isPitLap: Boolean(lap.isPitLap ?? lap.pitLap ?? false),
           // SD-18: Новые поля — имена взяты из реальной схемы session_laps
           maxSpeed: formatSpeed(maxSpeedRaw),
-          fuelRemaining: formatFuel(fuelRaw),
+          fuelRemaining: formatFuelPercent(fuelRaw),
           tyreWear: parseTyreWear(lap),
           tyreType: parseTyreType(lap),
         };

@@ -10,6 +10,29 @@
 import type { DriverLapRowView } from './types';
 import { useLanguage } from '@/lib/i18n';
 
+// ─── Бейдж компаунда шин ────────────────────────────────────────────────────
+
+const COMPOUND_BADGE_CLASS: Record<string, string> = {
+  S: 'bg-red-500/15 text-red-500 border-red-500/30',
+  M: 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30',
+  H: 'bg-muted-foreground/15 text-muted-foreground border-border',
+};
+
+/**
+ * Извлекает букву компаунда шин (S/M/H/…) из сырого названия. Устойчиво
+ * к формату «0,Medium» (индекс,название), встречающемуся в части логов.
+ */
+function getCompoundLetter(raw: string): string | null {
+  if (!raw || raw === '—') return null;
+  const name = raw.includes(',') ? raw.split(',').pop()!.trim() : raw.trim();
+  const first = name.charAt(0);
+  return first ? first.toUpperCase() : null;
+}
+
+function getCompoundBadgeClass(letter: string | null): string {
+  return (letter && COMPOUND_BADGE_CLASS[letter]) || COMPOUND_BADGE_CLASS.H;
+}
+
 // ─── DriverLapTable ───────────────────────────────────────────────────────────
 
 interface DriverLapTableProps {
@@ -61,12 +84,13 @@ export function DriverLapTable({ laps }: DriverLapTableProps) {
                 {lap.lapTime}
               </td>
 
-              {/* Сектора — фиолетовый: лучший сектор сессии среди всех пилотов,
-                  зелёный: личный лучший сектор пилота */}
+              {/* Сектора — чуть мельче времени круга, чтобы оно оставалось
+                  главным значением строки. Фиолетовый: лучший сектор сессии
+                  среди всех пилотов, зелёный: личный лучший сектор пилота */}
               {[0, 1, 2].map((i) => (
                 <td
                   key={i}
-                  className={`px-4 py-2 text-right font-data tabular-nums ${
+                  className={`px-4 py-2 text-right font-data text-xs tabular-nums ${
                     lap.sectorsAbsoluteBest[i]
                       ? 'font-bold text-purple-500'
                       : lap.sectorsPersonalBest[i]
@@ -83,21 +107,38 @@ export function DriverLapTable({ laps }: DriverLapTableProps) {
                 {lap.maxSpeed !== '—' ? `${lap.maxSpeed} ${t('sessionDetail.kmh')}` : '—'}
               </td>
 
-              {/* SD-18: Остаток топлива */}
+              {/* Остаток топлива, % от полного бака */}
               <td className="px-4 py-2 text-right font-data tabular-nums text-muted-foreground">
-                {lap.fuelRemaining !== '—' ? `${lap.fuelRemaining} ${t('sessionDetail.liters')}` : '—'}
+                {lap.fuelRemaining !== '—' ? `${lap.fuelRemaining}%` : '—'}
               </td>
 
-              {/* SD-18: Износ шин FL/FR/RL/RR */}
-              <td className="px-4 py-2 text-center font-data tabular-nums text-muted-foreground whitespace-nowrap">
-                {lap.tyreWear
-                  ? `${lap.tyreWear.fl} / ${lap.tyreWear.fr} / ${lap.tyreWear.rl} / ${lap.tyreWear.rr}`
-                  : '—'}
+              {/* Износ шин FL/FR/RL/RR — компактная сетка 2×2, мелкий шрифт */}
+              <td className="px-3 py-2 text-center">
+                {lap.tyreWear ? (
+                  <div className="inline-grid grid-cols-2 gap-x-2 text-right font-data text-[10px] leading-[1.5] text-muted-foreground">
+                    <span><span className="mr-1 text-muted-foreground/60">FL</span>{lap.tyreWear.fl}</span>
+                    <span><span className="mr-1 text-muted-foreground/60">FR</span>{lap.tyreWear.fr}</span>
+                    <span><span className="mr-1 text-muted-foreground/60">RL</span>{lap.tyreWear.rl}</span>
+                    <span><span className="mr-1 text-muted-foreground/60">RR</span>{lap.tyreWear.rr}</span>
+                  </div>
+                ) : '—'}
               </td>
 
-              {/* SD-18: Тип шин */}
-              <td className="px-4 py-2 text-center text-muted-foreground">
-                {lap.tyreType}
+              {/* Компаунд шин — круглый бейдж с буквой (S/M/H) */}
+              <td className="px-4 py-2 text-center">
+                {(() => {
+                  const letter = getCompoundLetter(lap.tyreType);
+                  return letter ? (
+                    <span
+                      className={`inline-flex h-[22px] w-[22px] items-center justify-center rounded-full border text-[11px] font-bold ${getCompoundBadgeClass(letter)}`}
+                      title={lap.tyreType}
+                    >
+                      {letter}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  );
+                })()}
               </td>
 
               {/* Пит (перемещён в конец, SD-18) */}
