@@ -40,9 +40,17 @@ export function formatDelta(ms: number, bestMs: number): string {
 
 export const CLASS_COLORS: Record<string, string> = {
   Hypercar: "hsl(var(--chart-1))",
+  Hyper: "hsl(var(--chart-1))",
   LMP2: "hsl(var(--chart-4))",
+  LMP3: "hsl(var(--chart-5))",
   GTE: "hsl(var(--chart-3))",
+  GT3: "hsl(var(--chart-2))",
 };
+
+/** Цвет для графиков по классу машины; неизвестный/отсутствующий класс — нейтральный. */
+export function getClassChartColor(carClass?: string | null): string {
+  return (carClass && CLASS_COLORS[carClass]) || "hsl(var(--muted-foreground))";
+}
 
 export const CONDITION_LABELS: Record<string, string> = {
   "Сухо": "Сухо",
