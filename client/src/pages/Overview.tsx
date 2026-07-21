@@ -1,6 +1,6 @@
 import { useLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
 import { useDriverFilter } from "@/lib/driverFilter";
-import { formatLap, formatDurationMin, getClassChartColor } from "@/lib/format";
+import { formatLap, getClassChartColor } from "@/lib/format";
 import { normalizeSessionCategory, CLASS_ORDER, getClassBadgeClass, type SessionCategory } from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DriverName } from "@/components/DriverName";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
+import { ActivityTile } from "@/components/ActivityTile";
 import { Link } from "wouter";
 import {
-  Gauge, Route, Flag, Users, RefreshCw, Car, User, Bot,
-  Dumbbell, Timer, Trophy, History, ChevronRight,
+  Gauge, Route, Flag, Users, RefreshCw, Car, User, Bot, History, ChevronRight,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
@@ -32,37 +32,6 @@ function HeroStat({
         {value}
       </div>
       {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
-    </div>
-  );
-}
-
-const ACTIVITY_ICON: Record<SessionCategory, typeof Dumbbell> = {
-  practice: Dumbbell,
-  qualify: Timer,
-  race: Trophy,
-};
-
-const ACTIVITY_CLASS: Record<SessionCategory, string> = {
-  practice: "bg-blue-500/10 text-blue-500 dark:text-blue-400",
-  qualify: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
-  race: "bg-red-500/10 text-red-600 dark:text-red-400",
-};
-
-function ActivityTile({
-  category, label, count, minutes, locale,
-}: { category: SessionCategory; label: string; count: number; minutes: number; locale: "ru" | "en" }) {
-  const { t } = useLanguage();
-  const Icon = ACTIVITY_ICON[category];
-  return (
-    <div className={`flex flex-col gap-2 rounded-md p-3.5 ${ACTIVITY_CLASS[category]}`}>
-      <div className="flex items-center gap-1.5 text-xs font-semibold">
-        <Icon size={13} />
-        {label}
-      </div>
-      <div className="font-data text-2xl font-bold leading-none tabular-nums">{count}</div>
-      <div className="font-data text-[11px] tabular-nums opacity-80">
-        {formatDurationMin(minutes, locale)} {t("overview.activityTotal")}
-      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import { useSessions } from "@/lib/api";
-import { formatLap, formatDurationMin } from "@/lib/format";
+import { formatLap } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +16,7 @@ import {
   type SessionCategory,
 } from "@/lib/classStyles";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
+import { ActivityTile } from "@/components/ActivityTile";
 import { useLanguage } from "@/lib/i18n";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -117,42 +118,6 @@ function useFilterOptions(): { key: "all" | SessionCategory; label: string }[] {
     { key: "qualify", label: t("sessionType.qualify") },
     { key: "race", label: t("sessionType.race") },
   ];
-}
-
-// ─── Summary tile ───────────────────────────────────────────────────────────────
-// Та же стилистика, что и у активной секции фильтра: та же иконка и те же
-// цветовые классы (getSessionTypeBadgeClass), только в виде плитки.
-
-interface SessionSummaryTileProps {
-  category: SessionCategory;
-  label: string;
-  value: string;
-}
-
-function SessionSummaryTile({ category, label, value }: SessionSummaryTileProps) {
-  const Icon = FILTER_ICON[category];
-  return (
-    <div
-      className={cn(
-        "rounded-lg border px-3.5 py-2.5 space-y-0.5",
-        getSessionTypeBadgeClass(category),
-      )}
-    >
-      {/* shrink-0 обязателен: без него на узких плитках (3 в ряд на мобильном) флекс
-          сжимал иконку вплоть до 0 ширины при длинной подписи ("Тренировок",
-          "Квалификаций"), а короткая "Гонок" не сжималась — иконки отображались
-          непоследовательно, то есть, то нет.
-          На мобильном (ниже sm) от подписи остаётся только иконка — с полным текстом
-          в трёх узких колонках "Время тренировок"/"Время квалификаций" переносились
-          на две строки и плитки выглядели неровно; текст остаётся доступен для
-          скринридеров через sr-only. */}
-      <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider opacity-80">
-        <Icon size={12} className="shrink-0" />
-        <span className="sr-only sm:not-sr-only">{label}</span>
-      </p>
-      <p className="font-data text-sm font-semibold tabular-nums truncate">{value}</p>
-    </div>
-  );
 }
 
 // ─── Loading Skeleton ─────────────────────────────────────────────────────────
@@ -260,16 +225,13 @@ export default function Sessions() {
       </div>
 
       {/* Сводка по всем сессиям — количество и суммарное время по категориям.
-          Стилистика плиток совпадает с активной секцией фильтра ниже. */}
+          Та же плитка ActivityTile, что и на Обзоре. */}
       {hasSessions && (
-        <Card className="overflow-hidden">
-          <div className="grid grid-cols-3 gap-2.5 p-4 sm:grid-cols-6">
-            <SessionSummaryTile category="practice" label={t("sessions.summaryPractice")} value={String(summary.practice.count)} />
-            <SessionSummaryTile category="qualify" label={t("sessions.summaryQualify")} value={String(summary.qualify.count)} />
-            <SessionSummaryTile category="race" label={t("sessions.summaryRace")} value={String(summary.race.count)} />
-            <SessionSummaryTile category="practice" label={t("sessions.summaryPracticeTime")} value={formatDurationMin(summary.practice.minutes, locale)} />
-            <SessionSummaryTile category="qualify" label={t("sessions.summaryQualifyTime")} value={formatDurationMin(summary.qualify.minutes, locale)} />
-            <SessionSummaryTile category="race" label={t("sessions.summaryRaceTime")} value={formatDurationMin(summary.race.minutes, locale)} />
+        <Card className="p-4">
+          <div className="grid grid-cols-3 gap-2.5">
+            <ActivityTile category="practice" label={t("sessionType.practice")} count={summary.practice.count} minutes={summary.practice.minutes} locale={locale} />
+            <ActivityTile category="qualify" label={t("sessionType.qualify")} count={summary.qualify.count} minutes={summary.qualify.minutes} locale={locale} />
+            <ActivityTile category="race" label={t("sessionType.race")} count={summary.race.count} minutes={summary.race.minutes} locale={locale} />
           </div>
         </Card>
       )}
