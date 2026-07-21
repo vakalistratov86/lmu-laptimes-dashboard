@@ -7,6 +7,7 @@ import { eq, notInArray } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
 import { computeFileHash, generateId, getJobStatus, getJobErrors, runImport } from "./importWorker";
 import { computeFileHashBinary, runTelemetryImport } from "./telemetryImportWorker";
+import { requireAdminToken } from "./adminAuth";
 
 /**
  * Wraps an async route handler so that any rejected Promise is forwarded
@@ -222,7 +223,7 @@ export async function registerRoutes(
    * задачи импорта и ошибки DLQ. Используется кнопкой "Очистить БД" на
    * вкладке импорта.
    */
-  app.delete("/api/import/all", asyncRoute(async (_req, res) => {
+  app.delete("/api/import/all", requireAdminToken, asyncRoute(async (_req, res) => {
     await db.transaction(async (tx) => {
       await tx.delete(sessionTrackLimits);
       await tx.delete(sessionSectorBests);
@@ -311,7 +312,7 @@ export async function registerRoutes(
    * DELETE /api/import/telemetry/all — очистка импортированной телеметрии.
    * Не затрагивает данные заездов (sessions/lap_times) — независимый набор таблиц.
    */
-  app.delete("/api/import/telemetry/all", asyncRoute(async (_req, res) => {
+  app.delete("/api/import/telemetry/all", requireAdminToken, asyncRoute(async (_req, res) => {
     await db.transaction(async (tx) => {
       await tx.delete(telemetrySamples);
       await tx.delete(telemetryChannels);
@@ -358,7 +359,7 @@ export async function registerRoutes(
   }));
 
   // ── Demo Data ────────────────────────────────────────────────────
-  app.delete("/api/demo", asyncRoute(async (_req, res) => {
+  app.delete("/api/demo", requireAdminToken, asyncRoute(async (_req, res) => {
     await db.delete(lapTimes).where(eq(lapTimes.source, "demo"));
 
     const usedTrackRows = await db.select({ id: lapTimes.trackId }).from(lapTimes);

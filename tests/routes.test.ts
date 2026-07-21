@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import express, { type Express } from 'express';
 import http from 'node:http';
 import { registerRoutes } from '../server/routes';
@@ -86,6 +86,7 @@ function makeRequest(
   method: string,
   path: string,
   body?: unknown,
+  headers?: Record<string, string>,
 ): Promise<{ status: number; body: unknown }> {
   return new Promise((resolve) => {
     const mockReq = {
@@ -94,7 +95,7 @@ function makeRequest(
       path,
       query: {},
       params: {},
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...headers },
       body: body ?? {},
     } as unknown as import('express').Request;
 
@@ -115,11 +116,24 @@ function makeRequest(
 // ---------------------------------------------------------------------------
 // Тесты
 // ---------------------------------------------------------------------------
+const TEST_ADMIN_TOKEN = 'test-admin-token';
+const authHeader = { authorization: `Bearer ${TEST_ADMIN_TOKEN}` };
+
 describe('API Routes', () => {
   let app: Express;
   let server: http.Server;
   let storage: Awaited<typeof import('../server/storage')>['storage'];
   let importWorker: typeof import('../server/importWorker');
+  let originalAdminToken: string | undefined;
+
+  beforeAll(() => {
+    originalAdminToken = process.env.ADMIN_TOKEN;
+    process.env.ADMIN_TOKEN = TEST_ADMIN_TOKEN;
+  });
+
+  afterAll(() => {
+    process.env.ADMIN_TOKEN = originalAdminToken;
+  });
 
   beforeEach(async () => {
     const result = await buildTestApp();
@@ -504,14 +518,41 @@ describe('API Routes', () => {
   // ── DELETE /api/demo ──────────────────────────────────────────────────────
   describe('DELETE /api/demo', () => {
     it('возвращает 200 с ok=true', async () => {
-      const res = await makeRequest(app, 'DELETE', '/api/demo');
+      const res = await makeRequest(app, 'DELETE', '/api/demo', undefined, authHeader);
       expect(res.status).toBe(200);
       expect((res.body as { ok: boolean }).ok).toBe(true);
     });
 
     it('ответ содержит message', async () => {
-      const res = await makeRequest(app, 'DELETE', '/api/demo');
+      const res = await makeRequest(app, 'DELETE', '/api/demo', undefined, authHeader);
       expect(res.body).toHaveProperty('message');
+    });
+  });
+
+  // ── Admin auth (issue #122) ───────────────────────────────────────────────
+  describe('Admin-защита деструктивных роутов', () => {
+    const protectedRoutes = ['/api/demo', '/api/import/all', '/api/import/telemetry/all'];
+
+    for (const path of protectedRoutes) {
+      it(`DELETE ${path} возвращает 401 без токена`, async () => {
+        const res = await makeRequest(app, 'DELETE', path);
+        expect(res.status).toBe(401);
+      });
+
+      it(`DELETE ${path} возвращает 401 с неверным токеном`, async () => {
+        const res = await makeRequest(app, 'DELETE', path, undefined, { authorization: 'Bearer wrong-token' });
+        expect(res.status).toBe(401);
+      });
+    }
+
+    it('возвращает 503, если ADMIN_TOKEN не настроен на сервере', async () => {
+      delete process.env.ADMIN_TOKEN;
+      try {
+        const res = await makeRequest(app, 'DELETE', '/api/demo', undefined, authHeader);
+        expect(res.status).toBe(503);
+      } finally {
+        process.env.ADMIN_TOKEN = TEST_ADMIN_TOKEN;
+      }
     });
   });
 
