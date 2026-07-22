@@ -11,7 +11,7 @@ import type {
 } from '@shared/schema';
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, or, desc, inArray } from "drizzle-orm";
 
 const sql = postgres(process.env.DATABASE_URL!);
 export const db = drizzle(sql);
@@ -85,10 +85,17 @@ export class DatabaseStorage implements IStorage {
    * читается на клиенте (только записываются при импорте), это первая точка
    * входа, поэтому обогащение (трасса/дата/имя второго участника) выполняется
    * здесь, а не переиспользуется из другого места.
+   *
+   * Инциденты выбираются по driver_id (виновник) ИЛИ target_driver_id
+   * (пострадавший) — иначе пилот, в которого просто врезались, никогда не
+   * увидел бы это в своём профиле. role/otherDriverName ниже нормализуют
+   * запись к точке зрения запрошенного пилота.
    */
   async getDriverIncidents(driverId: number): Promise<DriverIncidentsResponse> {
     const [incRows, tlRows] = await Promise.all([
-      db.select().from(sessionIncidents).where(eq(sessionIncidents.driverId, driverId)),
+      db.select().from(sessionIncidents).where(
+        or(eq(sessionIncidents.driverId, driverId), eq(sessionIncidents.targetDriverId, driverId)),
+      ),
       db.select().from(sessionTrackLimits).where(eq(sessionTrackLimits.driverId, driverId)),
     ]);
 
@@ -115,12 +122,17 @@ export class DatabaseStorage implements IStorage {
     const dateTimeFor = (sessionId: number): string => sessionMap.get(sessionId)?.dateTime ?? "";
 
     const incidents = incRows
-      .map((r) => ({
-        ...r,
-        trackName: trackNameFor(r.sessionId),
-        dateTime: dateTimeFor(r.sessionId),
-        targetDriverName: r.targetDriverId != null ? (driverMap.get(r.targetDriverId)?.name ?? null) : null,
-      }))
+      .map((r) => {
+        const isAtFault = r.driverId === driverId;
+        const otherId = isAtFault ? r.targetDriverId : r.driverId;
+        return {
+          ...r,
+          trackName: trackNameFor(r.sessionId),
+          dateTime: dateTimeFor(r.sessionId),
+          role: (isAtFault ? "caused" : "received") as "caused" | "received",
+          otherDriverName: otherId != null ? (driverMap.get(otherId)?.name ?? null) : null,
+        };
+      })
       .sort((a, b) => b.dateTime.localeCompare(a.dateTime));
 
     const trackLimits = tlRows

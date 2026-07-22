@@ -387,6 +387,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                       <tr>
                         <th className="px-4 py-2 text-left font-medium">{t("driverDetail.colDate")}</th>
                         <th className="px-4 py-2 text-left font-medium">{t("driverDetail.colTrack")}</th>
+                        <th className="px-4 py-2 text-left font-medium">{t("driverDetail.colRole")}</th>
                         <th className="px-4 py-2 text-left font-medium">{t("driverDetail.colTarget")}</th>
                         <th className="px-4 py-2 text-right font-medium">{t("driverDetail.colSeverity")}</th>
                       </tr>
@@ -396,7 +397,17 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                         <tr key={i} className="border-t border-border/60">
                           <td className="px-4 py-2 text-xs text-muted-foreground">{formatDateTime(inc.dateTime, intlLocale)}</td>
                           <td className="px-4 py-2">{inc.trackName}</td>
-                          <td className="px-4 py-2 text-muted-foreground">{inc.targetDriverName ?? "—"}</td>
+                          <td className="px-4 py-2">
+                            <Badge
+                              variant="outline"
+                              className={inc.role === "caused"
+                                ? "border-red-500/30 bg-red-500/10 text-[10px] text-red-500"
+                                : "border-blue-500/30 bg-blue-500/10 text-[10px] text-blue-500"}
+                            >
+                              {inc.role === "caused" ? t("driverDetail.roleCaused") : t("driverDetail.roleReceived")}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-2 text-muted-foreground">{inc.otherDriverName ?? "—"}</td>
                           <td className="px-4 py-2 text-right font-data tabular-nums">
                             {inc.severity.toFixed(1)}
                             {inc.isImmovable === 1 && (
