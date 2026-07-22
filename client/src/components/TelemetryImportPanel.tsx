@@ -251,7 +251,7 @@ export default function TelemetryImportPanel() {
   async function pickFolderFSA() {
     if (!FSA_SUPPORTED) return;
     try {
-      const handle = await (window as Window & {
+      const handle = await (window as unknown as Window & {
         showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
       }).showDirectoryPicker();
       setDirHandle(handle);

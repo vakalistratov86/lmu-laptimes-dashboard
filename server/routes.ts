@@ -399,7 +399,7 @@ export async function registerRoutes(
    * GET /api/import/:id/status — статус задачи (#5)
    */
   app.get("/api/import/:id/status", asyncRoute(async (req, res) => {
-    const job = await getJobStatus(req.params.id);
+    const job = await getJobStatus(String(req.params.id));
     if (!job) return res.status(404).json({ message: "Задача не найдена" });
     res.json({
       importId: job.id,
@@ -419,9 +419,9 @@ export async function registerRoutes(
    * GET /api/import/:id/errors — просмотр DLQ ошибок импорта (#8)
    */
   app.get("/api/import/:id/errors", asyncRoute(async (req, res) => {
-    const job = await getJobStatus(req.params.id);
+    const job = await getJobStatus(String(req.params.id));
     if (!job) return res.status(404).json({ message: "Задача не найдена" });
-    const errors = await getJobErrors(req.params.id);
+    const errors = await getJobErrors(String(req.params.id));
     res.json({
       importId: job.id,
       fileName: job.fileName,
