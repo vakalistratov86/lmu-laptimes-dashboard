@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
-import { useLaps, useTracks } from "@/lib/api";
+import { useBestLaps, useTracks } from "@/lib/api";
 import { formatLap, formatDelta } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -115,7 +115,10 @@ export default function Leaderboards() {
   const [classFilter, setClassFilter] = useState<string>("all");
   const [courseFilter, setCourseFilter] = useState<string>("all");
   const { data: tracks } = useTracks();
-  const { data: laps, isLoading } = useLaps();
+  // #121: агрегат "личный лучший круг на трассу+класс" вместо всех кругов
+  // системы — buildBoards() ниже уже и так сворачивал круги до одного per
+  // (трасса,класс,пилот) через Map, поэтому дальнейшая логика не меняется.
+  const { data: laps, isLoading } = useBestLaps();
 
   // Фильтр по пилотам — состояние страницы, не глобальный контекст: сбрасывается
   // при уходе с Leaderboards и ни на что за пределами этой страницы не влияет.

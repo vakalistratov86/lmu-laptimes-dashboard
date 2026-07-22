@@ -1,4 +1,4 @@
-import { useLaps, useTracks, useSessions } from "@/lib/api";
+import { useBestLaps, useTracks, useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,11 @@ function formatDate(iso: string, intlLocale: string): string {
 export default function Tracks() {
   const { t, locale, intlLocale } = useLanguage();
   const { data: tracks, isLoading } = useTracks();
-  const { data: laps } = useLaps();
+  // #121: агрегат "личный лучший круг на трассу+класс" вместо всех кругов
+  // системы — для рекорда трассы и списка классов достаточно этого. Общее
+  // число кругов считается ниже из sessions[].lapCount (уже загружено для
+  // sessionCount), а не подсчётом сырых круговых записей.
+  const { data: laps } = useBestLaps();
   const { data: sessions } = useSessions();
 
   /** Статистика по trackId */
@@ -53,7 +57,6 @@ export default function Tracks() {
 
     for (const l of laps ?? []) {
       const s = ensure(l.trackId);
-      s.lapCount++;
       if (l.lapMs < s.bestMs) {
         s.bestMs = l.lapMs;
         s.bestDriver = l.driverName;
@@ -64,6 +67,9 @@ export default function Tracks() {
     for (const sess of sessions ?? []) {
       const s = ensure(sess.trackId);
       s.sessionCount++;
+      // Реальное число кругов сессии (а не подсчёт строк из useBestLaps,
+      // который уже свёрнут до личных лучших и не отражает общий объём).
+      s.lapCount += sess.lapCount ?? 0;
       s.sessionTypes.add(sess.sessionType);
       if (!s.lastSession || sess.dateTime > s.lastSession) {
         s.lastSession = sess.dateTime;

@@ -1,4 +1,4 @@
-import { useLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
+import { useBestLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
 import { formatLap, getClassChartColor } from "@/lib/format";
 import { normalizeSessionCategory, CLASS_ORDER, getClassBadgeClass, type SessionCategory } from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
@@ -64,7 +64,10 @@ function getSessionBestLapMs(session: SessionEnriched): number | null {
 
 export default function Overview() {
   const { t, locale, intlLocale } = useLanguage();
-  const { data: laps, isLoading } = useLaps();
+  // #121: агрегат "личный лучший круг на трассу+класс" вместо всех кругов
+  // системы — для лучшего круга сезона и графика "лучшее время по трассам"
+  // достаточно этого куда меньшего набора.
+  const { data: laps, isLoading } = useBestLaps();
   const { data: tracks } = useTracks();
   const { data: drivers } = useDrivers();
   const { data: sessions } = useSessions();
