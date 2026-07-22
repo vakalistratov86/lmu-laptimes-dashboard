@@ -246,7 +246,7 @@ export default function Sessions() {
           На узких экранах группа целиком не помещается — делаем её горизонтально
           прокручиваемой вместо того, чтобы обрезать последние секции. */}
       <div
-        className="flex overflow-x-auto rounded-lg border border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="inline-flex max-w-full overflow-x-auto rounded-lg border border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="group"
         aria-label={t("sessions.filterAria")}
       >
