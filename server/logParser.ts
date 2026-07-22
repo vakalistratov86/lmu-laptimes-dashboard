@@ -458,7 +458,10 @@ export function parseRaceResults(xml: string): ParsedSession | null {
   if (drivers.length === 0) return null;
 
   // #49 — парсим Stream-блок (если есть)
-  const streamNode = raceResults.Stream as XmlNode | undefined;
+  // Stream может лежать как прямым потомком RaceResults, так и внутри секции
+  // конкретной сессии (напр. <Practice1><Stream>...), поэтому ищем рекурсивно —
+  // как и старый regex-парсер, искавший <Stream> по всему сырому тексту.
+  const streamNode = findFirst(raceResults, "Stream") as XmlNode | undefined;
   const { incidents, sectorBests, trackLimits } = streamNode
     ? parseStream(streamNode)
     : { incidents: [], sectorBests: [], trackLimits: [] };

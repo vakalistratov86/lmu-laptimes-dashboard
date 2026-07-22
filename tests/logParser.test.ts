@@ -352,6 +352,32 @@ describe('parseRaceResults', () => {
       expect(result.incidents[0].isImmovable).toBe(false);
     });
 
+    it('находит <Stream>, даже если он вложен внутрь тега сессии, а не является прямым потомком <RaceResults>', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rFactorXML>
+  <RaceResults>
+    <TrackVenue>Le Mans</TrackVenue>
+    <DateTime>1752505200</DateTime>
+    <Practice1>
+      <Stream>
+        <Incident et="15.5" severity="3"><Name>Пилот А</Name><Name>Пилот Б</Name></Incident>
+      </Stream>
+      <Driver>
+        <Name>Пилот А</Name>
+        <isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+        <CarClass>GT3</CarClass><CarType>Porsche 911</CarType><TeamName>Team A</TeamName>
+        <Laps>1</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+        <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+      </Driver>
+    </Practice1>
+  </RaceResults>
+</rFactorXML>`;
+      const result = parseRaceResults(xml)!;
+      expect(result.incidents).toHaveLength(1);
+      expect(result.incidents[0].driverName).toBe('Пилот А');
+      expect(result.incidents[0].targetDriverName).toBe('Пилот Б');
+    });
+
     it('инцидент с <Immovable/> не имеет targetDriverName', () => {
       const stream = `<Stream>
     <Incident et="5" severity="1"><Name>Пилот В</Name><Immovable/></Incident>
