@@ -14,6 +14,7 @@ import Tracks from "@/pages/Tracks";
 import TrackDetail from "@/pages/TrackDetail";
 import Sessions from "@/pages/Sessions";
 import SessionDetail from "@/pages/SessionDetail";
+import DriverDetail from "@/pages/DriverDetail";
 import Import from "@/pages/Import";
 import Events from "@/pages/Events";
 
@@ -26,6 +27,7 @@ function AppRouter() {
       <Route path="/tracks/:id" component={TrackDetail} />
       <Route path="/sessions" component={Sessions} />
       <Route path="/sessions/:id" component={SessionDetail} />
+      <Route path="/drivers/:id" component={DriverDetail} />
       <Route path="/events" component={Events} />
       <Route path="/import" component={Import} />
       <Route component={NotFound} />

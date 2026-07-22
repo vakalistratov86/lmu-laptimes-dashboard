@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./queryClient";
-import type { Track, DriverEnriched, LapTimeEnriched, SessionEnriched } from "@shared/schema";
+import type { Track, DriverEnriched, LapTimeEnriched, SessionEnriched, DriverIncidentsResponse } from "@shared/schema";
 
 export function useTracks() {
   return useQuery<Track[]>({ queryKey: ["/api/tracks"] });
@@ -15,6 +15,13 @@ export function useTrack(id: number | undefined) {
 
 export function useDrivers() {
   return useQuery<DriverEnriched[]>({ queryKey: ["/api/drivers"] });
+}
+
+export function useDriverIncidents(id: number | undefined) {
+  return useQuery<DriverIncidentsResponse>({
+    queryKey: ["/api/drivers", id, "incidents"],
+    enabled: id != null && !Number.isNaN(id),
+  });
 }
 
 export function useLaps(filter?: {

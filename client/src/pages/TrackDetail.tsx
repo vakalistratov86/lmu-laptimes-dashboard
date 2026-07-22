@@ -421,9 +421,9 @@ export default function TrackDetail() {
                   <tr key={l.id} className="border-t border-border hover:bg-muted/40" data-testid={`td-row-${l.id}`}>
                     <td className="px-4 py-2.5 font-data tabular-nums text-muted-foreground">{i + 1}</td>
                     <td className="px-4 py-2.5">
-                      <div className="font-medium">
+                      <Link href={`/drivers/${l.driverId}`} className="font-medium hover:underline">
                         <DriverName name={l.driverName} isPlayer={l.isPlayer} />
-                      </div>
+                      </Link>
                       <div className="text-xs text-muted-foreground">{l.team}</div>
                     </td>
                     <td className="px-4 py-2.5">
