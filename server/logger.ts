@@ -51,12 +51,14 @@ export const logger = {
 // ── Типизированные хелперы для import pipeline ──────────────────────────────
 
 export interface ImportStartedContext {
+  [key: string]: unknown;
   importJobId: string;
   fileName: string;
   logVersion: string;
 }
 
 export interface ImportCompletedContext {
+  [key: string]: unknown;
   importJobId: string;
   fileName: string;
   totalRows: number;
@@ -66,6 +68,7 @@ export interface ImportCompletedContext {
 }
 
 export interface ParseErrorContext {
+  [key: string]: unknown;
   importJobId: string;
   lineNumber?: number;
   raw?: string;
@@ -73,6 +76,7 @@ export interface ParseErrorContext {
 }
 
 export interface ImportSkippedContext {
+  [key: string]: unknown;
   importJobId: string;
   fileName: string;
   reason: string;

@@ -15,6 +15,7 @@ import {
   Trash2,
   FileText,
   Activity,
+  CircleSlash,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -213,7 +214,7 @@ export default function Import() {
   async function pickFolderFSA() {
     if (!FSA_SUPPORTED) return;
     try {
-      const handle = await (window as Window & {
+      const handle = await (window as unknown as Window & {
         showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
       }).showDirectoryPicker();
       setDirHandle(handle);
@@ -276,14 +277,32 @@ export default function Import() {
           const data: { results: ImportFileResult[]; imported: number; skipped: number; totalLaps: number } =
             await res.json();
           const r = data.results[0];
-          if (r?.ok) {
-            addLog("ok", t("imp.logImportOk", { name: file.name, event: r.event ?? r.venue ?? "", n: r.laps ?? 0 }));
-            setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + data.imported }));
-          } else {
-            // Обрезаем XML из сообщения об ошибке/пропуске — в лог пишем только имя файла и краткую причину
+          // ВАЖНО: проверяем `skipped` ПЕРВЫМ. Сервер возвращает `ok: false` и
+          // для пропуска (пустой/дубликат/0 кругов), и для настоящей ошибки —
+          // единственное надёжное различие даёт поле `skipped`. Раньше здесь
+          // проверялось только `r?.ok`, из-за чего пропуск с 0 кругами (у него
+          // `ok` был исторически true) попадал в ветку "успех" — журнал писал
+          // запись с пустым названием сессии, а счётчики imported/skipped
+          // оставались нетронутыми (файл "пропадал" из статистики бесследно).
+          if (r?.skipped) {
+            // Обрезаем XML из сообщения о пропуске — в лог пишем только имя файла и краткую причину
             const skipMsg = trimErrorMessage(r?.message ?? t("imp.logImportSkipDefault"));
             addLog("skip", t("imp.logImportSkip", { name: file.name, msg: skipMsg }));
             setCounters((c) => ({ ...c, queued: c.queued - 1, skipped: c.skipped + 1 }));
+          } else if (r?.ok) {
+            addLog("ok", t("imp.logImportOk", {
+              name: file.name,
+              event: r.event ?? r.venue ?? "",
+              sessionType: r.sessionType ?? "",
+              drivers: r.drivers ?? 0,
+              n: r.laps ?? 0,
+            }));
+            setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + 1 }));
+          } else {
+            // Настоящая ошибка (не пропуск) — валидация, БД и т.п.
+            const errMsg = trimErrorMessage(r?.message ?? t("imp.logImportErrorDefault"));
+            addLog("error", t("imp.logImportError", { name: file.name, msg: errMsg }));
+            setCounters((c) => ({ ...c, queued: c.queued - 1, failed: c.failed + 1 }));
           }
           localSeen.add(fileKey(file));
           await dbSaveSeenSet(localSeen);
@@ -397,12 +416,22 @@ export default function Import() {
     await importFiles(files);
   }
 
-  // ─── Цвет лога ───────────────────────────────────────────────────────────
+  // ─── Цвет и иконка записи журнала ─────────────────────────────────────────
+  // Иконка дублирует цвет для сканируемости и доступности (не полагаемся
+  // только на цвет — важно для дальтоников и при беглом просмотре журнала).
   function logColor(level: LogLevel) {
     if (level === "ok") return "text-emerald-400";
     if (level === "error") return "text-red-400";
     if (level === "skip") return "text-yellow-400";
-    return "text-card-foreground";
+    return "text-muted-foreground";
+  }
+
+  function LogIcon({ level }: { level: LogLevel }) {
+    const cls = cn("shrink-0", logColor(level));
+    if (level === "ok") return <CheckCircle2 size={14} className={cls} />;
+    if (level === "error") return <XCircle size={14} className={cls} />;
+    if (level === "skip") return <CircleSlash size={14} className={cls} />;
+    return <Info size={14} className={cls} />;
   }
 
   const modeLabel =
@@ -656,11 +685,12 @@ export default function Import() {
             data-testid="import-log"
           >
             {[...log].reverse().map((entry, i) => (
-              <li key={i} className={`flex items-start gap-2 px-4 py-2 text-xs ${logColor(entry.level)}`}>
+              <li key={i} className="flex items-start gap-2 px-4 py-2 text-xs hover-elevate">
+                <LogIcon level={entry.level} />
                 <span className="shrink-0 font-data text-muted-foreground">
                   {new Date(entry.ts).toLocaleTimeString()}
                 </span>
-                <span>{entry.text}</span>
+                <span className={logColor(entry.level)}>{entry.text}</span>
               </li>
             ))}
           </ul>
