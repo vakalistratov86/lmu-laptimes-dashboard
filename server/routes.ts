@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from 'node:http';
 import { storage, type LapFilter, db } from "./storage";
 import { importJobs, importErrors, tracks, drivers, lapTimes, sessions, sessionResults, sessionLaps, sessionIncidents, sessionSectorBests, sessionTrackLimits, telemetryImportJobs, telemetrySessions, telemetryChannels, telemetrySamples } from '@shared/schema';
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
 import { computeFileHash, generateId, getJobStatus, getJobErrors, runImport } from "./importWorker";
 import { computeFileHashBinary, runTelemetryImport } from "./telemetryImportWorker";
@@ -58,8 +58,14 @@ export async function registerRoutes(
     res.json(track);
   }));
 
+  // fix: useDrivers()/DriverFilterBar вызывают этот эндпоинт БЕЗ limit —
+  // раньше это всегда молча обрезалось до 500 записей (в отличие от
+  // /api/laps, где лимит по умолчанию не применяется при отсутствии
+  // фильтра). Список пилотов растёт вместе с реальным числом участников
+  // сессий, а не с числом кругов — гораздо медленнее lap_times, поэтому
+  // здесь достаточно высокого потолка вместо полноценной пагинации в UI.
   app.get("/api/drivers", asyncRoute(async (req, res) => {
-    const pagination = parsePagination(req.query, { defaultLimit: 500, maxLimit: 2000 });
+    const pagination = parsePagination(req.query, { defaultLimit: 5000, maxLimit: 5000 });
     res.json(await storage.getDrivers(pagination));
   }));
 
@@ -119,8 +125,11 @@ export async function registerRoutes(
     res.json(await storage.getBestLaps(filter));
   }));
 
+  // fix: useSessions() (Sessions.tsx summary, DriverProfile session history)
+  // вызывает этот эндпоинт БЕЗ limit — раньше молча обрезалось до 500 самых
+  // свежих сессий, без какой-либо пагинации в UI и без индикации усечения.
   app.get("/api/sessions", asyncRoute(async (req, res) => {
-    const pagination = parsePagination(req.query, { defaultLimit: 500, maxLimit: 2000 });
+    const pagination = parsePagination(req.query, { defaultLimit: 5000, maxLimit: 5000 });
     res.json(await storage.getSessions(pagination));
   }));
 
@@ -146,8 +155,13 @@ export async function registerRoutes(
       .from(sessionLaps)
       .where(eq(sessionLaps.sessionId, sessionId));
 
-    const allDrivers = await db.select().from(drivers);
-    const driverMap = new Map(allDrivers.map((d) => [d.id, d]));
+    // Только пилоты этой сессии — а не вся таблица drivers на каждый показ
+    // вкладок «Круги»/«Секторы»/«Прогресс» страницы сессии.
+    const driverIds = Array.from(new Set(lapsRows.map((l) => l.driverId)));
+    const driversInSession = driverIds.length
+      ? await db.select().from(drivers).where(inArray(drivers.id, driverIds))
+      : [];
+    const driverMap = new Map(driversInSession.map((d) => [d.id, d]));
 
     // Получаем isPlayer из sessionResults для каждого пилота
     const srRows = await db
@@ -213,7 +227,11 @@ export async function registerRoutes(
         .where(eq(importJobs.fileHash, fileHash));
       const existing = existingRows[0];
 
-      if (existing) {
+      // Только НЕ-failed прошлая попытка считается настоящим дубликатом.
+      // Файл, чей импорт раньше упал (временный сбой БД, диск и т.п.),
+      // иначе был бы заблокирован от повторной загрузки НАВСЕГДА — тот же
+      // fileHash уже занят в UNIQUE-колонке, а статус так и остаётся "failed".
+      if (existing && existing.status !== "failed") {
         skipped++;
         results.push({
           fileName,
@@ -227,15 +245,22 @@ export async function registerRoutes(
         continue;
       }
 
-      // Создаём запись задачи со статусом processing до запуска импорта
-      const id = generateId();
-      await db.insert(importJobs).values({
-        id,
-        fileHash,
-        fileName,
-        status: "processing",
-        createdAt: Date.now(),
-      });
+      // Новый файл — создаём запись задачи; повтор после failed — переиспользуем
+      // ту же строку (id, fileHash уникален), а не вставляем вторую с тем же хэшем.
+      const id = existing ? existing.id : generateId();
+      if (existing) {
+        await db.update(importJobs)
+          .set({ status: "processing", error: null, finishedAt: null })
+          .where(eq(importJobs.id, id));
+      } else {
+        await db.insert(importJobs).values({
+          id,
+          fileHash,
+          fileName,
+          status: "processing",
+          createdAt: Date.now(),
+        });
+      }
 
       try {
         const { sessionId, totalLaps: laps, validLaps, errorLaps, event, venue, sessionType, driverCount } =
@@ -340,7 +365,10 @@ export async function registerRoutes(
         .where(eq(telemetryImportJobs.fileHash, fileHash));
       const existing = existingRows[0];
 
-      if (existing) {
+      // Только НЕ-failed прошлая попытка блокирует повтор — иначе файл,
+      // чей импорт однажды упал, никогда больше не загрузился бы (fileHash
+      // уникален, а статус так и остаётся "failed" навсегда).
+      if (existing && existing.status !== "failed") {
         return res.status(409).json({
           ok: false,
           fileName,
@@ -350,14 +378,20 @@ export async function registerRoutes(
         });
       }
 
-      const id = generateId();
-      await db.insert(telemetryImportJobs).values({
-        id,
-        fileHash,
-        fileName,
-        status: "processing",
-        createdAt: Date.now(),
-      });
+      const id = existing ? existing.id : generateId();
+      if (existing) {
+        await db.update(telemetryImportJobs)
+          .set({ status: "processing", error: null, finishedAt: null })
+          .where(eq(telemetryImportJobs.id, id));
+      } else {
+        await db.insert(telemetryImportJobs).values({
+          id,
+          fileHash,
+          fileName,
+          status: "processing",
+          createdAt: Date.now(),
+        });
+      }
 
       try {
         const { telemetrySessionId, channelCount, sampleCount } = await runTelemetryImport({

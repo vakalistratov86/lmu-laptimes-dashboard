@@ -24,12 +24,15 @@ export function useDriverIncidents(id: number | undefined) {
   });
 }
 
-export function useLaps(filter?: {
-  trackId?: number;
-  driverId?: number;
-  carClass?: string;
-  conditions?: string;
-}) {
+export function useLaps(
+  filter?: {
+    trackId?: number;
+    driverId?: number;
+    carClass?: string;
+    conditions?: string;
+  },
+  options?: { enabled?: boolean },
+) {
   const params = new URLSearchParams();
   if (filter?.trackId) params.set("trackId", String(filter.trackId));
   if (filter?.driverId) params.set("driverId", String(filter.driverId));
@@ -38,6 +41,7 @@ export function useLaps(filter?: {
   const qs = params.toString();
   return useQuery<LapTimeEnriched[]>({
     queryKey: ["/api/laps", qs],
+    enabled: options?.enabled,
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/laps${qs ? `?${qs}` : ""}`);
       return res.json();

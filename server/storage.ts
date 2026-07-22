@@ -132,10 +132,24 @@ export class DatabaseStorage implements IStorage {
       ...tlRows.map((r) => r.sessionId),
     ]));
 
-    const [sessionRows, trackRows, driverRows] = await Promise.all([
-      sessionIds.length ? db.select().from(sessions).where(inArray(sessions.id, sessionIds)) : Promise.resolve([]),
-      db.select().from(tracks),
-      db.select().from(drivers),
+    // Только "другая сторона" инцидентов — а не вся таблица drivers на
+    // каждый вызов профиля пилота (тот же класс full-table-scan, что и
+    // findOrCreateDriver() в importWorker.ts до фикса #119-121).
+    const otherDriverIds = Array.from(new Set(
+      incRows.flatMap((r) => {
+        const otherId = r.driverId === driverId ? r.targetDriverId : r.driverId;
+        return otherId != null ? [otherId] : [];
+      }),
+    ));
+
+    const sessionRows = sessionIds.length
+      ? await db.select().from(sessions).where(inArray(sessions.id, sessionIds))
+      : [];
+    const trackIds = Array.from(new Set(sessionRows.map((s) => s.trackId)));
+
+    const [trackRows, driverRows] = await Promise.all([
+      trackIds.length ? db.select().from(tracks).where(inArray(tracks.id, trackIds)) : Promise.resolve([]),
+      otherDriverIds.length ? db.select().from(drivers).where(inArray(drivers.id, otherDriverIds)) : Promise.resolve([]),
     ]);
 
     const sessionMap = new Map(sessionRows.map((s) => [s.id, s]));
@@ -258,8 +272,16 @@ export class DatabaseStorage implements IStorage {
       eq(sessionResults.driverId, lapTimes.driverId),
     );
 
-    const distinctOn = [lapTimes.trackId, lapTimes.carClass, lapTimes.driverId];
-    const orderBy = [lapTimes.trackId, lapTimes.carClass, lapTimes.driverId, lapTimes.lapMs] as const;
+    // fix: раньше DISTINCT ON не включал sessions.course — если у одной
+    // физической трассы (одного trackId) бывает несколько конфигураций
+    ///лейаутов, записанных в разных сессиях с разным course, пилот получал
+    // только ОДНУ строку (свой быстрейший круг среди ВСЕХ конфигураций), а
+    // его результат на "проигравшей" конфигурации молча пропадал — включая
+    // случаи, когда Leaderboards показывает их как отдельные карточки
+    // (normalizeCourse() в client/src/lib/format.ts), и сравнение с рекордом
+    // трассы в профиле пилота (DriverProfile.tsx).
+    const distinctOn = [lapTimes.trackId, lapTimes.carClass, lapTimes.driverId, sessions.course];
+    const orderBy = [lapTimes.trackId, lapTimes.carClass, lapTimes.driverId, sessions.course, lapTimes.lapMs] as const;
 
     const baseQuery = () =>
       db

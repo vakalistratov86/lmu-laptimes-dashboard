@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "wouter";
 import { useDrivers, useLaps, useBestLaps, useSessions, useDriverIncidents } from "@/lib/api";
-import { formatLap, formatDelta, countryFlag } from "@/lib/format";
+import { formatLap, formatDelta, countryFlag, normalizeCourse } from "@/lib/format";
 import { getClassBadgeClass, getMedalColorClass } from "@/lib/classStyles";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,8 @@ import type { LapTimeEnriched, SessionEnriched } from "@shared/schema";
 interface TrackRecordRow {
   trackId: number;
   trackName: string;
+  /** Конфигурация/лейаут трассы (см. normalizeCourse) — null, если совпадает с trackName. */
+  courseLabel: string | null;
   carClass: string;
   bestLapMs: number;
   date: string;
@@ -118,19 +120,27 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
   const trackRecords = useMemo((): TrackRecordRow[] => {
     if (driverLaps.length === 0) return [];
 
+    // fix: ключ включает course — иначе трасса с несколькими конфигурациями
+    // лейаута под одним trackId (course различается между сессиями) даёт
+    // ОДНУ строку "личного лучшего", смешивая разные конфигурации, и не
+    // совпадает с тем, как теперь группирует getBestLaps() на сервере
+    // (см. #123 follow-up) — рекорд трассы сравнивался бы с чужой конфигурацией.
+    const keyOf = (l: LapTimeEnriched) =>
+      `${l.trackId}|${l.carClass}|${normalizeCourse(l.sessionCourse, l.trackName) ?? ""}`;
+
     const own = new Map<string, LapTimeEnriched>();
     for (const l of driverLaps) {
-      const key = `${l.trackId}|${l.carClass}`;
+      const key = keyOf(l);
       const cur = own.get(key);
       if (!cur || l.lapMs < cur.lapMs) own.set(key, l);
     }
 
-    // Абсолютный рекорд трассы+класса — минимум среди личных лучших ВСЕХ
-    // пилотов (bestLaps уже содержит ровно по одной строке на пилота на
-    // трассу+класс, так что здесь остаётся только взять минимум по пилотам).
+    // Абсолютный рекорд трассы+класса+конфигурации — минимум среди личных
+    // лучших ВСЕХ пилотов (bestLaps уже содержит ровно по одной строке на
+    // пилота на трассу+класс+course, так что здесь остаётся взять минимум).
     const absoluteBest = new Map<string, number>();
     for (const l of bestLaps ?? []) {
-      const key = `${l.trackId}|${l.carClass}`;
+      const key = keyOf(l);
       const cur = absoluteBest.get(key);
       if (cur == null || l.lapMs < cur) absoluteBest.set(key, l.lapMs);
     }
@@ -141,6 +151,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
         return {
           trackId: l.trackId,
           trackName: l.trackName,
+          courseLabel: normalizeCourse(l.sessionCourse, l.trackName),
           carClass: l.carClass,
           bestLapMs: l.lapMs,
           date: l.date,
@@ -148,7 +159,10 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
           isRecord: l.lapMs <= trackBestMs,
         };
       })
-      .sort((a, b) => a.trackName.localeCompare(b.trackName) || a.carClass.localeCompare(b.carClass));
+      .sort((a, b) =>
+        a.trackName.localeCompare(b.trackName) ||
+        (a.courseLabel ?? "").localeCompare(b.courseLabel ?? "") ||
+        a.carClass.localeCompare(b.carClass));
   }, [bestLaps, driverLaps]);
 
   const stats = useMemo(() => {
@@ -158,13 +172,19 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
       ? driverLaps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a))
       : null;
 
-    const trackLapCounts = new Map<string, number>();
+    // fix: группировка по trackId, а не по trackName — в каталоге трасс
+    // намеренно есть разные физические конфигурации с одинаковым названием
+    // (напр. "Bahrain" GP и "Bahrain" Outer Circuit — разные trackId), их
+    // круги не должны схлопываться в одну "любимую трассу".
+    const trackLapCounts = new Map<number, { name: string; count: number }>();
     for (const l of driverLaps) {
-      trackLapCounts.set(l.trackName, (trackLapCounts.get(l.trackName) ?? 0) + 1);
+      const cur = trackLapCounts.get(l.trackId);
+      if (cur) cur.count += 1;
+      else trackLapCounts.set(l.trackId, { name: l.trackName, count: 1 });
     }
     let favoriteTrack: string | null = null;
     let favoriteTrackLaps = 0;
-    for (const [name, count] of Array.from(trackLapCounts)) {
+    for (const { name, count } of Array.from(trackLapCounts.values())) {
       if (count > favoriteTrackLaps) {
         favoriteTrack = name;
         favoriteTrackLaps = count;
@@ -299,9 +319,12 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                   </thead>
                   <tbody>
                     {trackRecords.map((r) => (
-                      <tr key={`${r.trackId}-${r.carClass}`} className="border-t border-border hover:bg-muted/40">
+                      <tr key={`${r.trackId}-${r.courseLabel ?? ""}-${r.carClass}`} className="border-t border-border hover:bg-muted/40">
                         <td className="px-4 py-2.5 flex items-center gap-1.5">
                           <MapPin size={13} className="text-muted-foreground" /> {r.trackName}
+                          {r.courseLabel && (
+                            <span className="text-xs text-muted-foreground">· {r.courseLabel}</span>
+                          )}
                         </td>
                         <td className="px-4 py-2.5">
                           <Badge variant="outline" className={getClassBadgeClass(r.carClass)}>{r.carClass}</Badge>
