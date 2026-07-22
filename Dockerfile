@@ -17,5 +17,10 @@ RUN apk add --no-cache libstdc++ libgcc
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+# schema.ts + drizzle.config.ts let `docker compose exec dashboard npx drizzle-kit
+# push` be run manually against the production DB after a schema change —
+# dist/ only has the bundled server code, not the raw schema drizzle-kit reads.
+COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 EXPOSE 3000
 CMD ["node", "dist/index.cjs"]
