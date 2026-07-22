@@ -327,38 +327,99 @@ describe('parseRaceResults', () => {
       expect(result.drivers[0].teamName).toBe(`M&M Racing <Pro> "Team" 'X'`);
     });
 
-    it('различает <Name> во вложенных одноимённых тегах <Sector>, не смешивая их', () => {
+    // Реальные логи LMU кладут данные Sector/Incident/TrackLimits в атрибуты
+    // тега + человекочитаемый текст, а не во вложенные теги — проверено на
+    // живом файле сессии (см. #123, follow-up).
+    it('парсит реальную схему <Sector Driver=... Sector=... Class=...> из атрибутов', () => {
       const stream = `<Stream>
-    <Sector et="10" lap="1" s="1"><Name>Пилот А</Name><CarClass>Hypercar</CarClass></Sector>
-    <Sector et="20" lap="1" s="2"><Name>Пилот Б</Name><CarClass>LMP2</CarClass></Sector>
+    <Sector Driver="Пилот А" ID="0" Sector="1" Class="Hypercar" et="10.0">Пилот А(0) set new best for sector 1</Sector>
+    <Sector Driver="Пилот Б" ID="1" Sector="2" Class="LMP2" et="20.0">Пилот Б(1) set new best for sector 2</Sector>
   </Stream>`;
       const result = parseRaceResults(makeXml({ stream }))!;
       expect(result.sectorBests).toHaveLength(2);
-      expect(result.sectorBests[0].driverName).toBe('Пилот А');
-      expect(result.sectorBests[0].carClass).toBe('Hypercar');
-      expect(result.sectorBests[1].driverName).toBe('Пилот Б');
-      expect(result.sectorBests[1].carClass).toBe('LMP2');
+      expect(result.sectorBests[0]).toMatchObject({ driverName: 'Пилот А', carClass: 'Hypercar', sector: 1, elapsedTimeSec: 10.0 });
+      expect(result.sectorBests[1]).toMatchObject({ driverName: 'Пилот Б', carClass: 'LMP2', sector: 2, elapsedTimeSec: 20.0 });
     });
 
-    it('парсит два вложенных <Name> в <Incident> как driverName/targetDriverName', () => {
+    it('пропускает <Sector> без атрибута Driver (другое Stream-событие, переиспользующее тег)', () => {
       const stream = `<Stream>
-    <Incident et="15.5" severity="3"><Name>Пилот А</Name><Name>Пилот Б</Name></Incident>
+    <Sector et="15.0">Пилот А(0) reports new suspension damage</Sector>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ stream }))!;
+      expect(result.sectorBests).toHaveLength(0);
+    });
+
+    it('парсит реальную схему <Incident et="..."> с описанием "reported contact ... with another vehicle ..."', () => {
+      const stream = `<Stream>
+    <Incident et="15.5">Пилот А(0) reported contact (547.22) with another vehicle Пилот Б(1)</Incident>
   </Stream>`;
       const result = parseRaceResults(makeXml({ stream }))!;
       expect(result.incidents).toHaveLength(1);
       expect(result.incidents[0].driverName).toBe('Пилот А');
       expect(result.incidents[0].targetDriverName).toBe('Пилот Б');
-      expect(result.incidents[0].severity).toBe(3);
+      expect(result.incidents[0].severity).toBe(547.22);
       expect(result.incidents[0].isImmovable).toBe(false);
     });
 
-    it('инцидент с <Immovable/> не имеет targetDriverName', () => {
+    it('находит <Stream>, даже если он вложен внутрь тега сессии, а не является прямым потомком <RaceResults>', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rFactorXML>
+  <RaceResults>
+    <TrackVenue>Le Mans</TrackVenue>
+    <DateTime>1752505200</DateTime>
+    <Practice1>
+      <Stream>
+        <Incident et="15.5">Пилот А(0) reported contact (12.3) with another vehicle Пилот Б(1)</Incident>
+      </Stream>
+      <Driver>
+        <Name>Пилот А</Name>
+        <isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+        <CarClass>GT3</CarClass><CarType>Porsche 911</CarType><TeamName>Team A</TeamName>
+        <Laps>1</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+        <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+      </Driver>
+    </Practice1>
+  </RaceResults>
+</rFactorXML>`;
+      const result = parseRaceResults(xml)!;
+      expect(result.incidents).toHaveLength(1);
+      expect(result.incidents[0].driverName).toBe('Пилот А');
+      expect(result.incidents[0].targetDriverName).toBe('Пилот Б');
+    });
+
+    it('инцидент "... with Immovable" не имеет targetDriverName', () => {
       const stream = `<Stream>
-    <Incident et="5" severity="1"><Name>Пилот В</Name><Immovable/></Incident>
+    <Incident et="5">Пилот В(2) reported contact (138.93) with Immovable</Incident>
   </Stream>`;
       const result = parseRaceResults(makeXml({ stream }))!;
       expect(result.incidents[0].isImmovable).toBe(true);
       expect(result.incidents[0].targetDriverName).toBeNull();
+      expect(result.incidents[0].driverName).toBe('Пилот В');
+    });
+
+    it('пропускает <Incident> с нераспознанным текстом (не создаёт запись с фиктивными данными)', () => {
+      const stream = `<Stream>
+    <Incident et="5">какой-то неизвестный формат текста</Incident>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ stream }))!;
+      expect(result.incidents).toHaveLength(0);
+    });
+
+    it('парсит реальную схему <TrackLimits Driver=... WarningPoints=... Resolution=...> с решением в тексте тега', () => {
+      const stream = `<Stream>
+    <TrackLimits Driver="Пилот А" ID="0" Lap="5" WarningPoints="0" CurrentPoints="0" Resolution="7" et="248.2">No Further Action</TrackLimits>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ stream }))!;
+      expect(result.trackLimits).toHaveLength(1);
+      expect(result.trackLimits[0]).toMatchObject({
+        driverName: 'Пилот А',
+        lapNum: 5,
+        elapsedTimeSec: 248.2,
+        warningPoints: 0,
+        currentPoints: 0,
+        resolution: 7,
+        decision: 'No Further Action',
+      });
     });
 
     it('не путает несколько разных <Driver> с одинаковыми вложенными тегами', () => {
