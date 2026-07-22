@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "wouter";
-import { useDrivers, useLaps, useSessions, useDriverIncidents } from "@/lib/api";
+import { useDrivers, useLaps, useBestLaps, useSessions, useDriverIncidents } from "@/lib/api";
 import { formatLap, formatDelta, countryFlag } from "@/lib/format";
 import { getClassBadgeClass, getMedalColorClass } from "@/lib/classStyles";
 import { Card } from "@/components/ui/card";
@@ -74,7 +74,11 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
   const { t, intlLocale } = useLanguage();
 
   const { data: drivers, isLoading: driversLoading } = useDrivers();
-  const { data: laps, isLoading: lapsLoading } = useLaps();
+  // #121: собственные круги пилота — уже фильтр по driverId (не весь /api/laps).
+  const { data: driverLapsRaw, isLoading: lapsLoading } = useLaps({ driverId });
+  // Личный лучший круг каждого пилота на трассу+класс — для сравнения с
+  // абсолютным рекордом трассы; размер ответа не растёт с числом кругов.
+  const { data: bestLaps, isLoading: bestLapsLoading } = useBestLaps();
   const { data: sessions, isLoading: sessionsLoading } = useSessions();
   const { data: incidentsData, isLoading: incidentsLoading } = useDriverIncidents(driverId);
 
@@ -83,10 +87,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
     [drivers, driverId],
   );
 
-  const driverLaps = useMemo(
-    () => (laps ?? []).filter((l: LapTimeEnriched) => l.driverId === driverId),
-    [laps, driverId],
-  );
+  const driverLaps = useMemo(() => driverLapsRaw ?? [], [driverLapsRaw]);
 
   const driverSessions = useMemo((): DriverSessionRow[] => {
     if (!sessions || driverId == null) return [];
@@ -115,7 +116,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
   }, [sessions, driverId]);
 
   const trackRecords = useMemo((): TrackRecordRow[] => {
-    if (!laps || driverLaps.length === 0) return [];
+    if (driverLaps.length === 0) return [];
 
     const own = new Map<string, LapTimeEnriched>();
     for (const l of driverLaps) {
@@ -124,8 +125,11 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
       if (!cur || l.lapMs < cur.lapMs) own.set(key, l);
     }
 
+    // Абсолютный рекорд трассы+класса — минимум среди личных лучших ВСЕХ
+    // пилотов (bestLaps уже содержит ровно по одной строке на пилота на
+    // трассу+класс, так что здесь остаётся только взять минимум по пилотам).
     const absoluteBest = new Map<string, number>();
-    for (const l of laps as LapTimeEnriched[]) {
+    for (const l of bestLaps ?? []) {
       const key = `${l.trackId}|${l.carClass}`;
       const cur = absoluteBest.get(key);
       if (cur == null || l.lapMs < cur) absoluteBest.set(key, l.lapMs);
@@ -145,7 +149,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
         };
       })
       .sort((a, b) => a.trackName.localeCompare(b.trackName) || a.carClass.localeCompare(b.carClass));
-  }, [laps, driverLaps]);
+  }, [bestLaps, driverLaps]);
 
   const stats = useMemo(() => {
     if (driverLaps.length === 0 && driverSessions.length === 0) return null;
@@ -195,7 +199,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
     };
   }, [driverLaps, driverSessions]);
 
-  const isLoading = driversLoading || lapsLoading || sessionsLoading;
+  const isLoading = driversLoading || lapsLoading || bestLapsLoading || sessionsLoading;
 
   if (isLoading) {
     return (

@@ -11,7 +11,7 @@ import type {
 } from '@shared/schema';
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { eq, and, or, desc, inArray } from "drizzle-orm";
+import { eq, and, or, desc, inArray, sql as sqlExpr } from "drizzle-orm";
 
 const sql = postgres(process.env.DATABASE_URL!);
 export const db = drizzle(sql);
@@ -22,6 +22,20 @@ export interface LapFilter {
   carClass?: string;
   conditions?: string;
   sessionId?: number;
+  sessionCourse?: string;
+}
+
+/** #121: параметры offset-пагинации для списочных эндпоинтов. */
+export interface Pagination {
+  limit?: number;
+  offset?: number;
+}
+
+/** Фильтр для getBestLaps() — тот же набор полей, что и LapFilter, без sessionId (агрегат не по сессии). */
+export interface LapRecordFilter {
+  trackId?: number;
+  driverId?: number;
+  carClass?: string;
   sessionCourse?: string;
 }
 
@@ -40,11 +54,13 @@ export interface ImportResult {
 export interface IStorage {
   getTracks(): Promise<Track[]>;
   getTrack(id: number): Promise<Track | undefined>;
-  getDrivers(): Promise<DriverEnriched[]>;
+  getDrivers(pagination?: Pagination): Promise<DriverEnriched[]>;
   getDriver(id: number): Promise<Driver | undefined>;
   getDriverIncidents(driverId: number): Promise<DriverIncidentsResponse>;
-  getLaps(filter?: LapFilter): Promise<LapTimeEnriched[]>;
-  getSessions(): Promise<SessionEnriched[]>;
+  getLaps(filter?: LapFilter, pagination?: Pagination): Promise<LapTimeEnriched[]>;
+  /** #121: агрегат "личный лучший круг каждого пилота по трассе+классу" — бесконечно не растёт с числом кругов. */
+  getBestLaps(filter?: LapRecordFilter): Promise<LapTimeEnriched[]>;
+  getSessions(pagination?: Pagination): Promise<SessionEnriched[]>;
   getSession(id: number): Promise<SessionEnriched | undefined>;
 }
 
@@ -58,15 +74,27 @@ export class DatabaseStorage implements IStorage {
     return rows[0];
   }
 
-  async getDrivers(): Promise<DriverEnriched[]> {
-    const allDrivers = await db.select().from(drivers);
-    const srRows = await db.select().from(sessionResults);
+  /**
+   * #121: добавлена offset-пагинация. Заодно убран безусловный полный скан
+   * sessionResults — isPlayer теперь считается через MAX(is_player), только
+   * для пилотов текущей страницы, а не для всех когда-либо сыгравших.
+   */
+  async getDrivers(pagination?: Pagination): Promise<DriverEnriched[]> {
+    const base = db.select().from(drivers).orderBy(drivers.id);
+    const allDrivers = pagination?.limit != null
+      ? await base.limit(pagination.limit).offset(pagination.offset ?? 0)
+      : await base;
 
-    const playerMap = new Map<number, number>();
-    for (const sr of srRows) {
-      const current = playerMap.get(sr.driverId) ?? 0;
-      if (sr.isPlayer > current) playerMap.set(sr.driverId, sr.isPlayer);
-    }
+    if (allDrivers.length === 0) return [];
+
+    const driverIds = allDrivers.map((d) => d.id);
+    const playerAgg = await db
+      .select({ driverId: sessionResults.driverId, isPlayer: sqlExpr<number>`max(${sessionResults.isPlayer})` })
+      .from(sessionResults)
+      .where(inArray(sessionResults.driverId, driverIds))
+      .groupBy(sessionResults.driverId);
+
+    const playerMap = new Map(playerAgg.map((p) => [p.driverId, p.isPlayer]));
 
     return allDrivers.map((d) => ({
       ...d,
@@ -152,8 +180,10 @@ export class DatabaseStorage implements IStorage {
    * его команда, isPlayer из session_results для этой же пары session+driver)
    * делается через JOIN в самом SQL-запросе — Postgres фильтрует и джойнит,
    * а не приложение вручную по Map после выгрузки всего датасета.
+   *
+   * #121: добавлена offset-пагинация (limit/offset применяются в самом SQL).
    */
-  async getLaps(filter: LapFilter = {}): Promise<LapTimeEnriched[]> {
+  async getLaps(filter: LapFilter = {}, pagination?: Pagination): Promise<LapTimeEnriched[]> {
     const conditions = [];
     if (filter.trackId != null) conditions.push(eq(lapTimes.trackId, filter.trackId));
     if (filter.driverId != null) conditions.push(eq(lapTimes.driverId, filter.driverId));
@@ -177,22 +207,72 @@ export class DatabaseStorage implements IStorage {
       eq(sessionResults.driverId, lapTimes.driverId),
     );
 
+    const baseQuery = () =>
+      db
+        .select(selection)
+        .from(lapTimes)
+        .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
+        .leftJoin(tracks, eq(lapTimes.trackId, tracks.id))
+        .leftJoin(drivers, eq(lapTimes.driverId, drivers.id))
+        .leftJoin(sessionResults, sessionResultsJoin);
+
+    let query = conditions.length ? baseQuery().where(and(...conditions)) : baseQuery();
+    if (pagination?.limit != null) query = query.limit(pagination.limit).offset(pagination.offset ?? 0) as typeof query;
+
+    const rows = await query;
+
+    return rows.map(({ lap, sessionCourse, trackName, driverName, driverTeam, isPlayer }) => ({
+      ...lap,
+      trackName: trackName ?? "—",
+      driverName: driverName ?? "—",
+      team: driverTeam ?? "—",
+      isPlayer: isPlayer ?? null,
+      sessionCourse: sessionCourse ?? null,
+    } satisfies LapTimeEnriched));
+  }
+
+  /**
+   * #121: агрегат "личный лучший круг каждого пилота на каждой трассе в
+   * каждом классе" — ровно то, что нужно лидербордам и сравнению с рекордом
+   * трассы в профиле пилота. В отличие от getLaps(), размер ответа НЕ растёт
+   * с количеством кругов — он ограничен числом реальных комбинаций
+   * трасса×класс×пилот, поэтому отдельной пагинации не требует.
+   */
+  async getBestLaps(filter: LapRecordFilter = {}): Promise<LapTimeEnriched[]> {
+    const conditions = [];
+    if (filter.trackId != null) conditions.push(eq(lapTimes.trackId, filter.trackId));
+    if (filter.driverId != null) conditions.push(eq(lapTimes.driverId, filter.driverId));
+    if (filter.carClass) conditions.push(eq(lapTimes.carClass, filter.carClass));
+    if (filter.sessionCourse) conditions.push(eq(sessions.course, filter.sessionCourse));
+
+    const selection = {
+      lap: lapTimes,
+      sessionCourse: sessions.course,
+      trackName: tracks.name,
+      driverName: drivers.name,
+      driverTeam: drivers.team,
+      isPlayer: sessionResults.isPlayer,
+    };
+    const sessionResultsJoin = and(
+      eq(sessionResults.sessionId, lapTimes.sessionId),
+      eq(sessionResults.driverId, lapTimes.driverId),
+    );
+
+    const distinctOn = [lapTimes.trackId, lapTimes.carClass, lapTimes.driverId];
+    const orderBy = [lapTimes.trackId, lapTimes.carClass, lapTimes.driverId, lapTimes.lapMs] as const;
+
+    const baseQuery = () =>
+      db
+        .selectDistinctOn(distinctOn, selection)
+        .from(lapTimes)
+        .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
+        .leftJoin(tracks, eq(lapTimes.trackId, tracks.id))
+        .leftJoin(drivers, eq(lapTimes.driverId, drivers.id))
+        .leftJoin(sessionResults, sessionResultsJoin);
+
     const rows = conditions.length
-      ? await db
-          .select(selection)
-          .from(lapTimes)
-          .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
-          .leftJoin(tracks, eq(lapTimes.trackId, tracks.id))
-          .leftJoin(drivers, eq(lapTimes.driverId, drivers.id))
-          .leftJoin(sessionResults, sessionResultsJoin)
-          .where(and(...conditions))
-      : await db
-          .select(selection)
-          .from(lapTimes)
-          .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
-          .leftJoin(tracks, eq(lapTimes.trackId, tracks.id))
-          .leftJoin(drivers, eq(lapTimes.driverId, drivers.id))
-          .leftJoin(sessionResults, sessionResultsJoin);
+      ? await baseQuery().where(and(...conditions)).orderBy(...orderBy)
+      : await baseQuery().orderBy(...orderBy);
 
     return rows.map(({ lap, sessionCourse, trackName, driverName, driverTeam, isPlayer }) => ({
       ...lap,
@@ -210,13 +290,18 @@ export class DatabaseStorage implements IStorage {
    * Теперь трасса джойнится прямо в запросе сессий, а результаты + имена
    * пилотов всех сессий разом одним запросом и группируются в памяти —
    * итого 2 запроса независимо от количества сессий.
+   *
+   * #121: добавлена offset-пагинация.
    */
-  async getSessions(): Promise<SessionEnriched[]> {
-    const sessionRows = await db
+  async getSessions(pagination?: Pagination): Promise<SessionEnriched[]> {
+    let query = db
       .select({ session: sessions, trackName: tracks.name })
       .from(sessions)
       .leftJoin(tracks, eq(sessions.trackId, tracks.id))
       .orderBy(desc(sessions.dateTime));
+    if (pagination?.limit != null) query = query.limit(pagination.limit).offset(pagination.offset ?? 0) as typeof query;
+
+    const sessionRows = await query;
 
     return this.attachSessionResults(sessionRows);
   }

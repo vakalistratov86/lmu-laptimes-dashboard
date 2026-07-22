@@ -20,6 +20,29 @@ const asyncRoute =
   (req: Request, res: Response, next: NextFunction) =>
     fn(req, res, next).catch(next);
 
+/**
+ * #121: разбор limit/offset из query-параметров списочных эндпоинтов.
+ * defaultLimit применяется только когда клиент НЕ передал limit явно —
+ * так эндпоинт никогда не отдаёт безусловно весь датасет, но не мешает
+ * осознанному запросу большей страницы (в пределах maxLimit).
+ */
+function parsePagination(
+  query: Request["query"],
+  { defaultLimit, maxLimit }: { defaultLimit: number; maxLimit: number },
+): { limit: number; offset: number } {
+  let limit = defaultLimit;
+  if (query.limit != null) {
+    const n = Number(query.limit);
+    if (Number.isFinite(n) && n > 0) limit = Math.min(Math.floor(n), maxLimit);
+  }
+  let offset = 0;
+  if (query.offset != null) {
+    const n = Number(query.offset);
+    if (Number.isFinite(n) && n >= 0) offset = Math.floor(n);
+  }
+  return { limit, offset };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -35,8 +58,9 @@ export async function registerRoutes(
     res.json(track);
   }));
 
-  app.get("/api/drivers", asyncRoute(async (_req, res) => {
-    res.json(await storage.getDrivers());
+  app.get("/api/drivers", asyncRoute(async (req, res) => {
+    const pagination = parsePagination(req.query, { defaultLimit: 500, maxLimit: 2000 });
+    res.json(await storage.getDrivers(pagination));
   }));
 
   app.get("/api/drivers/:id", asyncRoute(async (req, res) => {
@@ -64,11 +88,40 @@ export async function registerRoutes(
     if (req.query.carClass) filter.carClass = String(req.query.carClass);
     if (req.query.conditions) filter.conditions = String(req.query.conditions);
     if (req.query.sessionId) filter.sessionId = Number(req.query.sessionId);
-    res.json(await storage.getLaps(filter));
+    if (req.query.sessionCourse) filter.sessionCourse = String(req.query.sessionCourse);
+
+    // #121: без фильтра и без явного limit — эндпоинт больше никогда не
+    // отдаёт ВЕСЬ lap_times безусловно. С любым фильтром (уже ограничен
+    // реальным числом строк по смыслу) лимит применяется только если его
+    // явно попросили.
+    const hasFilter = Object.keys(filter).length > 0;
+    const explicitLimit = req.query.limit != null;
+    const pagination = hasFilter && !explicitLimit
+      ? undefined
+      : parsePagination(req.query, { defaultLimit: 500, maxLimit: 5000 });
+
+    res.json(await storage.getLaps(filter, pagination));
   }));
 
-  app.get("/api/sessions", asyncRoute(async (_req, res) => {
-    res.json(await storage.getSessions());
+  /**
+   * GET /api/laps/best — #121: личный лучший круг каждого пилота на каждой
+   * трассе в каждом классе. Заменяет паттерн "выгрузить все круги и свернуть
+   * на клиенте" (Leaderboards, Overview, Tracks, профиль пилота) — размер
+   * ответа ограничен количеством комбинаций трасса×класс×пилот, а не общим
+   * числом кругов, поэтому отдельной пагинации не требует.
+   */
+  app.get("/api/laps/best", asyncRoute(async (req, res) => {
+    const filter: { trackId?: number; driverId?: number; carClass?: string; sessionCourse?: string } = {};
+    if (req.query.trackId) filter.trackId = Number(req.query.trackId);
+    if (req.query.driverId) filter.driverId = Number(req.query.driverId);
+    if (req.query.carClass) filter.carClass = String(req.query.carClass);
+    if (req.query.sessionCourse) filter.sessionCourse = String(req.query.sessionCourse);
+    res.json(await storage.getBestLaps(filter));
+  }));
+
+  app.get("/api/sessions", asyncRoute(async (req, res) => {
+    const pagination = parsePagination(req.query, { defaultLimit: 500, maxLimit: 2000 });
+    res.json(await storage.getSessions(pagination));
   }));
 
   app.get("/api/sessions/:id", asyncRoute(async (req, res) => {

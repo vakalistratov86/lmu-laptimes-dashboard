@@ -41,6 +41,7 @@ vi.mock('../server/storage', () => ({
     getDriver:  vi.fn(),
     getDriverIncidents: vi.fn().mockResolvedValue({ incidents: [], trackLimits: [] }),
     getLaps:    vi.fn().mockResolvedValue([]),
+    getBestLaps: vi.fn().mockResolvedValue([]),
     getSessions: vi.fn().mockResolvedValue([]),
     getSession:  vi.fn(),
   },
@@ -260,7 +261,45 @@ describe('API Routes', () => {
         app.handle(mockReq, mockRes, () => resolve());
         setTimeout(resolve, 50);
       });
-      expect(storage.getLaps).toHaveBeenCalledWith(expect.objectContaining({ trackId: 3 }));
+      // #121: второй аргумент — пагинация; при заданном фильтре и без явного
+      // limit она не применяется (undefined) — фильтрованный запрос и так
+      // ограничен реальным числом строк по смыслу.
+      expect(storage.getLaps).toHaveBeenCalledWith(expect.objectContaining({ trackId: 3 }), undefined);
+    });
+
+    it('#121: без фильтра применяет дефолтный limit/offset', async () => {
+      const mockReq = {
+        method: 'GET',
+        url: '/api/laps',
+        path: '/api/laps',
+        query: {},
+        params: {},
+        headers: { 'content-type': 'application/json' },
+        body: {},
+      } as unknown as import('express').Request;
+      const mockRes = {
+        statusCode: 200,
+        _headers: {} as Record<string, string>,
+        status(code: number) { this.statusCode = code; return this; },
+        json(_data: unknown) { return this; },
+        setHeader(k: string, v: string) { this._headers[k] = v; return this; },
+        getHeader(k: string) { return this._headers[k]; },
+        send(_data: unknown) { return this; },
+      } as unknown as import('express').Response;
+      await new Promise<void>((resolve) => {
+        app.handle(mockReq, mockRes, () => resolve());
+        setTimeout(resolve, 50);
+      });
+      expect(storage.getLaps).toHaveBeenCalledWith({}, { limit: 500, offset: 0 });
+    });
+  });
+
+  // ── GET /api/laps/best ───────────────────────────────────────────────────
+  describe('GET /api/laps/best', () => {
+    it('возвращает 200 и вызывает storage.getBestLaps', async () => {
+      const res = await makeRequest(app, 'GET', '/api/laps/best');
+      expect(res.status).toBe(200);
+      expect(storage.getBestLaps).toHaveBeenCalled();
     });
   });
 
