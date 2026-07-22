@@ -46,6 +46,7 @@ const ru = {
   nav: {
     overview: "Обзор",
     leaderboards: "Лидерборды",
+    pilotProfile: "Профиль пилота",
     tracks: "Трассы",
     sessions: "Сессии",
     events: "LMU Events",
@@ -60,7 +61,9 @@ const ru = {
   },
   driverFilter: {
     label: "Пилоты",
+    labelSingle: "Пилот",
     placeholderNone: "Выбрать пилотов…",
+    placeholderNoneSingle: "Выбрать пилота…",
     selectedSuffix: "выбрано",
     searchPlaceholder: "Поиск пилота…",
     showAi: "Показать ИИ",
@@ -293,6 +296,11 @@ const ru = {
     colPoints: "Баллы",
     colDecision: "Решение",
   },
+  pilotProfile: {
+    title: "Профиль пилота",
+    subtitle: "Выберите пилота, чтобы увидеть его статистику, рекорды и историю сессий",
+    empty: "Выберите пилота из списка выше, чтобы увидеть его профиль",
+  },
   imp: {
     title: "Импорт логов игры",
     subtitle: "Подключите папку с логами результатов LMU. Файлы .xml импортируются поочерёдно.",
@@ -423,6 +431,7 @@ const en: Dict = {
   nav: {
     overview: "Overview",
     leaderboards: "Leaderboards",
+    pilotProfile: "Pilot Profile",
     tracks: "Tracks",
     sessions: "Sessions",
     events: "LMU Events",
@@ -437,7 +446,9 @@ const en: Dict = {
   },
   driverFilter: {
     label: "Drivers",
+    labelSingle: "Driver",
     placeholderNone: "Select drivers…",
+    placeholderNoneSingle: "Select a driver…",
     selectedSuffix: "selected",
     searchPlaceholder: "Search driver…",
     showAi: "Show AI",
@@ -669,6 +680,11 @@ const en: Dict = {
     colLapNum: "Lap",
     colPoints: "Points",
     colDecision: "Decision",
+  },
+  pilotProfile: {
+    title: "Pilot Profile",
+    subtitle: "Select a pilot to see their stats, records and session history",
+    empty: "Select a pilot from the list above to see their profile",
   },
   imp: {
     title: "Import game logs",
