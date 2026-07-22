@@ -253,7 +253,12 @@ export default function TrackDetail() {
   const [, params] = useRoute("/tracks/:id");
   const id = params ? Number(params.id) : undefined;
   const { data: track, isLoading: trackLoading } = useTrack(id);
-  const { data: laps, isLoading: lapsLoading } = useLaps({ trackId: id });
+  // fix: без enabled-гварда невалидный id (0 / NaN, напр. /tracks/abc) не
+  // передавался в query-параметр trackId (0/NaN — falsy) и useLaps() тихо
+  // делал ЗАПРОС ВСЕЙ таблицы lap_times без фильтра — именно то, от чего
+  // должна защищать пагинация (#121) — только чтобы отрисовать "не найдено".
+  const validId = id != null && !Number.isNaN(id);
+  const { data: laps, isLoading: lapsLoading } = useLaps({ trackId: id }, { enabled: validId });
 
   const stats = useMemo(() => {
     if (!laps || laps.length === 0) return null;
@@ -421,9 +426,9 @@ export default function TrackDetail() {
                   <tr key={l.id} className="border-t border-border hover:bg-muted/40" data-testid={`td-row-${l.id}`}>
                     <td className="px-4 py-2.5 font-data tabular-nums text-muted-foreground">{i + 1}</td>
                     <td className="px-4 py-2.5">
-                      <div className="font-medium">
+                      <Link href={`/drivers/${l.driverId}`} className="font-medium hover:underline">
                         <DriverName name={l.driverName} isPlayer={l.isPlayer} />
-                      </div>
+                      </Link>
                       <div className="text-xs text-muted-foreground">{l.team}</div>
                     </td>
                     <td className="px-4 py-2.5">

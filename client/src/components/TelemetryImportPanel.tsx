@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
+import { useImportActivity } from "@/lib/importActivity";
 
 declare module "react" {
   interface InputHTMLAttributes<T> {
@@ -23,7 +24,6 @@ declare module "react" {
 type LogLevel = "info" | "ok" | "skip" | "error";
 type LogEntry = { ts: number; level: LogLevel; text: string };
 type Counters = { total: number; queued: number; imported: number; skipped: number; failed: number };
-type ImportMode = "idle" | "scanning" | "importing";
 
 const FSA_SUPPORTED = typeof window !== "undefined" && "showDirectoryPicker" in window;
 const DB_NAME = "lmu-import-db";
@@ -148,7 +148,8 @@ export default function TelemetryImportPanel() {
 
   const [log, setLogState] = useState<LogEntry[]>(() => loadLog());
   const [counters, setCountersState] = useState<Counters>(() => loadCounters());
-  const [mode, setMode] = useState<ImportMode>("idle");
+  // Общий с хедером стейт (индикатор активности на иконке /import) — см. lib/importActivity.tsx
+  const { mode, setMode } = useImportActivity();
   const [clearing, setClearing] = useState(false);
 
   const setLog = useCallback((updater: (prev: LogEntry[]) => LogEntry[]) => {

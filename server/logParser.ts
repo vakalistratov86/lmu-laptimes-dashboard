@@ -1,6 +1,9 @@
 // Парсер логов результатов rFactor 2 / Le Mans Ultimate (<rFactorXML><RaceResults>)
-// Формат хорошо структурирован; используем лёгкий разбор без внешних XML-зависимостей.
+// #123 — построен на fast-xml-parser (реальное дерево XML вместо ad-hoc regex),
+// что корректно обрабатывает CDATA, экранированные спецсимволы и вложенные
+// одноимённые теги в разных ветках дерева.
 
+import { XMLParser } from 'fast-xml-parser';
 import { detectLogVersion, assertSupportedVersion, type LogVersion } from '@shared/parserContracts';
 
 export interface ParsedLap {
@@ -113,14 +116,94 @@ export interface ParsedSession {
   trackLimits: ParsedTrackLimit[];
 }
 
-function tagValue(xml: string, tag: string): string | null {
-  const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
-  return m ? m[1].trim() : null;
+// Теги, которые всегда должны становиться массивом, даже если в документе
+// встретился только один экземпляр (иначе fast-xml-parser даст голый объект).
+// <Name> внутри <Incident> — особый случай: там их обычно два (виновник/жертва),
+// а в <Sector>/<TrackLimits> — Name всегда один, поэтому масштабируем по jPath.
+const ALWAYS_ARRAY_TAGS = new Set(['Driver', 'Lap', 'Incident', 'Sector', 'TrackLimits']);
+
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  textNodeName: '#text',
+  trimValues: true,
+  parseTagValue: false,
+  parseAttributeValue: false,
+  isArray: (tagName, jPath) => {
+    if (ALWAYS_ARRAY_TAGS.has(tagName)) return true;
+    if (tagName === 'Name' && typeof jPath === 'string' && jPath.endsWith('.Incident.Name')) return true;
+    return false;
+  },
+});
+
+type XmlNode = Record<string, unknown>;
+
+// Рекурсивно ищет первый узел с ключом `tag` где угодно в дереве (аналог
+// ненаправленного regex-поиска по всему тексту в старой реализации).
+function findFirst(node: unknown, tag: string): unknown {
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const found = findFirst(item, tag);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  if (node && typeof node === 'object') {
+    const obj = node as XmlNode;
+    if (Object.prototype.hasOwnProperty.call(obj, tag)) {
+      const v = obj[tag];
+      return Array.isArray(v) ? v[0] : v;
+    }
+    for (const key of Object.keys(obj)) {
+      const found = findFirst(obj[key], tag);
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
 }
 
-function attrValue(attrs: string, name: string): string | null {
-  const m = attrs.match(new RegExp(`${name}="([^"]*)"`));
-  return m ? m[1] : null;
+// Рекурсивно собирает все узлы с ключом `tag` в дереве, в порядке документа.
+function collectAll(node: unknown, tag: string): XmlNode[] {
+  const out: XmlNode[] = [];
+  function walk(n: unknown) {
+    if (Array.isArray(n)) {
+      for (const item of n) walk(item);
+      return;
+    }
+    if (n && typeof n === 'object') {
+      const obj = n as XmlNode;
+      for (const key of Object.keys(obj)) {
+        if (key === tag) {
+          const v = obj[key];
+          if (Array.isArray(v)) out.push(...(v as XmlNode[]));
+          else out.push(v as XmlNode);
+        } else {
+          walk(obj[key]);
+        }
+      }
+    }
+  }
+  walk(node);
+  return out;
+}
+
+// Скалярное значение тега-потомка. null — тег отсутствует; "" — тег присутствует, но пуст.
+function scalar(node: unknown, tag: string): string | null {
+  if (!node || typeof node !== 'object') return null;
+  const v = (node as XmlNode)[tag];
+  if (v === undefined || v === null) return null;
+  if (typeof v === 'object') {
+    // Тег с атрибутами и текстом одновременно — текст лежит в #text.
+    const inner = (v as XmlNode)['#text'];
+    return inner === undefined || inner === null ? null : String(inner);
+  }
+  return String(v);
+}
+
+function attr(node: unknown, name: string): string | null {
+  if (!node || typeof node !== 'object') return null;
+  const v = (node as XmlNode)[`@_${name}`];
+  return v === undefined || v === null ? null : String(v);
 }
 
 // Секунды (строка вида "101.9073") -> целые миллисекунды. Возвращает null для служебных значений.
@@ -145,65 +228,60 @@ function toFloat(v: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function parseDriverBlock(block: string): ParsedDriver | null {
-  const name = tagValue(block, "Name");
+function parseDriverBlock(driverNode: XmlNode): ParsedDriver | null {
+  const name = scalar(driverNode, "Name");
   if (!name) return null;
 
-  const isPlayer = tagValue(block, "isPlayer") === "1";
-  const position = parseInt(tagValue(block, "Position") ?? "0", 10) || 0;
-  const classPosition = parseInt(tagValue(block, "ClassPosition") ?? "0", 10) || 0;
-  const lapRankIncludingDiscos = toInt(tagValue(block, "LapRankIncludingDiscos")); // #48
-  const carClass = tagValue(block, "CarClass") ?? "—";
-  const carType = tagValue(block, "CarType") ?? tagValue(block, "VehName") ?? "—";
-  const vehFile = tagValue(block, "VehFile");                                      // #48
-  const vehName = tagValue(block, "VehName");                                      // #48
-  const category = tagValue(block, "Category");                                    // #48
-  const controlAndAids = tagValue(block, "ControlAndAids");                        // #48
-  const connectedStr = tagValue(block, "Connected");                               // #48
+  const isPlayer = scalar(driverNode, "isPlayer") === "1";
+  const position = parseInt(scalar(driverNode, "Position") ?? "0", 10) || 0;
+  const classPosition = parseInt(scalar(driverNode, "ClassPosition") ?? "0", 10) || 0;
+  const lapRankIncludingDiscos = toInt(scalar(driverNode, "LapRankIncludingDiscos")); // #48
+  const carClass = scalar(driverNode, "CarClass") ?? "—";
+  const carType = scalar(driverNode, "CarType") ?? scalar(driverNode, "VehName") ?? "—";
+  const vehFile = scalar(driverNode, "VehFile");                                      // #48
+  const vehName = scalar(driverNode, "VehName");                                      // #48
+  const category = scalar(driverNode, "Category");                                    // #48
+  const controlAndAids = scalar(driverNode, "ControlAndAids");                        // #48
+  const connectedStr = scalar(driverNode, "Connected");                               // #48
   const connected = connectedStr != null ? (connectedStr === "1" ? 1 : 0) : null;
-  const teamName = tagValue(block, "TeamName") ?? "—";
-  const carNumber = tagValue(block, "CarNumber");
-  const laps = parseInt(tagValue(block, "Laps") ?? "0", 10) || 0;
-  const pitstops = parseInt(tagValue(block, "Pitstops") ?? "0", 10) || 0;
-  const bestLapMs = secToMs(tagValue(block, "BestLapTime"));
-  const finishStatus = tagValue(block, "FinishStatus");
+  const teamName = scalar(driverNode, "TeamName") ?? "—";
+  const carNumber = scalar(driverNode, "CarNumber");
+  const laps = parseInt(scalar(driverNode, "Laps") ?? "0", 10) || 0;
+  const pitstops = parseInt(scalar(driverNode, "Pitstops") ?? "0", 10) || 0;
+  const bestLapMs = secToMs(scalar(driverNode, "BestLapTime"));
+  const finishStatus = scalar(driverNode, "FinishStatus");
 
   // Круги: <Lap num="2" ... s1="27.44" s2="51.67" s3="22.78" ... pit="1">101.9073</Lap>
-  const lapList: ParsedLap[] = [];
-  const lapRe = /<Lap\b([^>]*)>([\s\S]*?)<\/Lap>/g;
-  let lm: RegExpExecArray | null;
-  while ((lm = lapRe.exec(block)) !== null) {
-    const attrs = lm[1];
-    const inner = lm[2];
-    const attr = (a: string): string | null => attrValue(attrs, a);
-    const num = parseInt(attr("num") ?? "0", 10) || 0;
+  const lapNodes = (driverNode.Lap as XmlNode[] | undefined) ?? [];
+  const lapList: ParsedLap[] = lapNodes.map((lapNode) => {
+    const num = parseInt(attr(lapNode, "num") ?? "0", 10) || 0;
     // #63 — читаем conditions и frontCompound из атрибутов тега <Lap>
-    const conditions = attr("wet") === "1" ? "Дождь" : (attr("conditions") ?? null);
-    const frontCompound = attr("frontCompound") ?? attr("compound") ?? null;
-    lapList.push({
+    const conditions = attr(lapNode, "wet") === "1" ? "Дождь" : (attr(lapNode, "conditions") ?? null);
+    const frontCompound = attr(lapNode, "frontCompound") ?? attr(lapNode, "compound") ?? null;
+    return {
       num,
-      lapMs: secToMs(inner),
-      s1Ms: secToMs(attr("s1")),
-      s2Ms: secToMs(attr("s2")),
-      s3Ms: secToMs(attr("s3")),
-      isPit: attr("pit") === "1",
+      lapMs: secToMs((lapNode['#text'] as string | undefined) ?? null),
+      s1Ms: secToMs(attr(lapNode, "s1")),
+      s2Ms: secToMs(attr(lapNode, "s2")),
+      s3Ms: secToMs(attr(lapNode, "s3")),
+      isPit: attr(lapNode, "pit") === "1",
       conditions,
       frontCompound,
       // Телеметрия из XML-атрибутов <Lap>
-      topSpeedKph: toFloat(attr("topspeed")),
-      fuelLevel: toFloat(attr("fuel")),
-      fuelUsed: toFloat(attr("fuelUsed")),
-      tyreFLCondition: toFloat(attr("twfl")),
-      tyreFRCondition: toFloat(attr("twfr")),
-      tyreRLCondition: toFloat(attr("twrl")),
-      tyreRRCondition: toFloat(attr("twrr")),
-      rearCompound: attr("rcompound") ?? null,
-      tyreFL: attr("FL") ?? null,
-      tyreFR: attr("FR") ?? null,
-      tyreRL: attr("RL") ?? null,
-      tyreRR: attr("RR") ?? null,
-    });
-  }
+      topSpeedKph: toFloat(attr(lapNode, "topspeed")),
+      fuelLevel: toFloat(attr(lapNode, "fuel")),
+      fuelUsed: toFloat(attr(lapNode, "fuelUsed")),
+      tyreFLCondition: toFloat(attr(lapNode, "twfl")),
+      tyreFRCondition: toFloat(attr(lapNode, "twfr")),
+      tyreRLCondition: toFloat(attr(lapNode, "twrl")),
+      tyreRRCondition: toFloat(attr(lapNode, "twrr")),
+      rearCompound: attr(lapNode, "rcompound") ?? null,
+      tyreFL: attr(lapNode, "FL") ?? null,
+      tyreFR: attr(lapNode, "FR") ?? null,
+      tyreRL: attr(lapNode, "RL") ?? null,
+      tyreRR: attr(lapNode, "RR") ?? null,
+    };
+  });
 
   return {
     name,
@@ -228,11 +306,22 @@ function parseDriverBlock(block: string): ParsedDriver | null {
   };
 }
 
-// #49 — парсинг Stream-блока
-function parseStream(
-  streamXml: string,
-  driverNameByBlock?: (block: string) => string | null,
-): {
+// Реальные логи LMU кладут данные Incident/Sector/TrackLimits в атрибуты тега
+// плюс человекочитаемое текстовое описание — а не во вложенные теги <Name>/
+// <CarClass>/<WarningPoints>, как можно было бы предположить по названиям полей.
+// Проверено на живом файле сессии (см. #123, follow-up после миграции на
+// fast-xml-parser): например,
+//   <Incident et="461.8">Abdulla Al-Khelaifi(11) reported contact (547.22) with another vehicle Jack Hawksworth(14)</Incident>
+//   <Incident et="1158.8">Vasiliy Kalistratov(0) reported contact (3542.71) with Immovable</Incident>
+//   <Sector Driver="Jonny Adam" ID="3" Sector="1" Class="GT3" et="159.7">Jonny Adam(3) set new best for sector 1</Sector>
+//   <TrackLimits Driver="Vasiliy Kalistratov" ID="0" Lap="1" WarningPoints="0" CurrentPoints="0" Resolution="7" et="248.2">No Further Action</TrackLimits>
+// Атрибута "severity" в реальных логах нет; число в скобках после "reported
+// contact" — единственный доступный количественный показатель серьёзности.
+const INCIDENT_TEXT_RE =
+  /^(.+?)\(-?\d+\)\s+reported contact\s+\(([\d.]+)\)\s+with\s+(?:Immovable|another vehicle\s+(.+?)\(-?\d+\))\s*$/;
+
+// #49 — парсинг Stream-узла
+function parseStream(streamNode: XmlNode): {
   incidents: ParsedIncident[];
   sectorBests: ParsedSectorBest[];
   trackLimits: ParsedTrackLimit[];
@@ -242,52 +331,48 @@ function parseStream(
   const trackLimits: ParsedTrackLimit[] = [];
 
   // --- Incidents ---
-  const incidentRe = /<Incident\b([^>]*)>([\s\S]*?)<\/Incident>/g;
-  let im: RegExpExecArray | null;
-  while ((im = incidentRe.exec(streamXml)) !== null) {
-    const attrs = im[1];
-    const inner = im[2];
-    const et = toFloat(attrValue(attrs, "et")) ?? 0;
-    // fix(#64): severity — атрибут тега <Incident>, а не текст в скобках
-    const severity = parseFloat(attrValue(attrs, "severity") ?? "0") || 0;
-    const names = [...inner.matchAll(/<Name>([\s\S]*?)<\/Name>/g)].map((m) => m[1].trim());
-    const isImmovable = inner.includes("<Immovable>") || inner.includes("Immovable");
+  const incidentNodes = (streamNode.Incident as XmlNode[] | undefined) ?? [];
+  for (const incNode of incidentNodes) {
+    const text = String(incNode['#text'] ?? '').trim();
+    const m = text.match(INCIDENT_TEXT_RE);
+    if (!m) continue; // нераспознанный формат текста — не создаём запись с фиктивными данными
+    const et = toFloat(attr(incNode, "et")) ?? 0;
+    const isImmovable = m[3] === undefined;
     incidents.push({
-      driverName: names[0] ?? "Unknown",
-      targetDriverName: isImmovable ? null : (names[1] ?? null),
+      driverName: m[1].trim(),
+      targetDriverName: isImmovable ? null : m[3].trim(),
       elapsedTimeSec: et,
-      severity,
+      severity: toFloat(m[2]) ?? 0,
       isImmovable,
     });
   }
 
   // --- SectorBests ---
-  const sectorRe = /<Sector\b([^>]*)>([\s\S]*?)<\/Sector>/g;
-  let sm: RegExpExecArray | null;
-  while ((sm = sectorRe.exec(streamXml)) !== null) {
-    const attrs = sm[1];
-    const inner = sm[2];
-    const et = toFloat(attrValue(attrs, "et")) ?? 0;
-    const lapNum = toInt(attrValue(attrs, "lap"));
-    const sector = toInt(attrValue(attrs, "s")) ?? 0;
-    const driverName = tagValue(inner, "Name") ?? "Unknown";
-    const carClass = tagValue(inner, "CarClass") ?? "—";
+  // Не у всех <Sector>-тегов есть атрибут Driver — тег переиспользуется и для
+  // других Stream-событий (напр. "reports new suspension damage"), которые не
+  // являются лучшим временем сектора; такие записи пропускаем.
+  const sectorNodes = (streamNode.Sector as XmlNode[] | undefined) ?? [];
+  for (const secNode of sectorNodes) {
+    const driverName = attr(secNode, "Driver");
+    if (!driverName) continue;
+    const et = toFloat(attr(secNode, "et")) ?? 0;
+    const lapNum = toInt(attr(secNode, "Lap"));
+    const sector = toInt(attr(secNode, "Sector")) ?? 0;
+    const carClass = attr(secNode, "Class") ?? "—";
     sectorBests.push({ driverName, carClass, sector, elapsedTimeSec: et, lapNum });
   }
 
   // --- TrackLimits ---
-  const tlRe = /<TrackLimits\b([^>]*)>([\s\S]*?)<\/TrackLimits>/g;
-  let tm: RegExpExecArray | null;
-  while ((tm = tlRe.exec(streamXml)) !== null) {
-    const attrs = tm[1];
-    const inner = tm[2];
-    const et = toFloat(attrValue(attrs, "et")) ?? 0;
-    const lapNum = toInt(attrValue(attrs, "lap")) ?? 0;
-    const driverName = tagValue(inner, "Name") ?? "Unknown";
-    const warningPoints = toInt(tagValue(inner, "WarningPoints"));
-    const currentPoints = toInt(tagValue(inner, "CurrentPoints"));
-    const resolution = toInt(attrValue(attrs, "Resolution") ?? tagValue(inner, "Resolution") ?? null);
-    const decision = tagValue(inner, "Decision");
+  const tlNodes = (streamNode.TrackLimits as XmlNode[] | undefined) ?? [];
+  for (const tlNode of tlNodes) {
+    const driverName = attr(tlNode, "Driver");
+    if (!driverName) continue;
+    const et = toFloat(attr(tlNode, "et")) ?? 0;
+    const lapNum = toInt(attr(tlNode, "Lap")) ?? 0;
+    const warningPoints = toInt(attr(tlNode, "WarningPoints"));
+    const currentPoints = toInt(attr(tlNode, "CurrentPoints"));
+    const resolution = toInt(attr(tlNode, "Resolution"));
+    const decision = String(tlNode['#text'] ?? '').trim() || null;
     trackLimits.push({ driverName, lapNum, elapsedTimeSec: et, warningPoints, currentPoints, resolution, decision });
   }
 
@@ -295,36 +380,31 @@ function parseStream(
 }
 
 // Определяем тип сессии по имени секции-обёртки (<Practice1>, <Qualify>, <Race> и т.п.)
-function detectSessionType(xml: string): { type: string; block: string } {
-  const known = [
-    "TestDay",
-    "Practice1",
-    "Practice2",
-    "Practice3",
-    "Practice4",
-    "Practice",
-    "Warmup",
-    "Qualify1",
-    "Qualify2",
-    "Qualify",
-    "Race1",
-    "Race2",
-    "Race",
-  ];
-  for (const t of known) {
-    const m = xml.match(new RegExp(`<${t}>([\\s\\S]*?)</${t}>`));
-    if (m) {
-      const label =
-        t.startsWith("Practice") ? "Практика" :
-        t.startsWith("Qualify") ? "Квалификация" :
-        t.startsWith("Race") ? "Гонка" :
-        t === "Warmup" ? "Прогрев" :
-        t === "TestDay" ? "Тесты" : t;
-      return { type: `${label} (${t})`, block: m[1] };
+const SESSION_TAGS: Array<[tag: string, label: string]> = [
+  ["TestDay", "Тесты"],
+  ["Practice1", "Практика"],
+  ["Practice2", "Практика"],
+  ["Practice3", "Практика"],
+  ["Practice4", "Практика"],
+  ["Practice", "Практика"],
+  ["Warmup", "Прогрев"],
+  ["Qualify1", "Квалификация"],
+  ["Qualify2", "Квалификация"],
+  ["Qualify", "Квалификация"],
+  ["Race1", "Гонка"],
+  ["Race2", "Гонка"],
+  ["Race", "Гонка"],
+];
+
+function detectSessionType(raceResults: XmlNode): { type: string; node: unknown } {
+  for (const [tag, label] of SESSION_TAGS) {
+    if (Object.prototype.hasOwnProperty.call(raceResults, tag)) {
+      const node = raceResults[tag];
+      return { type: `${label} (${tag})`, node: Array.isArray(node) ? node[0] : node };
     }
   }
   // Фолбэк: вся секция RaceResults
-  return { type: "Сессия", block: xml };
+  return { type: "Сессия", node: raceResults };
 }
 
 export function parseRaceResults(xml: string): ParsedSession | null {
@@ -332,25 +412,28 @@ export function parseRaceResults(xml: string): ParsedSession | null {
   const detectedVersion = detectLogVersion(xml);
   const logFormatVersion = assertSupportedVersion(detectedVersion, xml);
 
-  const venue = tagValue(xml, "TrackVenue") ?? tagValue(xml, "TrackCourse") ?? "Неизвестная трасса";
-  const course = tagValue(xml, "TrackCourse");  // null если тег отсутствует
+  const root = xmlParser.parse(xml);
+  const raceResults = (findFirst(root, "RaceResults") as XmlNode | undefined) ?? (root as XmlNode);
+
+  const venue = scalar(raceResults, "TrackVenue") ?? scalar(raceResults, "TrackCourse") ?? "Неизвестная трасса";
+  const course = scalar(raceResults, "TrackCourse");  // null если тег отсутствует
   // fix: "||" (not "??") — a present-but-empty <TrackEvent></TrackEvent> must also fall back to venue
-  const event = tagValue(xml, "TrackEvent") || venue;
-  const gameVersion = tagValue(xml, "GameVersion");
+  const event = scalar(raceResults, "TrackEvent") || venue;
+  const gameVersion = scalar(raceResults, "GameVersion");
 
   // #50 — trackLengthM
-  const trackLenStr = tagValue(xml, "TrackLength");
+  const trackLenStr = scalar(raceResults, "TrackLength");
   const trackLengthM = trackLenStr ? parseFloat(trackLenStr) : null;
 
   // Дата: предпочитаем Unix DateTime верхнего уровня; иначе TimeString
   let dateTimeIso: string;
   let dateTimeUnix: number | null = null; // #48
-  const unixStr = tagValue(xml, "DateTime");
+  const unixStr = scalar(raceResults, "DateTime");
   if (unixStr && /^\d+$/.test(unixStr)) {
     dateTimeUnix = parseInt(unixStr, 10); // #48
     dateTimeIso = new Date(dateTimeUnix * 1000).toISOString();
   } else {
-    const ts = tagValue(xml, "TimeString"); // "2026/07/10 20:54:44"
+    const ts = scalar(raceResults, "TimeString"); // "2026/07/10 20:54:44"
     if (ts) {
       const iso = ts.replace(/\//g, "-").replace(" ", "T");
       const d = new Date(iso);
@@ -361,41 +444,42 @@ export function parseRaceResults(xml: string): ParsedSession | null {
   }
 
   // #48 — настройки сессии
-  const setting = tagValue(xml, "Setting");
-  const raceLaps = toInt(tagValue(xml, "RaceLaps"));
-  const raceTimeMin = toInt(tagValue(xml, "RaceTime"));
-  const mechFailRate = toInt(tagValue(xml, "MechFailRate"));
-  const damageMult = toInt(tagValue(xml, "DamageMult"));
-  const fuelMult = toFloat(tagValue(xml, "FuelMult"));
-  const tireMult = toFloat(tagValue(xml, "TireMult"));
-  const vehiclesAllowed = tagValue(xml, "VehiclesAllowed");
-  const parcFerme = toInt(tagValue(xml, "ParcFerme"));
-  const fixedSetups = toInt(tagValue(xml, "FixedSetups"));
-  const freeSettings = toInt(tagValue(xml, "FreeSettings"));
-  const fixedUpgrades = toInt(tagValue(xml, "FixedUpgrades"));
-  const tireWarmers = toInt(tagValue(xml, "TireWarmers"));
-  const dedicated = toInt(tagValue(xml, "Dedicated"));
-  const sessionDurationMin = toInt(tagValue(xml, "Minutes"));
-  const sessionMaxLaps = toInt(tagValue(xml, "Laps"));
-  const mostLapsCompleted = toInt(tagValue(xml, "MostLapsCompleted"));
+  const setting = scalar(raceResults, "Setting");
+  const raceLaps = toInt(scalar(raceResults, "RaceLaps"));
+  const raceTimeMin = toInt(scalar(raceResults, "RaceTime"));
+  const mechFailRate = toInt(scalar(raceResults, "MechFailRate"));
+  const damageMult = toInt(scalar(raceResults, "DamageMult"));
+  const fuelMult = toFloat(scalar(raceResults, "FuelMult"));
+  const tireMult = toFloat(scalar(raceResults, "TireMult"));
+  const vehiclesAllowed = scalar(raceResults, "VehiclesAllowed");
+  const parcFerme = toInt(scalar(raceResults, "ParcFerme"));
+  const fixedSetups = toInt(scalar(raceResults, "FixedSetups"));
+  const freeSettings = toInt(scalar(raceResults, "FreeSettings"));
+  const fixedUpgrades = toInt(scalar(raceResults, "FixedUpgrades"));
+  const tireWarmers = toInt(scalar(raceResults, "TireWarmers"));
+  const dedicated = toInt(scalar(raceResults, "Dedicated"));
+  const sessionDurationMin = toInt(scalar(raceResults, "Minutes"));
+  const sessionMaxLaps = toInt(scalar(raceResults, "Laps"));
+  const mostLapsCompleted = toInt(scalar(raceResults, "MostLapsCompleted"));
 
-  const { type: sessionType, block: sessionBlock } = detectSessionType(xml);
+  const { type: sessionType, node: sessionNode } = detectSessionType(raceResults);
 
   // Блоки <Driver>...</Driver> ищем внутри секции сессии
   const drivers: ParsedDriver[] = [];
-  const driverRe = /<Driver>([\s\S]*?)<\/Driver>/g;
-  let dm: RegExpExecArray | null;
-  while ((dm = driverRe.exec(sessionBlock)) !== null) {
-    const parsed = parseDriverBlock(dm[1]);
+  for (const driverNode of collectAll(sessionNode, "Driver")) {
+    const parsed = parseDriverBlock(driverNode);
     if (parsed) drivers.push(parsed);
   }
 
   if (drivers.length === 0) return null;
 
   // #49 — парсим Stream-блок (если есть)
-  const streamMatch = xml.match(/<Stream>([\s\S]*?)<\/Stream>/);
-  const { incidents, sectorBests, trackLimits } = streamMatch
-    ? parseStream(streamMatch[1])
+  // Stream может лежать как прямым потомком RaceResults, так и внутри секции
+  // конкретной сессии (напр. <Practice1><Stream>...), поэтому ищем рекурсивно —
+  // как и старый regex-парсер, искавший <Stream> по всему сырому тексту.
+  const streamNode = findFirst(raceResults, "Stream") as XmlNode | undefined;
+  const { incidents, sectorBests, trackLimits } = streamNode
+    ? parseStream(streamNode)
     : { incidents: [], sectorBests: [], trackLimits: [] };
 
   return {

@@ -5,8 +5,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
-import { DriverFilterProvider } from "@/lib/driverFilter";
 import { LanguageProvider } from "@/lib/i18n";
+import { ImportActivityProvider } from "@/lib/importActivity";
 import NotFound from "@/pages/not-found";
 import Overview from "@/pages/Overview";
 import Leaderboards from "@/pages/Leaderboards";
@@ -16,6 +16,8 @@ import Sessions from "@/pages/Sessions";
 import SessionDetail from "@/pages/SessionDetail";
 import Telemetry from "@/pages/Telemetry";
 import TelemetryDetail from "@/pages/TelemetryDetail";
+import DriverDetail from "@/pages/DriverDetail";
+import PilotProfile from "@/pages/PilotProfile";
 import Import from "@/pages/Import";
 import Events from "@/pages/Events";
 
@@ -30,6 +32,8 @@ function AppRouter() {
       <Route path="/sessions/:id" component={SessionDetail} />
       <Route path="/telemetry" component={Telemetry} />
       <Route path="/telemetry/:id" component={TelemetryDetail} />
+      <Route path="/drivers/:id" component={DriverDetail} />
+      <Route path="/profile" component={PilotProfile} />
       <Route path="/events" component={Events} />
       <Route path="/import" component={Import} />
       <Route component={NotFound} />
@@ -41,16 +45,16 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>
-        <TooltipProvider>
-          <Toaster />
-          <DriverFilterProvider>
+        <ImportActivityProvider>
+          <TooltipProvider>
+            <Toaster />
             <Router hook={useHashLocation}>
               <AppLayout>
                 <AppRouter />
               </AppLayout>
             </Router>
-          </DriverFilterProvider>
-        </TooltipProvider>
+          </TooltipProvider>
+        </ImportActivityProvider>
       </LanguageProvider>
     </QueryClientProvider>
   );

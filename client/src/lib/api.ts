@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./queryClient";
-import type { Track, DriverEnriched, LapTimeEnriched, SessionEnriched, TelemetrySession } from "@shared/schema";
+import type { Track, DriverEnriched, LapTimeEnriched, SessionEnriched, TelemetrySession, DriverIncidentsResponse } from "@shared/schema";
 
 export function useTracks() {
   return useQuery<Track[]>({ queryKey: ["/api/tracks"] });
@@ -17,12 +17,22 @@ export function useDrivers() {
   return useQuery<DriverEnriched[]>({ queryKey: ["/api/drivers"] });
 }
 
-export function useLaps(filter?: {
-  trackId?: number;
-  driverId?: number;
-  carClass?: string;
-  conditions?: string;
-}) {
+export function useDriverIncidents(id: number | undefined) {
+  return useQuery<DriverIncidentsResponse>({
+    queryKey: ["/api/drivers", id, "incidents"],
+    enabled: id != null && !Number.isNaN(id),
+  });
+}
+
+export function useLaps(
+  filter?: {
+    trackId?: number;
+    driverId?: number;
+    carClass?: string;
+    conditions?: string;
+  },
+  options?: { enabled?: boolean },
+) {
   const params = new URLSearchParams();
   if (filter?.trackId) params.set("trackId", String(filter.trackId));
   if (filter?.driverId) params.set("driverId", String(filter.driverId));
@@ -31,8 +41,35 @@ export function useLaps(filter?: {
   const qs = params.toString();
   return useQuery<LapTimeEnriched[]>({
     queryKey: ["/api/laps", qs],
+    enabled: options?.enabled,
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/laps${qs ? `?${qs}` : ""}`);
+      return res.json();
+    },
+  });
+}
+
+/**
+ * #121: личный лучший круг каждого пилота на каждой трассе в каждом классе —
+ * бесконечно не растёт с числом кругов (в отличие от useLaps() без фильтра).
+ * Используется там, где раньше грузился весь /api/laps ради кросс-пилотного
+ * сравнения: Leaderboards, Overview, Tracks, сравнение с рекордом трассы
+ * в профиле пилота.
+ */
+export function useBestLaps(filter?: {
+  trackId?: number;
+  driverId?: number;
+  carClass?: string;
+}) {
+  const params = new URLSearchParams();
+  if (filter?.trackId) params.set("trackId", String(filter.trackId));
+  if (filter?.driverId) params.set("driverId", String(filter.driverId));
+  if (filter?.carClass) params.set("carClass", filter.carClass);
+  const qs = params.toString();
+  return useQuery<LapTimeEnriched[]>({
+    queryKey: ["/api/laps/best", qs],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/laps/best${qs ? `?${qs}` : ""}`);
       return res.json();
     },
   });
@@ -70,11 +107,20 @@ export function useSession(id: number | undefined) {
 export type ImportFileResult = {
   fileName: string;
   ok: boolean;
-  message: string;
+  // true для ЛЮБОЙ причины пропуска файла (пустой/дубликат/0 кругов) —
+  // единственное надёжное поле для различения "пропущен" от "ошибка"; `ok`
+  // сам по себе не годится, т.к. false как для пропуска, так и для ошибки.
+  skipped?: boolean;
+  message?: string;
+  status?: number;
+  importId?: string;
+  importStatus?: string;
   sessionId?: number;
   event?: string;
   venue?: string;
+  sessionType?: string;
   laps?: number;
+  errorLaps?: number;
   drivers?: number;
 };
 

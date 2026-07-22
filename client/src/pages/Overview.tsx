@@ -1,7 +1,6 @@
-import { useLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
-import { useDriverFilter } from "@/lib/driverFilter";
-import { formatLap, getClassChartColor } from "@/lib/format";
-import { normalizeSessionCategory, CLASS_ORDER, getClassBadgeClass, type SessionCategory } from "@/lib/classStyles";
+import { useBestLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
+import { formatLap } from "@/lib/format";
+import { normalizeSessionCategory, getClassBadgeClass, type SessionCategory } from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,11 +10,8 @@ import { SessionTypeBadge } from "@/components/SessionTypeBadge";
 import { ActivityTile } from "@/components/ActivityTile";
 import { Link } from "wouter";
 import {
-  Gauge, Route, Flag, Users, RefreshCw, Car, User, Bot, History, ChevronRight, Upload,
+  Gauge, Route, Flag, Users, RefreshCw, Car, User, Bot, History, ChevronRight, Upload, MapPin,
 } from "lucide-react";
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
-} from "recharts";
 import { useMemo } from "react";
 import type { SessionEnriched } from "@/lib/api";
 
@@ -65,23 +61,19 @@ function getSessionBestLapMs(session: SessionEnriched): number | null {
 
 export default function Overview() {
   const { t, locale, intlLocale } = useLanguage();
-  const { data: laps, isLoading } = useLaps();
+  // #121: агрегат "личный лучший круг на трассу+класс" вместо всех кругов
+  // системы — для лучшего круга сезона и графика "лучшее время по трассам"
+  // достаточно этого куда меньшего набора.
+  const { data: laps, isLoading } = useBestLaps();
   const { data: tracks } = useTracks();
   const { data: drivers } = useDrivers();
   const { data: sessions } = useSessions();
-  const { selectedDriverIds, isFiltered } = useDriverFilter();
 
   /** Форматирует дистанцию в метрах: < 1000 → «X м», иначе → «X.XX км» */
   const formatDistance = (meters: number): string => {
     if (meters < 1000) return `${Math.round(meters)} ${t("overview.meters")}`;
     return `${(meters / 1000).toFixed(2)} ${t("overview.km")}`;
   };
-
-  const filteredLaps = useMemo(() => {
-    if (!laps) return [];
-    if (!isFiltered) return laps;
-    return laps.filter((l) => selectedDriverIds.has(l.driverId));
-  }, [laps, selectedDriverIds, isFiltered]);
 
   // Реальные и ИИ игроки из результатов сессий
   const { realPlayerCount, aiPlayerCount } = useMemo(() => {
@@ -178,40 +170,22 @@ export default function Overview() {
     );
   }
 
-  if (filteredLaps.length === 0) {
-    return (
-      <div className="space-y-6">
-        <PageTitle />
-        <p className="py-16 text-center text-sm text-muted-foreground">
-          {t("overview.noDataForDrivers")}
-        </p>
-      </div>
-    );
-  }
+  const bestLap = laps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a), laps[0]);
 
-  const bestLap = filteredLaps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a), filteredLaps[0]);
-
-  const bestByTrack = new Map<string, { ms: number; carClass: string }>();
-  for (const l of filteredLaps) {
+  const bestByTrack = new Map<string, {
+    ms: number; carClass: string; driverId: number; driverName: string; isPlayer: number | null;
+  }>();
+  for (const l of laps) {
     const cur = bestByTrack.get(l.trackName);
-    if (!cur || l.lapMs < cur.ms) bestByTrack.set(l.trackName, { ms: l.lapMs, carClass: l.carClass });
+    if (!cur || l.lapMs < cur.ms) {
+      bestByTrack.set(l.trackName, {
+        ms: l.lapMs, carClass: l.carClass, driverId: l.driverId, driverName: l.driverName, isPlayer: l.isPlayer,
+      });
+    }
   }
-  const chartData = Array.from(bestByTrack.entries())
-    .map(([name, { ms, carClass }]) => ({ name, seconds: +(ms / 1000).toFixed(1), label: formatLap(ms), carClass }))
-    .sort((a, b) => a.seconds - b.seconds);
-
-  const chartClasses = Array.from(new Set(chartData.map((d) => d.carClass))).sort((a, b) => {
-    const ai = CLASS_ORDER.indexOf(a as typeof CLASS_ORDER[number]);
-    const bi = CLASS_ORDER.indexOf(b as typeof CLASS_ORDER[number]);
-    if (ai === -1 && bi === -1) return a.localeCompare(b);
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
-
-  const filteredDriverCount = isFiltered
-    ? selectedDriverIds.size
-    : (drivers?.length ?? 0);
+  const trackBests = Array.from(bestByTrack.entries())
+    .map(([trackName, v]) => ({ trackName, ...v }))
+    .sort((a, b) => a.ms - b.ms);
 
   const totalPlayers = realPlayerCount + aiPlayerCount;
   const realPct = totalPlayers > 0 ? (realPlayerCount / totalPlayers) * 100 : 0;
@@ -237,7 +211,9 @@ export default function Overview() {
               {formatLap(bestLap.lapMs)}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-              <DriverName name={bestLap.driverName} isPlayer={bestLap.isPlayer} className="font-medium text-foreground" />
+              <Link href={`/drivers/${bestLap.driverId}`} className="hover:underline">
+                <DriverName name={bestLap.driverName} isPlayer={bestLap.isPlayer} className="font-medium text-foreground" />
+              </Link>
               <span className="inline-flex items-center gap-1.5">
                 <Car size={14} />
                 {bestLap.car}
@@ -259,8 +235,8 @@ export default function Overview() {
             testId="drivers"
             icon={Users}
             label={t("overview.kpiDrivers")}
-            value={String(filteredDriverCount)}
-            sub={isFiltered ? t("overview.kpiDriversSubSelected") : t("overview.kpiDriversSubAll")}
+            value={String(drivers?.length ?? 0)}
+            sub={t("overview.kpiDriversSubAll")}
           />
           <HeroStat testId="laps-completed" icon={RefreshCw} label={t("overview.kpiLapsCompleted")} value={String(totalLapsCompleted)} sub={t("overview.kpiLapsCompletedSub")} />
         </div>
@@ -303,43 +279,44 @@ export default function Overview() {
 
       {/* Лучшее время по трассам */}
       <Card className="p-5">
-        <div className="mb-1 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{t("overview.chartTitle")}</h2>
           <span className="text-xs text-muted-foreground">{t("overview.chartSubtitle")}</span>
         </div>
-        <div className="mb-3 flex flex-wrap gap-3">
-          {chartClasses.map((cls) => (
-            <span key={cls} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className="h-2 w-2 rounded-sm" style={{ background: getClassChartColor(cls) }} />
-              {cls}
-            </span>
-          ))}
-        </div>
-        <div style={{ height: 340 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 60 }}>
-              <CartesianGrid horizontal={false} stroke="hsl(var(--border))" />
-              <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-              <YAxis
-                type="category" dataKey="name" width={120}
-                stroke="hsl(var(--muted-foreground))" fontSize={12}
-              />
-              <Tooltip
-                cursor={{ fill: "hsl(var(--muted) / 0.3)" }}
-                contentStyle={{
-                  background: "hsl(var(--popover))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: 8, fontSize: 13,
-                }}
-                formatter={(_v: any, _n: any, p: any) => [`${p.payload.label} · ${p.payload.carClass}`, t("overview.chartTooltipLap")]}
-              />
-              <Bar dataKey="seconds" radius={[0, 4, 4, 0]}>
-                {chartData.map((d, i) => (
-                  <Cell key={i} fill={getClassChartColor(d.carClass)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2.5 text-left font-medium">{t("overview.colPilot")}</th>
+                <th className="px-4 py-2.5 text-left font-medium">{t("overview.colTrack")}</th>
+                <th className="px-4 py-2.5 text-left font-medium">{t("overview.colClass")}</th>
+                <th className="px-4 py-2.5 text-right font-medium">{t("overview.colTime")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trackBests.map((row) => (
+                <tr key={row.trackName} className="border-t border-border hover:bg-muted/40">
+                  <td className="px-4 py-2.5">
+                    <Link href={`/drivers/${row.driverId}`} className="hover:underline">
+                      <DriverName name={row.driverName} isPlayer={row.isPlayer} />
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className="inline-flex items-center gap-1.5">
+                      <MapPin size={13} className="text-muted-foreground" />
+                      {row.trackName}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Badge variant="outline" className={getClassBadgeClass(row.carClass)}>{row.carClass}</Badge>
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-data font-bold tabular-nums">
+                    {formatLap(row.ms)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
 

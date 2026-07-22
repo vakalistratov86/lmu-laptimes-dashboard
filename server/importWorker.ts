@@ -7,7 +7,8 @@
  *
  * Pipeline: parse → validate (#9) → normalize (#10) → persist / DLQ (#8)
  * Импорт считается успешным, если валидных круга >= VALID_LAP_THRESHOLD_PCT% (#8).
- * Файлы с 0 кругами пропускаются: счётчик skipped++, статус "skipped" (ZERO_LAPS).
+ * Файлы с 0 кругами ИЛИ 0 участниками пропускаются: счётчик skipped++,
+ * статус "skipped" (ZERO_LAPS) — обе ситуации означают "нечего импортировать".
  * Структурированное логирование JSON через server/logger.ts (#12).
  *
  * runImport() экспортирован для прямого вызова из routes.ts (синхронный импорт).
@@ -20,7 +21,7 @@ import {
   sessionLaps, sessionIncidents, sessionSectorBests, sessionTrackLimits,
   tracks, drivers,
 } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { parseRaceResults, type ParsedSession } from "./logParser";
 import { validateLapTime } from "@shared/validators";
 import { normalizeLapTime, normalizeDriverNameForStorage, normalizeTrackName, toMilliseconds } from "./normalizer";
@@ -183,6 +184,13 @@ export interface ImportResult {
   totalLaps: number;
   validLaps: number;
   errorLaps: number;
+  // Для информативного журнала импорта на клиенте (#122 follow-up) —
+  // раньше routes.ts не получал event/venue вообще, и строка "успешно
+  // импортирован" в журнале всегда показывала пустое название сессии.
+  event: string;
+  venue: string;
+  sessionType: string;
+  driverCount: number;
 }
 
 /**
@@ -205,8 +213,21 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     }
     throw new Error(`Ошибка разбора: ${err.message}`);
   }
+  // Файл без единого валидного участника (0 <Driver> в детектированной секции
+  // сессии) по построению означает и 0 кругов — тот же случай "нечего
+  // импортировать", что и ZERO_LAPS ниже, просто более крайний. Раньше это
+  // считалось "ошибкой", а не пропуском, хотя семантически файл может быть
+  // абсолютно валидным логом LMU (напр. сессия, из которой все отключились
+  // до того, как игра записала хотя бы одного участника).
   if (!parsed) {
-    throw new Error("Не похоже на лог результатов LMU/rFactor (нет RaceResults)");
+    logImportSkipped({
+      importJobId: job.id,
+      fileName: job.fileName,
+      reason: 'ZERO_LAPS',
+    });
+    const err = new Error(`Файл пропущен: в логе не найдено ни одного участника (0 пилотов, 0 кругов)`);
+    (err as any).code = 'ZERO_LAPS';
+    throw err;
   }
 
   // Проверяем наличие кругов во всех водителях
@@ -265,6 +286,17 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     }).returning();
     const session = sessionRows[0];
 
+    // Пакетно предзагружаем/создаём всех пилотов сессии ОДНИМ запросом вместо
+    // одного запроса на каждого пилота (та же категория проблемы, что и N+1
+    // full-table-scan в getSessions()/getLaps(), см. #119/#120): раньше
+    // findOrCreateDriver() делала SELECT * FROM drivers на каждый вызов —
+    // полное сканирование всей таблицы пилотов для КАЖДОГО участника КАЖДОГО
+    // импортируемого файла.
+    const driversByNormalizedName = await findOrCreateDrivers(
+      tx,
+      parsed!.drivers.map((d) => ({ name: normalizeDriverNameForStorage(d.name), team: d.teamName })),
+    );
+
     const driverIdByName = new Map<string, number>();
     const lapTimeRows: any[] = [];
     const sessionLapRows: any[] = [];
@@ -274,7 +306,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
     for (const d of parsed!.drivers) {
       const normalizedName = normalizeDriverNameForStorage(d.name);
-      const driver = await findOrCreateDriver(tx, normalizedName, d.teamName);
+      const driver = driversByNormalizedName.get(normalizedName.toLowerCase())!;
       driverIdByName.set(normalizedName.toLowerCase(), driver.id);
       const cls = normalizeClass(d.carClass);
 
@@ -435,13 +467,41 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       }
     }
 
+    // Stream-события (инциденты/секторы/трек-лимиты), ссылающиеся на пилота,
+    // которого нет среди участников этой сессии (напр. кто-то отключился
+    // или был исключён), раньше молча пропадали (continue без следа). Теперь
+    // такие записи фиксируются в DLQ (import_errors) и логируются как warn —
+    // видно и в GET /api/import/:id/errors, и в консоли, а не теряются бесследно.
+    const streamDlqRows: any[] = [];
+    const logUnknownStreamDriver = (
+      kind: "incident" | "sectorBest" | "trackLimit",
+      driverName: string,
+      payload: unknown,
+    ) => {
+      const message = `Stream-событие "${kind}" ссылается на неизвестного пилота "${driverName}" — не найден среди участников сессии`;
+      logParseError(
+        { importJobId: job.id, raw: JSON.stringify(payload), code: "SEMANTIC_ERROR" },
+        message,
+      );
+      streamDlqRows.push({
+        importJobId: job.id,
+        rawPayload: JSON.stringify(payload),
+        errorCode: "SEMANTIC_ERROR",
+        errorMessage: message,
+        occurredAt: Date.now(),
+      });
+    };
+
     // Инциденты
     for (const inc of parsed!.incidents) {
-      const normalizedIncDriver = inc.driverName.trim().toLowerCase();
+      const normalizedIncDriver = normalizeDriverNameForStorage(inc.driverName).toLowerCase();
       const driverId = driverIdByName.get(normalizedIncDriver);
-      if (driverId == null) continue;
+      if (driverId == null) {
+        logUnknownStreamDriver("incident", inc.driverName, inc);
+        continue;
+      }
       const targetDriverId = inc.targetDriverName
-        ? (driverIdByName.get(inc.targetDriverName.trim().toLowerCase()) ?? null)
+        ? (driverIdByName.get(normalizeDriverNameForStorage(inc.targetDriverName).toLowerCase()) ?? null)
         : null;
       await tx.insert(sessionIncidents).values({
         sessionId: session.id,
@@ -455,9 +515,12 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
     // Лучшие времена секторов
     for (const sb of parsed!.sectorBests) {
-      const normalizedSbDriver = sb.driverName.trim().toLowerCase();
+      const normalizedSbDriver = normalizeDriverNameForStorage(sb.driverName).toLowerCase();
       const driverId = driverIdByName.get(normalizedSbDriver);
-      if (driverId == null) continue;
+      if (driverId == null) {
+        logUnknownStreamDriver("sectorBest", sb.driverName, sb);
+        continue;
+      }
       await tx.insert(sessionSectorBests).values({
         sessionId: session.id,
         driverId,
@@ -470,9 +533,12 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
     // Нарушения трассы
     for (const tl of parsed!.trackLimits) {
-      const normalizedTlDriver = tl.driverName.trim().toLowerCase();
+      const normalizedTlDriver = normalizeDriverNameForStorage(tl.driverName).toLowerCase();
       const driverId = driverIdByName.get(normalizedTlDriver);
-      if (driverId == null) continue;
+      if (driverId == null) {
+        logUnknownStreamDriver("trackLimit", tl.driverName, tl);
+        continue;
+      }
       await tx.insert(sessionTrackLimits).values({
         sessionId: session.id,
         driverId,
@@ -485,12 +551,27 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       });
     }
 
+    // Batch insert DLQ для Stream-событий — отдельно от dlqRows кругов (#8):
+    // не должны влиять на порог валидных кругов, проверенный чуть выше.
+    for (let i = 0; i < streamDlqRows.length; i += CHUNK_SIZE) {
+      await tx.insert(importErrors).values(streamDlqRows.slice(i, i + CHUNK_SIZE));
+    }
+
     // Атомарное обновление lapCount внутри транзакции (#11)
     await tx.update(sessions)
       .set({ lapCount: validLapsCount })
       .where(eq(sessions.id, session.id));
 
-    return { sessionId: session.id, totalLaps: totalLapsCount, validLaps: validLapsCount, errorLaps: dlqRows.length };
+    return {
+      sessionId: session.id,
+      totalLaps: totalLapsCount,
+      validLaps: validLapsCount,
+      errorLaps: dlqRows.length,
+      event: parsed!.event,
+      venue: parsed!.venue,
+      sessionType: parsed!.sessionType,
+      driverCount: parsed!.drivers.length,
+    };
   });
 
   return result;
@@ -509,13 +590,17 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 const TRACK_LENGTH_MATCH_TOLERANCE_KM = 0.05;
 
 async function findOrCreateTrack(tx: any, parsed: ParsedSession): Promise<Track> {
-  const all = await tx.select().from(tracks);
   const course = parsed.course;
   const canonicalName = canonicalTrackName(parsed.venue).name.toLowerCase();
   const parsedCourseNorm = (course ?? "").toLowerCase();
   const parsedLengthKm = parsed.trackLengthM ? parsed.trackLengthM / 1000 : null;
 
-  const sameName = all.filter((t: Track) => t.name.toLowerCase() === canonicalName);
+  // Только треки с совпадающим канонич. названием — вместо SELECT * FROM tracks
+  // (полное сканирование всей таблицы на каждый импорт ради JS-фильтрации).
+  const sameName: Track[] = await tx
+    .select()
+    .from(tracks)
+    .where(eq(sql`lower(${tracks.name})`, canonicalName));
 
   // 1) Точное совпадение по названию конфигурации (course/layout).
   const exactMatch = sameName.find((t: Track) => {
@@ -547,16 +632,44 @@ async function findOrCreateTrack(tx: any, parsed: ParsedSession): Promise<Track>
   return rows[0];
 }
 
-async function findOrCreateDriver(tx: any, name: string, team: string): Promise<Driver> {
-  const all = await tx.select().from(drivers);
-  const found = all.find((d: Driver) => d.name.toLowerCase() === name.toLowerCase());
-  if (found) return found;
-  const rows = await tx.insert(drivers).values({
-    name,
-    team: team || "—",
-    country: guessCountry(name),
-  }).returning();
-  return rows[0];
+/**
+ * Пакетно находит/создаёт пилотов для всех участников сессии за 1 SELECT
+ * (по всем именам сразу) + по 1 INSERT на реально нового пилота — вместо
+ * SELECT * FROM drivers (полное сканирование всей таблицы) на КАЖДОГО
+ * участника, как это было раньше. Возвращает Map по имени в нижнем регистре.
+ */
+async function findOrCreateDrivers(
+  tx: any,
+  entries: Array<{ name: string; team: string }>,
+): Promise<Map<string, Driver>> {
+  const byKey = new Map<string, { name: string; team: string }>();
+  for (const e of entries) {
+    const key = e.name.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, e);
+  }
+
+  const result = new Map<string, Driver>();
+  if (byKey.size === 0) return result;
+
+  const existing: Driver[] = await tx
+    .select()
+    .from(drivers)
+    .where(inArray(sql`lower(${drivers.name})`, Array.from(byKey.keys())));
+  for (const d of existing) {
+    result.set(d.name.toLowerCase(), d);
+  }
+
+  for (const [key, e] of Array.from(byKey.entries())) {
+    if (result.has(key)) continue;
+    const rows = await tx.insert(drivers).values({
+      name: e.name,
+      team: e.team || "—",
+      country: guessCountry(e.name),
+    }).returning();
+    result.set(key, rows[0]);
+  }
+
+  return result;
 }
 
 function normalizeClass(raw: string): string {

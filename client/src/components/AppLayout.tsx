@@ -1,21 +1,24 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Trophy, Flag, ListChecks, Upload, Moon, Sun, Menu, X, CalendarDays, Activity } from "lucide-react";
+import { LayoutDashboard, Trophy, Flag, ListChecks, Upload, Moon, Sun, Menu, X, CalendarDays, Activity, User } from "lucide-react";
 import { Logo } from "./Logo";
-import { DriverFilterBar } from "./DriverFilterBar";
 import { useState, useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useLanguage, type Locale } from "@/lib/i18n";
+import { useImportActivity } from "@/lib/importActivity";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
+// Импорт логов перенесён из бокового меню в иконку хедера (см. ImportButton) —
+// в основном списке навигации страниц больше не участвует.
 function useNav() {
   const { t } = useLanguage();
   return [
     { href: "/", label: t("nav.overview"), icon: LayoutDashboard, testId: "link-overview" },
     { href: "/leaderboards", label: t("nav.leaderboards"), icon: Trophy, testId: "link-leaderboards" },
+    { href: "/profile", label: t("nav.pilotProfile"), icon: User, testId: "link-pilot-profile" },
     { href: "/tracks", label: t("nav.tracks"), icon: Flag, testId: "link-tracks" },
     { href: "/sessions", label: t("nav.sessions"), icon: ListChecks, testId: "link-sessions" },
     { href: "/telemetry", label: t("nav.telemetry"), icon: Activity, testId: "link-telemetry" },
     { href: "/events", label: t("nav.events"), icon: CalendarDays, testId: "link-events" },
-    { href: "/import", label: t("nav.import"), icon: Upload, testId: "link-import" },
   ];
 }
 
@@ -107,6 +110,44 @@ function LanguageSwitcher() {
   );
 }
 
+/**
+ * Иконка перехода на /import в хедере (раньше — пункт бокового меню).
+ * Пульсирующая точка показывает, что скан/импорт идёт в фоне, даже если
+ * пользователь ушёл со страницы — mode приходит из общего ImportActivityContext,
+ * в который пишут и Import.tsx (вкладка логов), и TelemetryImportPanel.tsx.
+ */
+function ImportButton() {
+  const { t } = useLanguage();
+  const { mode } = useImportActivity();
+  const [location] = useLocation();
+  const active = location.startsWith("/import");
+  const isBusy = mode !== "idle";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          href="/import"
+          data-testid="button-header-import"
+          aria-label={t("nav.import")}
+          className={cn(
+            "relative flex h-9 w-9 items-center justify-center rounded-md border transition-colors hover-elevate",
+            active
+              ? "border-primary/30 bg-primary/10 text-primary"
+              : "border-border text-muted-foreground",
+          )}
+        >
+          <Upload size={16} />
+          {isBusy && (
+            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-primary" />
+          )}
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{t("nav.import")}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { theme, toggle } = useTheme();
   const { t } = useLanguage();
@@ -116,9 +157,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   useEffect(() => { setMobileOpen(false); }, [location]);
 
   return (
-    <div className="grid h-[100dvh] grid-cols-1 grid-rows-[auto_auto_1fr] overflow-hidden bg-background md:grid-cols-[15rem_1fr]">
+    <div className="grid h-[100dvh] grid-cols-1 grid-rows-[auto_1fr] overflow-hidden bg-background md:grid-cols-[15rem_1fr]">
       {/* Desktop sidebar */}
-      <aside className="row-span-3 hidden w-60 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar [overscroll-behavior:contain] md:flex">
+      <aside className="row-span-2 hidden w-60 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar [overscroll-behavior:contain] md:flex">
         <SidebarContent />
       </aside>
 
@@ -153,6 +194,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <ImportButton />
           <LanguageSwitcher />
           <button
             data-testid="button-theme-toggle"
@@ -164,11 +206,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
       </header>
-
-      {/* Driver filter bar — row 2, sticky below header */}
-      <div className="sticky top-[57px] z-[9] md:col-start-2">
-        <DriverFilterBar />
-      </div>
 
       {/* Main */}
       <main className="overflow-y-auto [overscroll-behavior:contain] md:col-start-2">

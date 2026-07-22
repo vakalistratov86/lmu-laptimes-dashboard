@@ -11,7 +11,7 @@ export function formatLap(ms: number): string {
 }
 
 // Форматирование сектора в SS.mmm
-export function formatSector(ms: number): string {
+export function formatSector(ms: number | null): string {
   if (!ms || ms <= 0) return "—";
   const seconds = Math.floor(ms / 1000);
   const millis = ms % 1000;
@@ -57,6 +57,23 @@ export const CONDITION_LABELS: Record<string, string> = {
   "Дождь": "Дождь",
   "Смешанно": "Смешанно",
 };
+
+/**
+ * A session's course only identifies a distinct track layout when it actually
+ * differs from the venue name. Some LMU logs write the course tag as a plain
+ * copy of the venue (or leave it blank) while others record it for the same
+ * physical track — without this, those sessions would be treated as a second,
+ * near-identical track layout for the same track.
+ *
+ * Shared between Leaderboards.tsx (splits leaderboard boards by course) and
+ * DriverProfile.tsx (must key personal-best/track-record lookups the same
+ * way getBestLaps() on the server groups its rows — see #123 follow-up).
+ */
+export function normalizeCourse(course: string | null | undefined, trackName: string): string | null {
+  const trimmed = course?.trim();
+  if (!trimmed) return null;
+  return trimmed.toLowerCase() === trackName.trim().toLowerCase() ? null : trimmed;
+}
 
 export function countryFlag(code: string): string {
   const map: Record<string, string> = {

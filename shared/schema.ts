@@ -324,3 +324,29 @@ export type SessionFull = SessionEnriched & {
   sectorBests: SessionSectorBest[];
   trackLimits: SessionTrackLimits[];
 };
+
+// Инциденты/нарушения одного пилота, обогащённые контекстом сессии — для
+// страницы профиля пилота (GET /api/drivers/:id/incidents).
+//
+// Инцидент попадает в выборку пилота, если он в нём driver_id (виновник)
+// ИЛИ target_driver_id (пострадавший) — role/otherDriverName нормализуют
+// это к точке зрения запрошенного пилота независимо от того, как строка
+// хранится в БД.
+export type SessionIncidentEnriched = SessionIncident & {
+  trackName: string;
+  dateTime: string;
+  /** "caused" — запрошенный пилот виновник, "received" — пострадавшая сторона. */
+  role: "caused" | "received";
+  /** Имя второго участника (или null для удара о неподвижный объект). */
+  otherDriverName: string | null;
+};
+
+export type SessionTrackLimitsEnriched = SessionTrackLimits & {
+  trackName: string;
+  dateTime: string;
+};
+
+export type DriverIncidentsResponse = {
+  incidents: SessionIncidentEnriched[];
+  trackLimits: SessionTrackLimitsEnriched[];
+};

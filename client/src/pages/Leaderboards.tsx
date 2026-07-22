@@ -1,8 +1,7 @@
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
-import { useLaps, useTracks } from "@/lib/api";
-import { useDriverFilter } from "@/lib/driverFilter";
-import { formatLap, formatDelta } from "@/lib/format";
+import { useBestLaps, useTracks } from "@/lib/api";
+import { formatLap, formatDelta, normalizeCourse } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +11,7 @@ import {
 import { Trophy, Medal, Upload } from "lucide-react";
 import { CLASS_ORDER, getClassBadgeClass, getClassAccentClass } from "@/lib/classStyles";
 import { DriverName } from "@/components/DriverName";
+import { DriverFilterBar } from "@/components/DriverFilterBar";
 import { useLanguage } from "@/lib/i18n";
 
 type LapRow = {
@@ -53,19 +53,6 @@ function formatRecordDate(dateStr: string | undefined, intlLocale: string): stri
   } catch {
     return dateStr;
   }
-}
-
-/**
- * A session's course only identifies a distinct track layout when it actually
- * differs from the venue name. Some LMU logs write the course tag as a plain
- * copy of the venue (or leave it blank) while others record it for the same
- * physical track — without this, those sessions split into a second,
- * near-identical leaderboard card for the same track.
- */
-function normalizeCourse(course: string | null | undefined, trackName: string): string | null {
-  const trimmed = course?.trim();
-  if (!trimmed) return null;
-  return trimmed.toLowerCase() === trackName.trim().toLowerCase() ? null : trimmed;
 }
 
 function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
@@ -115,8 +102,34 @@ export default function Leaderboards() {
   const [classFilter, setClassFilter] = useState<string>("all");
   const [courseFilter, setCourseFilter] = useState<string>("all");
   const { data: tracks } = useTracks();
-  const { data: laps, isLoading } = useLaps();
-  const { selectedDriverIds, isFiltered: globalFiltered } = useDriverFilter();
+  // #121: агрегат "личный лучший круг на трассу+класс" вместо всех кругов
+  // системы — buildBoards() ниже уже и так сворачивал круги до одного per
+  // (трасса,класс,пилот) через Map, поэтому дальнейшая логика не меняется.
+  const { data: laps, isLoading } = useBestLaps();
+
+  // Фильтр по пилотам — состояние страницы, не глобальный контекст: сбрасывается
+  // при уходе с Leaderboards и ни на что за пределами этой страницы не влияет.
+  const [selectedDriverIds, setSelectedDriverIds] = useState<Set<number>>(new Set());
+  const driversFiltered = selectedDriverIds.size > 0;
+  const toggleDriver = (id: number) => {
+    setSelectedDriverIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const setManyDrivers = (ids: number[], selected: boolean) => {
+    setSelectedDriverIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (selected) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+  const clearDrivers = () => setSelectedDriverIds(new Set());
 
   const availableClasses = useMemo(() => {
     if (!laps) return [];
@@ -156,13 +169,13 @@ export default function Leaderboards() {
       filtered = filtered.filter((l: LapRow) => normalizeCourse(l.sessionCourse, l.trackName) === courseFilter);
     }
 
-    if (globalFiltered) {
+    if (driversFiltered) {
       filtered = filtered.filter((l: LapRow) => selectedDriverIds.has(l.driverId));
     }
 
     const maxPerClass = trackId === "all" ? 3 : 50;
     return buildBoards(filtered, maxPerClass);
-  }, [laps, trackId, classFilter, courseFilter, globalFiltered, selectedDriverIds]);
+  }, [laps, trackId, classFilter, courseFilter, driversFiltered, selectedDriverIds]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -175,6 +188,12 @@ export default function Leaderboards() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <DriverFilterBar
+            selectedDriverIds={selectedDriverIds}
+            onToggleDriver={toggleDriver}
+            onSetManyDrivers={setManyDrivers}
+            onClear={clearDrivers}
+          />
           <div className="flex flex-col gap-1">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("leaderboards.filterTrack")}</span>
             <Select value={trackId} onValueChange={setTrackId}>
@@ -293,9 +312,13 @@ export default function Leaderboards() {
                             </td>
                             {/* Пилот */}
                             <td className="px-4 py-2.5">
-                              <span className="font-medium">
+                              <Link
+                                href={`/drivers/${l.driverId}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="font-medium hover:underline"
+                              >
                                 <DriverName name={l.driverName} isPlayer={l.isPlayer} />
-                              </span>
+                              </Link>
                             </td>
                             {/* Команда */}
                             <td className="hidden max-w-[160px] truncate px-4 py-2.5 text-muted-foreground sm:table-cell">
