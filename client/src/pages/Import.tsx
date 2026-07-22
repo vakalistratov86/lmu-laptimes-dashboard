@@ -256,7 +256,24 @@ export default function Import() {
       }
 
       const localSeen = seenSet ?? (await dbGetSeenSet());
+      const alreadySeenFiles = xmlFiles.filter((f) => localSeen.has(fileKey(f)));
       const newFiles = xmlFiles.filter((f) => !localSeen.has(fileKey(f)));
+
+      // fix: файлы, уже отмеченные локально как обработанные (по имени/размеру/
+      // дате изменения), раньше молча выбрасывались из newFiles ДО цикла,
+      // который обновляет счётчики — total/queued/skipped их вообще не видели.
+      // Теперь они логируются и учитываются как пропуск, как и дубликаты,
+      // которые обнаруживает сервер по хэшу содержимого.
+      if (alreadySeenFiles.length > 0) {
+        setCounters((c) => ({
+          ...c,
+          total: c.total + alreadySeenFiles.length,
+          skipped: c.skipped + alreadySeenFiles.length,
+        }));
+        for (const file of alreadySeenFiles) {
+          addLog("skip", t("imp.logImportSkip", { name: file.name, msg: t("imp.logImportSkipLocalDuplicate") }));
+        }
+      }
 
       if (newFiles.length === 0) {
         addLog("info", t("imp.logNoNewFiles"));
