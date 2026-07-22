@@ -200,7 +200,7 @@ export async function registerRoutes(
       const content = String(f?.content ?? "");
 
       if (!content.trim()) {
-        results.push({ fileName, ok: false, status: 409, message: "Пустой файл" });
+        results.push({ fileName, ok: false, skipped: true, status: 409, message: "Пустой файл" });
         skipped++;
         continue;
       }
@@ -218,6 +218,7 @@ export async function registerRoutes(
         results.push({
           fileName,
           ok: false,
+          skipped: true,
           status: 409,
           message: "Файл уже был импортирован",
           importId: existing.id,
@@ -237,12 +238,8 @@ export async function registerRoutes(
       });
 
       try {
-        const { sessionId, totalLaps: laps, validLaps, errorLaps } = await runImport({
-          id,
-          fileHash,
-          fileName,
-          content,
-        });
+        const { sessionId, totalLaps: laps, validLaps, errorLaps, event, venue, sessionType, driverCount } =
+          await runImport({ id, fileHash, fileName, content });
 
         await db.update(importJobs)
           .set({ status: "completed", sessionId, totalLaps: laps, validLaps, errorLaps, finishedAt: Date.now() })
@@ -250,20 +247,32 @@ export async function registerRoutes(
 
         imported++;
         totalLaps += validLaps;
-        results.push({ fileName, ok: true, importId: id, sessionId, laps: validLaps, errorLaps });
+        results.push({
+          fileName,
+          ok: true,
+          skipped: false,
+          importId: id,
+          sessionId,
+          laps: validLaps,
+          errorLaps,
+          event,
+          venue,
+          sessionType,
+          drivers: driverCount,
+        });
       } catch (e: any) {
         if (e.code === "ZERO_LAPS") {
-          // Файл валидный, но кругов нет — считаем пропуском, не ошибкой
+          // Файл валидный, но кругов/участников нет — считаем пропуском, не ошибкой
           await db.update(importJobs)
             .set({ status: "skipped", error: e.message, finishedAt: Date.now() })
             .where(eq(importJobs.id, id));
           skipped++;
           results.push({
             fileName,
-            ok: true,
+            ok: false,
             skipped: true,
             status: 200,
-            message: "Файл пропущен: 0 кругов",
+            message: e.message,
             importId: id,
           });
         } else {
@@ -271,7 +280,7 @@ export async function registerRoutes(
             .set({ status: "failed", error: e.message, finishedAt: Date.now() })
             .where(eq(importJobs.id, id));
           errors++;
-          results.push({ fileName, ok: false, status: 500, message: e.message, importId: id });
+          results.push({ fileName, ok: false, skipped: false, status: 500, message: e.message, importId: id });
         }
       }
     }

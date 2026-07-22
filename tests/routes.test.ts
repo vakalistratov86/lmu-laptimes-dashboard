@@ -375,16 +375,22 @@ describe('API Routes', () => {
       expect(results[0].sessionId).toBe(1);
     });
 
-    it('пустой content возвращает ok=false и status=409', async () => {
+    // Контракт per-file результата (#122 follow-up): `ok` теперь означает
+    // ИСКЛЮЧИТЕЛЬНО "данные реально записаны", а `skipped` — единственный
+    // надёжный дискриминатор пропуска (пустой файл / дубликат / 0 кругов).
+    // Раньше ZERO_LAPS отдавался с ok=true, из-за чего клиент (проверявший
+    // `r.ok` раньше `r.skipped`) путал пропуск с успешным импортом.
+    it('пустой content возвращает ok=false, skipped=true и status=409', async () => {
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'empty.xml', content: '' }],
       });
-      const results = (res.body as { results: { ok: boolean; status: number }[] }).results;
+      const results = (res.body as { results: { ok: boolean; skipped: boolean; status: number }[] }).results;
       expect(results[0].ok).toBe(false);
+      expect(results[0].skipped).toBe(true);
       expect(results[0].status).toBe(409);
     });
 
-    it('дублирующий файл (уже есть в import_jobs) возвращает ok=false и status=409', async () => {
+    it('дублирующий файл (уже есть в import_jobs) возвращает ok=false, skipped=true и status=409', async () => {
       (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce(
         chain([{ id: 'existing-id', status: 'completed' }]),
       );
@@ -392,22 +398,24 @@ describe('API Routes', () => {
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'dup.xml', content: '<rFactorXML>dup</rFactorXML>' }],
       });
-      const results = (res.body as { results: { ok: boolean; status: number; importId: string; importStatus: string }[] }).results;
+      const results = (res.body as { results: { ok: boolean; skipped: boolean; status: number; importId: string; importStatus: string }[] }).results;
       expect(results[0].ok).toBe(false);
+      expect(results[0].skipped).toBe(true);
       expect(results[0].status).toBe(409);
       expect(results[0].importId).toBe('existing-id');
       expect(results[0].importStatus).toBe('completed');
     });
 
-    it('произвольная ошибка runImport возвращает ok=false и status=500', async () => {
+    it('произвольная ошибка runImport возвращает ok=false, skipped=false и status=500', async () => {
       (importWorker.runImport as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error('internal error'),
       );
       const res = await makeRequest(app, 'POST', '/api/import', {
         files: [{ fileName: 'bad.xml', content: '<rFactorXML>bad</rFactorXML>' }],
       });
-      const results = (res.body as { results: { ok: boolean; status: number; message: string }[] }).results;
+      const results = (res.body as { results: { ok: boolean; skipped: boolean; status: number; message: string }[] }).results;
       expect(results[0].ok).toBe(false);
+      expect(results[0].skipped).toBe(false);
       expect(results[0].status).toBe(500);
       expect(results[0].message).toBe('internal error');
     });
@@ -422,7 +430,7 @@ describe('API Routes', () => {
       expect(body.imported).toBe(0);
     });
 
-    it('файл с 0 кругов (ZERO_LAPS) помечается как пропущенный, а не ошибка', async () => {
+    it('файл с 0 кругов (ZERO_LAPS) помечается как пропущенный (ok=false, skipped=true), а не ошибка', async () => {
       const zeroLapsErr = new Error('Файл пропущен: 0 кругов') as Error & { code?: string };
       zeroLapsErr.code = 'ZERO_LAPS';
       (importWorker.runImport as ReturnType<typeof vi.fn>).mockRejectedValueOnce(zeroLapsErr);
@@ -431,10 +439,36 @@ describe('API Routes', () => {
         files: [{ fileName: 'nolaps.xml', content: '<rFactorXML>nolaps</rFactorXML>' }],
       });
       expect(res.status).toBe(200);
-      const results = (res.body as { results: { ok: boolean; skipped: boolean; status: number }[] }).results;
-      expect(results[0].ok).toBe(true);
+      const results = (res.body as { results: { ok: boolean; skipped: boolean; status: number; message: string }[] }).results;
+      expect(results[0].ok).toBe(false);
       expect(results[0].skipped).toBe(true);
       expect(results[0].status).toBe(200);
+      expect(results[0].message).toBe('Файл пропущен: 0 кругов');
+    });
+
+    it('успешный импорт возвращает ok=true, skipped=false и данные сессии (event/venue/sessionType/drivers) для журнала', async () => {
+      (importWorker.runImport as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        sessionId: 42,
+        totalLaps: 20,
+        validLaps: 18,
+        errorLaps: 2,
+        event: 'Rolex 6 Hours Of Sao Paulo',
+        venue: 'Interlagos',
+        sessionType: 'Практика (Practice1)',
+        driverCount: 19,
+      });
+
+      const res = await makeRequest(app, 'POST', '/api/import', {
+        files: [{ fileName: 'ok.xml', content: '<rFactorXML>ok</rFactorXML>' }],
+      });
+      const results = (res.body as { results: any[] }).results;
+      expect(results[0].ok).toBe(true);
+      expect(results[0].skipped).toBe(false);
+      expect(results[0].event).toBe('Rolex 6 Hours Of Sao Paulo');
+      expect(results[0].venue).toBe('Interlagos');
+      expect(results[0].sessionType).toBe('Практика (Practice1)');
+      expect(results[0].drivers).toBe(19);
+      expect(results[0].laps).toBe(18);
     });
 
     it('вызывает runImport с правильными аргументами', async () => {

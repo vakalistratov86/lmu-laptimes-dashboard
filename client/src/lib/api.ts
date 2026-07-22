@@ -103,11 +103,20 @@ export function useSession(id: number | undefined) {
 export type ImportFileResult = {
   fileName: string;
   ok: boolean;
-  message: string;
+  // true для ЛЮБОЙ причины пропуска файла (пустой/дубликат/0 кругов) —
+  // единственное надёжное поле для различения "пропущен" от "ошибка"; `ok`
+  // сам по себе не годится, т.к. false как для пропуска, так и для ошибки.
+  skipped?: boolean;
+  message?: string;
+  status?: number;
+  importId?: string;
+  importStatus?: string;
   sessionId?: number;
   event?: string;
   venue?: string;
+  sessionType?: string;
   laps?: number;
+  errorLaps?: number;
   drivers?: number;
 };
 
