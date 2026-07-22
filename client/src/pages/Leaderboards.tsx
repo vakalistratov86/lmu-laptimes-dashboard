@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import { useLaps, useTracks } from "@/lib/api";
-import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap, formatDelta } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +11,7 @@ import {
 import { Trophy, Medal, Upload } from "lucide-react";
 import { CLASS_ORDER, getClassBadgeClass, getClassAccentClass } from "@/lib/classStyles";
 import { DriverName } from "@/components/DriverName";
+import { DriverFilterBar } from "@/components/DriverFilterBar";
 import { useLanguage } from "@/lib/i18n";
 
 type LapRow = {
@@ -116,7 +116,30 @@ export default function Leaderboards() {
   const [courseFilter, setCourseFilter] = useState<string>("all");
   const { data: tracks } = useTracks();
   const { data: laps, isLoading } = useLaps();
-  const { selectedDriverIds, isFiltered: globalFiltered } = useDriverFilter();
+
+  // Фильтр по пилотам — состояние страницы, не глобальный контекст: сбрасывается
+  // при уходе с Leaderboards и ни на что за пределами этой страницы не влияет.
+  const [selectedDriverIds, setSelectedDriverIds] = useState<Set<number>>(new Set());
+  const driversFiltered = selectedDriverIds.size > 0;
+  const toggleDriver = (id: number) => {
+    setSelectedDriverIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const setManyDrivers = (ids: number[], selected: boolean) => {
+    setSelectedDriverIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (selected) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+  const clearDrivers = () => setSelectedDriverIds(new Set());
 
   const availableClasses = useMemo(() => {
     if (!laps) return [];
@@ -156,13 +179,13 @@ export default function Leaderboards() {
       filtered = filtered.filter((l: LapRow) => normalizeCourse(l.sessionCourse, l.trackName) === courseFilter);
     }
 
-    if (globalFiltered) {
+    if (driversFiltered) {
       filtered = filtered.filter((l: LapRow) => selectedDriverIds.has(l.driverId));
     }
 
     const maxPerClass = trackId === "all" ? 3 : 50;
     return buildBoards(filtered, maxPerClass);
-  }, [laps, trackId, classFilter, courseFilter, globalFiltered, selectedDriverIds]);
+  }, [laps, trackId, classFilter, courseFilter, driversFiltered, selectedDriverIds]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -175,6 +198,12 @@ export default function Leaderboards() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <DriverFilterBar
+            selectedDriverIds={selectedDriverIds}
+            onToggleDriver={toggleDriver}
+            onSetManyDrivers={setManyDrivers}
+            onClear={clearDrivers}
+          />
           <div className="flex flex-col gap-1">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("leaderboards.filterTrack")}</span>
             <Select value={trackId} onValueChange={setTrackId}>

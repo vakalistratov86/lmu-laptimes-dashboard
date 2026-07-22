@@ -79,7 +79,6 @@ const ru = {
   overview: {
     title: "Обзор",
     subtitle: "Сводка по мониторингу времён на трассах LMU",
-    noDataForDrivers: "Нет данных для выбранных пилотов",
     emptyTitle: "Пока нет данных",
     emptyBody: "Импортируйте логи заездов, чтобы увидеть здесь статистику лучших кругов, активность по сессиям и рекорды по трассам.",
     emptyCta: "Импортировать логи",
@@ -90,7 +89,6 @@ const ru = {
     kpiTracksSub: "активных",
     kpiDrivers: "Пилотов",
     kpiDriversSubAll: "в чемпионате",
-    kpiDriversSubSelected: "выбрано",
     kpiLapsCompleted: "Кругов",
     kpiLapsCompletedSub: "пройдено всего",
     activityTitle: "Активность по типам сессий",
@@ -458,7 +456,6 @@ const en: Dict = {
   overview: {
     title: "Overview",
     subtitle: "LMU lap time monitoring summary",
-    noDataForDrivers: "No data for the selected drivers",
     emptyTitle: "No data yet",
     emptyBody: "Import race logs to see best-lap stats, session activity and track records here.",
     emptyCta: "Import logs",
@@ -469,7 +466,6 @@ const en: Dict = {
     kpiTracksSub: "active",
     kpiDrivers: "Drivers",
     kpiDriversSubAll: "in the championship",
-    kpiDriversSubSelected: "selected",
     kpiLapsCompleted: "Laps",
     kpiLapsCompletedSub: "completed in total",
     activityTitle: "Session activity by type",

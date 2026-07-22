@@ -1,5 +1,4 @@
 import { useLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
-import { useDriverFilter } from "@/lib/driverFilter";
 import { formatLap, getClassChartColor } from "@/lib/format";
 import { normalizeSessionCategory, CLASS_ORDER, getClassBadgeClass, type SessionCategory } from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
@@ -69,19 +68,12 @@ export default function Overview() {
   const { data: tracks } = useTracks();
   const { data: drivers } = useDrivers();
   const { data: sessions } = useSessions();
-  const { selectedDriverIds, isFiltered } = useDriverFilter();
 
   /** Форматирует дистанцию в метрах: < 1000 → «X м», иначе → «X.XX км» */
   const formatDistance = (meters: number): string => {
     if (meters < 1000) return `${Math.round(meters)} ${t("overview.meters")}`;
     return `${(meters / 1000).toFixed(2)} ${t("overview.km")}`;
   };
-
-  const filteredLaps = useMemo(() => {
-    if (!laps) return [];
-    if (!isFiltered) return laps;
-    return laps.filter((l) => selectedDriverIds.has(l.driverId));
-  }, [laps, selectedDriverIds, isFiltered]);
 
   // Реальные и ИИ игроки из результатов сессий
   const { realPlayerCount, aiPlayerCount } = useMemo(() => {
@@ -178,21 +170,10 @@ export default function Overview() {
     );
   }
 
-  if (filteredLaps.length === 0) {
-    return (
-      <div className="space-y-6">
-        <PageTitle />
-        <p className="py-16 text-center text-sm text-muted-foreground">
-          {t("overview.noDataForDrivers")}
-        </p>
-      </div>
-    );
-  }
-
-  const bestLap = filteredLaps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a), filteredLaps[0]);
+  const bestLap = laps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a), laps[0]);
 
   const bestByTrack = new Map<string, { ms: number; carClass: string }>();
-  for (const l of filteredLaps) {
+  for (const l of laps) {
     const cur = bestByTrack.get(l.trackName);
     if (!cur || l.lapMs < cur.ms) bestByTrack.set(l.trackName, { ms: l.lapMs, carClass: l.carClass });
   }
@@ -208,10 +189,6 @@ export default function Overview() {
     if (bi === -1) return -1;
     return ai - bi;
   });
-
-  const filteredDriverCount = isFiltered
-    ? selectedDriverIds.size
-    : (drivers?.length ?? 0);
 
   const totalPlayers = realPlayerCount + aiPlayerCount;
   const realPct = totalPlayers > 0 ? (realPlayerCount / totalPlayers) * 100 : 0;
@@ -261,8 +238,8 @@ export default function Overview() {
             testId="drivers"
             icon={Users}
             label={t("overview.kpiDrivers")}
-            value={String(filteredDriverCount)}
-            sub={isFiltered ? t("overview.kpiDriversSubSelected") : t("overview.kpiDriversSubAll")}
+            value={String(drivers?.length ?? 0)}
+            sub={t("overview.kpiDriversSubAll")}
           />
           <HeroStat testId="laps-completed" icon={RefreshCw} label={t("overview.kpiLapsCompleted")} value={String(totalLapsCompleted)} sub={t("overview.kpiLapsCompletedSub")} />
         </div>
