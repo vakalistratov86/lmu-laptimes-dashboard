@@ -164,8 +164,17 @@ function groupByMonth(events: SpecialEvent[]): Map<string, SpecialEvent[]> {
   return map;
 }
 
+// fix: раньше "today" здесь считался по UTC-дате (new Date().toISOString()),
+// а formatCountdown() ниже — по ЛОКАЛЬНОЙ дате (setHours(0,0,0,0)). Для
+// пользователя не в UTC эти два "сегодня" расходятся примерно половину
+// суток — событие могло попасть во вкладку "прошедшие" с меткой отсчёта
+// "сегодня" на самой карточке. Используем ту же локальную полночь, что и
+// formatCountdown, чтобы обе метки всегда были согласованы.
 function isUpcoming(ev: SpecialEvent): boolean {
-  return new Date(ev.dateIso) >= new Date(new Date().toISOString().slice(0, 10));
+  const target = new Date(`${ev.dateIso.slice(0, 10)}T00:00:00`).getTime();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return target >= today.getTime();
 }
 
 function isPast(ev: SpecialEvent): boolean {

@@ -253,5 +253,69 @@ describe('eventsParser', () => {
       expect(result.events.length).toBeGreaterThanOrEqual(5);
       expect(result.source).toBe('static');
     });
+
+    // fix: resolveYear() раньше сравнивал 1-е число месяца вместо настоящего
+    // дня события — из-за этого ЛЮБОЕ ещё не наступившее событие текущего
+    // месяца (кроме 1-го числа) получало год+1.
+    describe('resolveYear — год события в пределах текущего месяца (fix)', () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(2026, 6, 10)); // "сегодня" — 10 июля 2026
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('событие позже в текущем месяце получает ТЕКУЩИЙ год, а не следующий', async () => {
+        const fakeHtml = `
+          <html><body>
+            <p>w/c 28/7 – 4 Hours Silverstone – Hypercar, LMGT3</p>
+            <p>w/c 8/9 – 6 Hours COTA – Hypercar, LMGT3</p>
+            <p>w/c 6/10 – 10 Hours TBA – Hypercar, WEC LMP2, LMGT3</p>
+            <p>w/c 10/11 – 8 Hours Bahrain – Hypercar, LMGT3</p>
+            <p>w/c 20/10 – 24 Hours Le Mans – Hypercar, WEC LMP2, LMGT3</p>
+          </body></html>
+        `;
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, text: async () => fakeHtml }));
+
+        const result = await getSpecialEvents();
+        const jul28 = result.events.find((e) => e.track === 'Silverstone');
+        expect(jul28?.dateIso).toBe('2026-07-28');
+      });
+
+      it('событие раньше в текущем месяце (уже прошло) получает СЛЕДУЮЩИЙ год', async () => {
+        const fakeHtml = `
+          <html><body>
+            <p>w/c 3/7 – 4 Hours Silverstone – Hypercar, LMGT3</p>
+            <p>w/c 8/9 – 6 Hours COTA – Hypercar, LMGT3</p>
+            <p>w/c 6/10 – 10 Hours TBA – Hypercar, WEC LMP2, LMGT3</p>
+            <p>w/c 10/11 – 8 Hours Bahrain – Hypercar, LMGT3</p>
+            <p>w/c 20/10 – 24 Hours Le Mans – Hypercar, WEC LMP2, LMGT3</p>
+          </body></html>
+        `;
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, text: async () => fakeHtml }));
+
+        const result = await getSpecialEvents();
+        const jul3 = result.events.find((e) => e.track === 'Silverstone');
+        expect(jul3?.dateIso).toBe('2027-07-03');
+      });
+
+      it('событие сегодняшним числом остаётся в ТЕКУЩЕМ году (не считается "прошедшим")', async () => {
+        const fakeHtml = `
+          <html><body>
+            <p>w/c 10/7 – 4 Hours Silverstone – Hypercar, LMGT3</p>
+            <p>w/c 8/9 – 6 Hours COTA – Hypercar, LMGT3</p>
+            <p>w/c 6/10 – 10 Hours TBA – Hypercar, WEC LMP2, LMGT3</p>
+            <p>w/c 10/11 – 8 Hours Bahrain – Hypercar, LMGT3</p>
+            <p>w/c 20/10 – 24 Hours Le Mans – Hypercar, WEC LMP2, LMGT3</p>
+          </body></html>
+        `;
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, text: async () => fakeHtml }));
+
+        const result = await getSpecialEvents();
+        const jul10 = result.events.find((e) => e.track === 'Silverstone');
+        expect(jul10?.dateIso).toBe('2026-07-10');
+      });
+    });
   });
 });

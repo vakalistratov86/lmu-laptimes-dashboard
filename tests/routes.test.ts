@@ -406,6 +406,30 @@ describe('API Routes', () => {
       expect(results[0].importStatus).toBe('completed');
     });
 
+    // fix: раньше ЛЮБАЯ существующая строка с тем же file_hash (включая
+    // failed) считалась дубликатом — файл, чей импорт однажды упал, больше
+    // никогда не мог быть загружен повторно (fileHash уникален навсегда).
+    it('файл с прошлой FAILED попыткой — НЕ дубликат, импорт повторяется с тем же id', async () => {
+      (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        chain([{ id: 'failed-job-id', status: 'failed' }]),
+      );
+
+      const res = await makeRequest(app, 'POST', '/api/import', {
+        files: [{ fileName: 'retry.xml', content: '<rFactorXML>retry</rFactorXML>' }],
+      });
+
+      expect(res.status).toBe(200);
+      const results = (res.body as { results: { ok: boolean; skipped: boolean; importId: string }[] }).results;
+      expect(results[0].ok).toBe(true);
+      expect(results[0].skipped).toBe(false);
+      expect(results[0].importId).toBe('failed-job-id');
+      expect(importWorker.runImport).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'failed-job-id' }),
+      );
+      // Переиспользуем строку через UPDATE, а не создаём вторую с тем же fileHash.
+      expect(db.update).toHaveBeenCalled();
+    });
+
     it('произвольная ошибка runImport возвращает ok=false, skipped=false и status=500', async () => {
       (importWorker.runImport as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error('internal error'),

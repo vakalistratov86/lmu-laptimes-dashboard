@@ -228,6 +228,24 @@ export function normalizeSessionType(raw: string): NormalizedSessionType {
 type AnySession = Record<string, any>;
 type AnyLap = Record<string, any>;
 
+/**
+ * Ключ группировки кругов по пилоту. Предпочитаем driverId, когда он есть в
+ * данных, а не driverName как единственный идентификатор — два разных
+ * пилота могут случайно иметь одинаковое отображаемое имя (или оба быть
+ * безымянными и попасть под общий 'Unknown'), из-за чего их круги молча
+ * сливались бы в одну группу со смешанной статистикой.
+ */
+function driverKey(lap: AnyLap): string {
+  const id = lap.driverId ?? lap.driver_id;
+  if (id != null && Number.isFinite(Number(id))) return `id:${id}`;
+  return `name:${String(lap.driverName ?? lap.driver ?? 'Unknown')}`;
+}
+
+/** Является ли круг пит-лапом (учитываем оба варианта имени поля из разных источников). */
+function isPitLap(lap: AnyLap): boolean {
+  return Boolean(lap.isPitLap ?? lap.pitLap ?? false);
+}
+
 export function buildHeroStats(session: unknown): SessionHeroStatItem[] {
   const s = session as AnySession;
   const normalized = normalizeSessionType(String(s?.sessionType ?? ''));
@@ -358,28 +376,29 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
 // ────────────────────────────────────────────────────────────────────────────
 
 export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
-  const map = new Map<string, { carNumber: string | number; points: LapProgressPoint[] }>();
+  const map = new Map<string, { driverName: string; carNumber: string | number; points: LapProgressPoint[] }>();
 
   for (const raw of laps) {
     const lap = raw as AnyLap;
-    const driver = String(lap.driverName ?? lap.driver ?? 'Unknown');
+    const key = driverKey(lap);
+    const driverName = String(lap.driverName ?? lap.driver ?? 'Unknown');
     const carNumber = lap.carNumber ?? lap.number ?? '';
     const lapNum = Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0);
     const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? 0);
 
     if (!Number.isFinite(timeSeconds) || timeSeconds <= 0) continue;
 
-    if (!map.has(driver)) {
-      map.set(driver, { carNumber, points: [] });
+    if (!map.has(key)) {
+      map.set(key, { driverName, carNumber, points: [] });
     }
-    map.get(driver)!.points.push({
+    map.get(key)!.points.push({
       lap: lapNum,
       timeSeconds,
       timeFormatted: formatLapTime(timeSeconds),
     });
   }
 
-  return Array.from(map.entries()).map(([driverName, { carNumber, points }]) => ({
+  return Array.from(map.values()).map(({ driverName, carNumber, points }) => ({
     driverName,
     carNumber,
     points: points.sort((a, b) => a.lap - b.lap),
@@ -394,6 +413,7 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
   const map = new Map<
     string,
     {
+      driverName: string;
       carNumber: string | number;
       bestS: [number, number, number];
     }
@@ -403,17 +423,19 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
 
   for (const raw of laps) {
     const lap = raw as AnyLap;
-    const driver = String(lap.driverName ?? lap.driver ?? 'Unknown');
+    if (isPitLap(lap)) continue; // пит-лапы не должны выигрывать "лучший сектор"
+    const key = driverKey(lap);
+    const driverName = String(lap.driverName ?? lap.driver ?? 'Unknown');
     const carNumber = lap.carNumber ?? lap.number ?? '';
 
     const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
     const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
     const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
 
-    if (!map.has(driver)) {
-      map.set(driver, { carNumber, bestS: [Infinity, Infinity, Infinity] });
+    if (!map.has(key)) {
+      map.set(key, { driverName, carNumber, bestS: [Infinity, Infinity, Infinity] });
     }
-    const entry = map.get(driver)!;
+    const entry = map.get(key)!;
 
     if (Number.isFinite(s1) && s1 < entry.bestS[0]) entry.bestS[0] = s1;
     if (Number.isFinite(s2) && s2 < entry.bestS[1]) entry.bestS[1] = s2;
@@ -424,11 +446,13 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     if (Number.isFinite(s3) && s3 < absoluteBest[2]) absoluteBest[2] = s3;
   }
 
-  return Array.from(map.entries()).map(([driverName, { carNumber, bestS }]) => {
-    const theoreticalSeconds = bestS.reduce(
-      (sum, s) => sum + (Number.isFinite(s) ? s : 0),
-      0,
-    );
+  return Array.from(map.values()).map(({ driverName, carNumber, bestS }) => {
+    // fix: раньше отсутствующий сектор (bestS[i] всё ещё Infinity) тихо
+    // заменялся на 0 в сумме — получался правдоподобный, но заниженный
+    // "теоретический" круг из 2 секторов вместо 3. Теперь при неполном
+    // наборе секторов результат — NaN, что formatLapTime корректно рисует как «—».
+    const hasAllSectors = bestS.every((s) => Number.isFinite(s));
+    const theoreticalSeconds = hasAllSectors ? bestS[0] + bestS[1] + bestS[2] : NaN;
     // SD-21: Абсолютный лучший по КАЖДОМУ сектору отдельно (не общий флаг) —
     // используется, чтобы красить именно тот сектор, который является рекордом сессии.
     const sectorAbsoluteBest: [boolean, boolean, boolean] = [
@@ -460,6 +484,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   const map = new Map<
     string,
     {
+      driverName: string;
       carNumber: string | number;
       isPlayer: number | null;
       rawLaps: AnyLap[];
@@ -468,11 +493,12 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 
   for (const raw of laps) {
     const lap = raw as AnyLap;
-    const driver = String(lap.driverName ?? lap.driver ?? 'Unknown');
+    const key = driverKey(lap);
+    const driverName = String(lap.driverName ?? lap.driver ?? 'Unknown');
     const carNumber = lap.carNumber ?? lap.number ?? '';
     const isPlayer: number | null = lap.isPlayer ?? null;
-    if (!map.has(driver)) map.set(driver, { carNumber, isPlayer, rawLaps: [] });
-    map.get(driver)!.rawLaps.push(lap);
+    if (!map.has(key)) map.set(key, { driverName, carNumber, isPlayer, rawLaps: [] });
+    map.get(key)!.rawLaps.push(lap);
   }
 
   let overallBestSeconds = Infinity;
@@ -480,6 +506,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   const overallBestSectors: [number, number, number] = [Infinity, Infinity, Infinity];
   for (const { rawLaps } of map.values()) {
     for (const lap of rawLaps) {
+      if (isPitLap(lap)) continue; // пит-лапы не должны выигрывать лучший круг/сектор сессии
       const t = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
       if (Number.isFinite(t) && t < overallBestSeconds) overallBestSeconds = t;
 
@@ -494,11 +521,12 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 
   const groups: DriverLapsGroupView[] = [];
 
-  for (const [driverName, { carNumber, isPlayer, rawLaps }] of map.entries()) {
+  for (const { driverName, carNumber, isPlayer, rawLaps } of map.values()) {
     let personalBestSeconds = Infinity;
     // SD-21: Личный лучший сектор пилота за сессию (по каждому из трёх).
     const personalBestSectors: [number, number, number] = [Infinity, Infinity, Infinity];
     for (const lap of rawLaps) {
+      if (isPitLap(lap)) continue; // пит-лапы не должны выигрывать личный лучший круг/сектор
       const t = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
       if (Number.isFinite(t) && t < personalBestSeconds) personalBestSeconds = t;
 
@@ -567,9 +595,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
     });
     // Пит-лапы искажают среднее/худшее время — считаем без них,
     // но если все круги были пит-лапами, используем все круги как fallback.
-    const nonPitTimedLaps = timedLaps.filter(
-      (lap: AnyLap) => !(lap.isPitLap ?? lap.pitLap ?? false),
-    );
+    const nonPitTimedLaps = timedLaps.filter((lap: AnyLap) => !isPitLap(lap));
     const lapsForAvg = nonPitTimedLaps.length > 0 ? nonPitTimedLaps : timedLaps;
     const lapSeconds: number[] = lapsForAvg.map((lap: AnyLap) =>
       Number(lap.lapTimeSeconds ?? lap.time ?? NaN),

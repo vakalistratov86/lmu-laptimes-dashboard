@@ -494,14 +494,14 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
     // Инциденты
     for (const inc of parsed!.incidents) {
-      const normalizedIncDriver = inc.driverName.trim().toLowerCase();
+      const normalizedIncDriver = normalizeDriverNameForStorage(inc.driverName).toLowerCase();
       const driverId = driverIdByName.get(normalizedIncDriver);
       if (driverId == null) {
         logUnknownStreamDriver("incident", inc.driverName, inc);
         continue;
       }
       const targetDriverId = inc.targetDriverName
-        ? (driverIdByName.get(inc.targetDriverName.trim().toLowerCase()) ?? null)
+        ? (driverIdByName.get(normalizeDriverNameForStorage(inc.targetDriverName).toLowerCase()) ?? null)
         : null;
       await tx.insert(sessionIncidents).values({
         sessionId: session.id,
@@ -515,7 +515,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
     // Лучшие времена секторов
     for (const sb of parsed!.sectorBests) {
-      const normalizedSbDriver = sb.driverName.trim().toLowerCase();
+      const normalizedSbDriver = normalizeDriverNameForStorage(sb.driverName).toLowerCase();
       const driverId = driverIdByName.get(normalizedSbDriver);
       if (driverId == null) {
         logUnknownStreamDriver("sectorBest", sb.driverName, sb);
@@ -533,7 +533,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
     // Нарушения трассы
     for (const tl of parsed!.trackLimits) {
-      const normalizedTlDriver = tl.driverName.trim().toLowerCase();
+      const normalizedTlDriver = normalizeDriverNameForStorage(tl.driverName).toLowerCase();
       const driverId = driverIdByName.get(normalizedTlDriver);
       if (driverId == null) {
         logUnknownStreamDriver("trackLimit", tl.driverName, tl);

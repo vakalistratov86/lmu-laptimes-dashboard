@@ -100,13 +100,19 @@ export async function getSpecialEvents(): Promise<ParsedRaw> {
  * fix(#77): Определяет год для события через скользящее 12-месячное окно.
  * Если кандидатная дата в текущем году уже прошла — берём следующий год.
  * Это корректно обрабатывает граничные месяцы (декабрь/январь).
+ *
+ * fix: раньше сравнивался всегда 1-й день месяца, а не сам день события —
+ * из-за этого ЛЮБОЕ событие текущего месяца (кроме 1-го числа) считалось
+ * "уже прошедшим" и получало год+1, даже если оно ещё не наступило. Теперь
+ * сравниваем настоящий день события с началом сегодняшнего дня (полночь),
+ * а не с точным текущим моментом — иначе событие, датированное сегодняшним
+ * числом, тоже считалось бы "прошедшим" в любое время после полуночи.
  */
-function resolveYear(month: number): number {
+function resolveYear(month: number, day: number): number {
   const now = new Date();
-  // Создаём дату события в текущем году (1-й день месяца)
-  const candidate = new Date(now.getFullYear(), month - 1, 1);
-  // Если событие уже прошло в текущем году — берём следующий год
-  if (candidate < now) return now.getFullYear() + 1;
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const candidate = new Date(now.getFullYear(), month - 1, day);
+  if (candidate < todayMidnight) return now.getFullYear() + 1;
   return now.getFullYear();
 }
 
@@ -137,7 +143,7 @@ async function fetchAndParse(): Promise<ParsedRaw> {
     const dayStr = weekOf.split("/")[0];
     const day = parseInt(dayStr, 10);
     // Используем resolveYear() для корректного определения года (#53)
-    const year = resolveYear(month);
+    const year = resolveYear(month, day);
     const dateIso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const id = dateIso;
     const isFeatured = duration >= 24 || /24\s*h/i.test(trackRaw);

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import { useBestLaps, useTracks } from "@/lib/api";
-import { formatLap, formatDelta } from "@/lib/format";
+import { formatLap, formatDelta, normalizeCourse } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,19 +53,6 @@ function formatRecordDate(dateStr: string | undefined, intlLocale: string): stri
   } catch {
     return dateStr;
   }
-}
-
-/**
- * A session's course only identifies a distinct track layout when it actually
- * differs from the venue name. Some LMU logs write the course tag as a plain
- * copy of the venue (or leave it blank) while others record it for the same
- * physical track — without this, those sessions split into a second,
- * near-identical leaderboard card for the same track.
- */
-function normalizeCourse(course: string | null | undefined, trackName: string): string | null {
-  const trimmed = course?.trim();
-  if (!trimmed) return null;
-  return trimmed.toLowerCase() === trackName.trim().toLowerCase() ? null : trimmed;
 }
 
 function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
