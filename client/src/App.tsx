@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { LanguageProvider } from "@/lib/i18n";
+import { ImportActivityProvider } from "@/lib/importActivity";
 import NotFound from "@/pages/not-found";
 import Overview from "@/pages/Overview";
 import Leaderboards from "@/pages/Leaderboards";
@@ -40,14 +41,16 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router hook={useHashLocation}>
-            <AppLayout>
-              <AppRouter />
-            </AppLayout>
-          </Router>
-        </TooltipProvider>
+        <ImportActivityProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router hook={useHashLocation}>
+              <AppLayout>
+                <AppRouter />
+              </AppLayout>
+            </Router>
+          </TooltipProvider>
+        </ImportActivityProvider>
       </LanguageProvider>
     </QueryClientProvider>
   );
