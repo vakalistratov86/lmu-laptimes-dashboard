@@ -9,6 +9,7 @@ function makeXml(overrides: Partial<{
   dateTime: string;
   sessionTag: string;
   drivers: string;
+  stream: string;
 }> = {}): string {
   const {
     venue = 'Le Mans',
@@ -30,6 +31,7 @@ function makeXml(overrides: Partial<{
   <Lap num="1" s1="27.44" s2="51.67" s3="22.78">101.890</Lap>
   <Lap num="2" s1="27.10" s2="51.20" s3="22.60" pit="1">100.900</Lap>
 </Driver>`,
+    stream = '',
   } = overrides;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -43,6 +45,7 @@ function makeXml(overrides: Partial<{
     <${sessionTag}>
       ${drivers}
     </${sessionTag}>
+    ${stream}
   </RaceResults>
 </rFactorXML>`;
 }
@@ -291,6 +294,89 @@ describe('parseRaceResults', () => {
       expect(result.drivers).toHaveLength(2);
       expect(result.drivers[0].name).toBe('Пилот Альфа');
       expect(result.drivers[1].name).toBe('Пилот Бета');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // #123 — миграция на fast-xml-parser: CDATA, экранированные символы,
+  // вложенные одноимённые теги
+  // -------------------------------------------------------------------------
+  describe('fast-xml-parser: граничные случаи (#123)', () => {
+    it('поддерживает CDATA в имени пилота', () => {
+      const driversXml = `<Driver>
+  <Name><![CDATA[Team & Racing "Alpha"]]></Name>
+  <isPlayer>0</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+  <CarClass>LMP2</CarClass><CarType>Oreca 07</CarType><TeamName>Team B</TeamName>
+  <Laps>1</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+  <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+</Driver>`;
+      const result = parseRaceResults(makeXml({ drivers: driversXml }))!;
+      expect(result.drivers[0].name).toBe('Team & Racing "Alpha"');
+    });
+
+    it('корректно декодирует экранированные спецсимволы (&amp; &lt; &gt; &quot; &apos;)', () => {
+      const driversXml = `<Driver>
+  <Name>Test Driver</Name>
+  <isPlayer>0</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+  <CarClass>LMP2</CarClass><CarType>Oreca 07</CarType>
+  <TeamName>M&amp;M Racing &lt;Pro&gt; &quot;Team&quot; &apos;X&apos;</TeamName>
+  <Laps>1</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+  <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+</Driver>`;
+      const result = parseRaceResults(makeXml({ drivers: driversXml }))!;
+      expect(result.drivers[0].teamName).toBe(`M&M Racing <Pro> "Team" 'X'`);
+    });
+
+    it('различает <Name> во вложенных одноимённых тегах <Sector>, не смешивая их', () => {
+      const stream = `<Stream>
+    <Sector et="10" lap="1" s="1"><Name>Пилот А</Name><CarClass>Hypercar</CarClass></Sector>
+    <Sector et="20" lap="1" s="2"><Name>Пилот Б</Name><CarClass>LMP2</CarClass></Sector>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ stream }))!;
+      expect(result.sectorBests).toHaveLength(2);
+      expect(result.sectorBests[0].driverName).toBe('Пилот А');
+      expect(result.sectorBests[0].carClass).toBe('Hypercar');
+      expect(result.sectorBests[1].driverName).toBe('Пилот Б');
+      expect(result.sectorBests[1].carClass).toBe('LMP2');
+    });
+
+    it('парсит два вложенных <Name> в <Incident> как driverName/targetDriverName', () => {
+      const stream = `<Stream>
+    <Incident et="15.5" severity="3"><Name>Пилот А</Name><Name>Пилот Б</Name></Incident>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ stream }))!;
+      expect(result.incidents).toHaveLength(1);
+      expect(result.incidents[0].driverName).toBe('Пилот А');
+      expect(result.incidents[0].targetDriverName).toBe('Пилот Б');
+      expect(result.incidents[0].severity).toBe(3);
+      expect(result.incidents[0].isImmovable).toBe(false);
+    });
+
+    it('инцидент с <Immovable/> не имеет targetDriverName', () => {
+      const stream = `<Stream>
+    <Incident et="5" severity="1"><Name>Пилот В</Name><Immovable/></Incident>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ stream }))!;
+      expect(result.incidents[0].isImmovable).toBe(true);
+      expect(result.incidents[0].targetDriverName).toBeNull();
+    });
+
+    it('не путает несколько разных <Driver> с одинаковыми вложенными тегами', () => {
+      const driversXml = `<Driver>
+  <Name>Alpha</Name><isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+  <CarClass>Hypercar</CarClass><CarType>Ferrari 499P</CarType><TeamName>Ferrari</TeamName>
+  <Laps>5</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+  <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+</Driver>
+<Driver>
+  <Name>Beta</Name><isPlayer>0</isPlayer><Position>2</Position><ClassPosition>2</ClassPosition>
+  <CarClass>Hypercar</CarClass><CarType>Porsche 963</CarType><TeamName>Porsche</TeamName>
+  <Laps>5</Laps><Pitstops>1</Pitstops><BestLapTime>102.500</BestLapTime>
+  <Lap num="1" s1="26.0" s2="51.5" s3="25.0">102.500</Lap>
+</Driver>`;
+      const result = parseRaceResults(makeXml({ drivers: driversXml }))!;
+      expect(result.drivers[0].lapList[0].s1Ms).toBe(25000);
+      expect(result.drivers[1].lapList[0].s1Ms).toBe(26000);
     });
   });
 });
