@@ -1,7 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Trophy, Flag, ListChecks, Upload, Moon, Sun, Menu, X, CalendarDays } from "lucide-react";
 import { Logo } from "./Logo";
-import { DriverFilterBar } from "./DriverFilterBar";
 import { useState, useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useLanguage, type Locale } from "@/lib/i18n";
@@ -115,9 +114,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   useEffect(() => { setMobileOpen(false); }, [location]);
 
   return (
-    <div className="grid h-[100dvh] grid-cols-1 grid-rows-[auto_auto_1fr] overflow-hidden bg-background md:grid-cols-[15rem_1fr]">
+    <div className="grid h-[100dvh] grid-cols-1 grid-rows-[auto_1fr] overflow-hidden bg-background md:grid-cols-[15rem_1fr]">
       {/* Desktop sidebar */}
-      <aside className="row-span-3 hidden w-60 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar [overscroll-behavior:contain] md:flex">
+      <aside className="row-span-2 hidden w-60 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar [overscroll-behavior:contain] md:flex">
         <SidebarContent />
       </aside>
 
@@ -163,11 +162,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
       </header>
-
-      {/* Driver filter bar — row 2, sticky below header */}
-      <div className="sticky top-[57px] z-[9] md:col-start-2">
-        <DriverFilterBar />
-      </div>
 
       {/* Main */}
       <main className="overflow-y-auto [overscroll-behavior:contain] md:col-start-2">
