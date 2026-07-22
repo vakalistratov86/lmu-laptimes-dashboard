@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useImportActivity } from "@/lib/importActivity";
 import TelemetryImportPanel from "@/components/TelemetryImportPanel";
 
 type MainTab = "logs" | "telemetry";
@@ -35,7 +36,6 @@ declare module "react" {
 type LogLevel = "info" | "ok" | "skip" | "error";
 type LogEntry = { ts: number; level: LogLevel; text: string };
 type Counters = { total: number; queued: number; imported: number; skipped: number; failed: number };
-type ImportMode = "idle" | "scanning" | "importing";
 
 const FSA_SUPPORTED = typeof window !== "undefined" && "showDirectoryPicker" in window;
 const DB_NAME = "lmu-import-db";
@@ -166,7 +166,8 @@ export default function Import() {
   // Журнал — инициализируем из localStorage
   const [log, setLogState] = useState<LogEntry[]>(() => loadLog());
   const [counters, setCountersState] = useState<Counters>(() => loadCounters());
-  const [mode, setMode] = useState<ImportMode>("idle");
+  // Общий с хедером стейт (индикатор активности на иконке /import) — см. lib/importActivity.tsx
+  const { mode, setMode } = useImportActivity();
   const [clearingDb, setClearingDb] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>("logs");
 
