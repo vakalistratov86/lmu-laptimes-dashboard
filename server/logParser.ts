@@ -306,6 +306,20 @@ function parseDriverBlock(driverNode: XmlNode): ParsedDriver | null {
   };
 }
 
+// Реальные логи LMU кладут данные Incident/Sector/TrackLimits в атрибуты тега
+// плюс человекочитаемое текстовое описание — а не во вложенные теги <Name>/
+// <CarClass>/<WarningPoints>, как можно было бы предположить по названиям полей.
+// Проверено на живом файле сессии (см. #123, follow-up после миграции на
+// fast-xml-parser): например,
+//   <Incident et="461.8">Abdulla Al-Khelaifi(11) reported contact (547.22) with another vehicle Jack Hawksworth(14)</Incident>
+//   <Incident et="1158.8">Vasiliy Kalistratov(0) reported contact (3542.71) with Immovable</Incident>
+//   <Sector Driver="Jonny Adam" ID="3" Sector="1" Class="GT3" et="159.7">Jonny Adam(3) set new best for sector 1</Sector>
+//   <TrackLimits Driver="Vasiliy Kalistratov" ID="0" Lap="1" WarningPoints="0" CurrentPoints="0" Resolution="7" et="248.2">No Further Action</TrackLimits>
+// Атрибута "severity" в реальных логах нет; число в скобках после "reported
+// contact" — единственный доступный количественный показатель серьёзности.
+const INCIDENT_TEXT_RE =
+  /^(.+?)\(-?\d+\)\s+reported contact\s+\(([\d.]+)\)\s+with\s+(?:Immovable|another vehicle\s+(.+?)\(-?\d+\))\s*$/;
+
 // #49 — парсинг Stream-узла
 function parseStream(streamNode: XmlNode): {
   incidents: ParsedIncident[];
@@ -319,44 +333,46 @@ function parseStream(streamNode: XmlNode): {
   // --- Incidents ---
   const incidentNodes = (streamNode.Incident as XmlNode[] | undefined) ?? [];
   for (const incNode of incidentNodes) {
+    const text = String(incNode['#text'] ?? '').trim();
+    const m = text.match(INCIDENT_TEXT_RE);
+    if (!m) continue; // нераспознанный формат текста — не создаём запись с фиктивными данными
     const et = toFloat(attr(incNode, "et")) ?? 0;
-    // fix(#64): severity — атрибут тега <Incident>, а не текст в скобках
-    const severity = parseFloat(attr(incNode, "severity") ?? "0") || 0;
-    const namesRaw = incNode.Name;
-    const names: string[] = Array.isArray(namesRaw)
-      ? namesRaw.map((n) => String(n).trim())
-      : namesRaw != null ? [String(namesRaw).trim()] : [];
-    const isImmovable = Object.prototype.hasOwnProperty.call(incNode, "Immovable");
+    const isImmovable = m[3] === undefined;
     incidents.push({
-      driverName: names[0] ?? "Unknown",
-      targetDriverName: isImmovable ? null : (names[1] ?? null),
+      driverName: m[1].trim(),
+      targetDriverName: isImmovable ? null : m[3].trim(),
       elapsedTimeSec: et,
-      severity,
+      severity: toFloat(m[2]) ?? 0,
       isImmovable,
     });
   }
 
   // --- SectorBests ---
+  // Не у всех <Sector>-тегов есть атрибут Driver — тег переиспользуется и для
+  // других Stream-событий (напр. "reports new suspension damage"), которые не
+  // являются лучшим временем сектора; такие записи пропускаем.
   const sectorNodes = (streamNode.Sector as XmlNode[] | undefined) ?? [];
   for (const secNode of sectorNodes) {
+    const driverName = attr(secNode, "Driver");
+    if (!driverName) continue;
     const et = toFloat(attr(secNode, "et")) ?? 0;
-    const lapNum = toInt(attr(secNode, "lap"));
-    const sector = toInt(attr(secNode, "s")) ?? 0;
-    const driverName = scalar(secNode, "Name") ?? "Unknown";
-    const carClass = scalar(secNode, "CarClass") ?? "—";
+    const lapNum = toInt(attr(secNode, "Lap"));
+    const sector = toInt(attr(secNode, "Sector")) ?? 0;
+    const carClass = attr(secNode, "Class") ?? "—";
     sectorBests.push({ driverName, carClass, sector, elapsedTimeSec: et, lapNum });
   }
 
   // --- TrackLimits ---
   const tlNodes = (streamNode.TrackLimits as XmlNode[] | undefined) ?? [];
   for (const tlNode of tlNodes) {
+    const driverName = attr(tlNode, "Driver");
+    if (!driverName) continue;
     const et = toFloat(attr(tlNode, "et")) ?? 0;
-    const lapNum = toInt(attr(tlNode, "lap")) ?? 0;
-    const driverName = scalar(tlNode, "Name") ?? "Unknown";
-    const warningPoints = toInt(scalar(tlNode, "WarningPoints"));
-    const currentPoints = toInt(scalar(tlNode, "CurrentPoints"));
-    const resolution = toInt(attr(tlNode, "Resolution") ?? scalar(tlNode, "Resolution"));
-    const decision = scalar(tlNode, "Decision");
+    const lapNum = toInt(attr(tlNode, "Lap")) ?? 0;
+    const warningPoints = toInt(attr(tlNode, "WarningPoints"));
+    const currentPoints = toInt(attr(tlNode, "CurrentPoints"));
+    const resolution = toInt(attr(tlNode, "Resolution"));
+    const decision = String(tlNode['#text'] ?? '').trim() || null;
     trackLimits.push({ driverName, lapNum, elapsedTimeSec: et, warningPoints, currentPoints, resolution, decision });
   }
 
