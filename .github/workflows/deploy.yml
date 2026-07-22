@@ -58,7 +58,7 @@ jobs:
             mkdir -p /opt/lmu-dashboard
             cd /opt/lmu-dashboard
 
-            printf 'POSTGRES_PASSWORD=%s\n' '${{ secrets.POSTGRES_PASSWORD }}' > .env
+            printf 'POSTGRES_PASSWORD=%s\nADMIN_TOKEN=%s\n' '${{ secrets.POSTGRES_PASSWORD }}' '${{ secrets.ADMIN_TOKEN }}' > .env
             chmod 600 .env
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
