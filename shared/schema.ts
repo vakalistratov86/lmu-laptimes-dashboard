@@ -324,3 +324,21 @@ export type SessionFull = SessionEnriched & {
   sectorBests: SessionSectorBest[];
   trackLimits: SessionTrackLimits[];
 };
+
+// Инциденты/нарушения одного пилота, обогащённые контекстом сессии — для
+// страницы профиля пилота (GET /api/drivers/:id/incidents).
+export type SessionIncidentEnriched = SessionIncident & {
+  trackName: string;
+  dateTime: string;
+  targetDriverName: string | null;
+};
+
+export type SessionTrackLimitsEnriched = SessionTrackLimits & {
+  trackName: string;
+  dateTime: string;
+};
+
+export type DriverIncidentsResponse = {
+  incidents: SessionIncidentEnriched[];
+  trackLimits: SessionTrackLimitsEnriched[];
+};

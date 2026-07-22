@@ -293,9 +293,13 @@ export default function Leaderboards() {
                             </td>
                             {/* Пилот */}
                             <td className="px-4 py-2.5">
-                              <span className="font-medium">
+                              <Link
+                                href={`/drivers/${l.driverId}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="font-medium hover:underline"
+                              >
                                 <DriverName name={l.driverName} isPlayer={l.isPlayer} />
-                              </span>
+                              </Link>
                             </td>
                             {/* Команда */}
                             <td className="hidden max-w-[160px] truncate px-4 py-2.5 text-muted-foreground sm:table-cell">

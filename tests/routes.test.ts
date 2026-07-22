@@ -39,6 +39,7 @@ vi.mock('../server/storage', () => ({
     getTrack:   vi.fn(),
     getDrivers: vi.fn().mockResolvedValue([]),
     getDriver:  vi.fn(),
+    getDriverIncidents: vi.fn().mockResolvedValue({ incidents: [], trackLimits: [] }),
     getLaps:    vi.fn().mockResolvedValue([]),
     getSessions: vi.fn().mockResolvedValue([]),
     getSession:  vi.fn(),

@@ -237,7 +237,9 @@ export default function Overview() {
               {formatLap(bestLap.lapMs)}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-              <DriverName name={bestLap.driverName} isPlayer={bestLap.isPlayer} className="font-medium text-foreground" />
+              <Link href={`/drivers/${bestLap.driverId}`} className="hover:underline">
+                <DriverName name={bestLap.driverName} isPlayer={bestLap.isPlayer} className="font-medium text-foreground" />
+              </Link>
               <span className="inline-flex items-center gap-1.5">
                 <Car size={14} />
                 {bestLap.car}

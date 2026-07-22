@@ -45,6 +45,18 @@ export async function registerRoutes(
     res.json(driver);
   }));
 
+  /**
+   * GET /api/drivers/:id/incidents — инциденты и нарушения трек-лимитов
+   * пилота по всем сессиям. Используется страницей профиля пилота.
+   */
+  app.get("/api/drivers/:id/incidents", asyncRoute(async (req, res) => {
+    const driverId = Number(req.params.id);
+    if (!Number.isFinite(driverId)) {
+      return res.status(400).json({ message: "Некорректный id пилота" });
+    }
+    res.json(await storage.getDriverIncidents(driverId));
+  }));
+
   app.get("/api/laps", asyncRoute(async (req, res) => {
     const filter: LapFilter = {};
     if (req.query.trackId) filter.trackId = Number(req.query.trackId);

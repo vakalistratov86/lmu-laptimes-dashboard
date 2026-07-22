@@ -1,5 +1,5 @@
 import {
-  tracks, drivers, lapTimes, sessions, sessionResults,
+  tracks, drivers, lapTimes, sessions, sessionResults, sessionIncidents, sessionTrackLimits,
 } from '@shared/schema';
 import type {
   Track, InsertTrack,
@@ -7,10 +7,11 @@ import type {
   DriverEnriched,
   LapTimeEnriched,
   Session, SessionEnriched,
+  DriverIncidentsResponse,
 } from '@shared/schema';
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 
 const sql = postgres(process.env.DATABASE_URL!);
 export const db = drizzle(sql);
@@ -41,6 +42,7 @@ export interface IStorage {
   getTrack(id: number): Promise<Track | undefined>;
   getDrivers(): Promise<DriverEnriched[]>;
   getDriver(id: number): Promise<Driver | undefined>;
+  getDriverIncidents(driverId: number): Promise<DriverIncidentsResponse>;
   getLaps(filter?: LapFilter): Promise<LapTimeEnriched[]>;
   getSessions(): Promise<SessionEnriched[]>;
   getSession(id: number): Promise<SessionEnriched | undefined>;
@@ -75,6 +77,61 @@ export class DatabaseStorage implements IStorage {
   async getDriver(id: number): Promise<Driver | undefined> {
     const rows = await db.select().from(drivers).where(eq(drivers.id, id));
     return rows[0];
+  }
+
+  /**
+   * Инциденты и нарушения трек-лимитов конкретного пилота по всем сессиям —
+   * для страницы профиля пилота. Ни та, ни другая таблица нигде больше не
+   * читается на клиенте (только записываются при импорте), это первая точка
+   * входа, поэтому обогащение (трасса/дата/имя второго участника) выполняется
+   * здесь, а не переиспользуется из другого места.
+   */
+  async getDriverIncidents(driverId: number): Promise<DriverIncidentsResponse> {
+    const [incRows, tlRows] = await Promise.all([
+      db.select().from(sessionIncidents).where(eq(sessionIncidents.driverId, driverId)),
+      db.select().from(sessionTrackLimits).where(eq(sessionTrackLimits.driverId, driverId)),
+    ]);
+
+    const sessionIds = Array.from(new Set([
+      ...incRows.map((r) => r.sessionId),
+      ...tlRows.map((r) => r.sessionId),
+    ]));
+
+    const [sessionRows, trackRows, driverRows] = await Promise.all([
+      sessionIds.length ? db.select().from(sessions).where(inArray(sessions.id, sessionIds)) : Promise.resolve([]),
+      db.select().from(tracks),
+      db.select().from(drivers),
+    ]);
+
+    const sessionMap = new Map(sessionRows.map((s) => [s.id, s]));
+    const trackMap = new Map(trackRows.map((t) => [t.id, t]));
+    const driverMap = new Map(driverRows.map((d) => [d.id, d]));
+
+    const trackNameFor = (sessionId: number): string => {
+      const s = sessionMap.get(sessionId);
+      if (!s) return "—";
+      return trackMap.get(s.trackId)?.name ?? s.venue;
+    };
+    const dateTimeFor = (sessionId: number): string => sessionMap.get(sessionId)?.dateTime ?? "";
+
+    const incidents = incRows
+      .map((r) => ({
+        ...r,
+        trackName: trackNameFor(r.sessionId),
+        dateTime: dateTimeFor(r.sessionId),
+        targetDriverName: r.targetDriverId != null ? (driverMap.get(r.targetDriverId)?.name ?? null) : null,
+      }))
+      .sort((a, b) => b.dateTime.localeCompare(a.dateTime));
+
+    const trackLimits = tlRows
+      .map((r) => ({
+        ...r,
+        trackName: trackNameFor(r.sessionId),
+        dateTime: dateTimeFor(r.sessionId),
+      }))
+      .sort((a, b) => b.dateTime.localeCompare(a.dateTime));
+
+    return { incidents, trackLimits };
   }
 
   async getLaps(filter: LapFilter = {}): Promise<LapTimeEnriched[]> {
