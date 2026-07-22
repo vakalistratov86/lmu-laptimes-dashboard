@@ -36,7 +36,7 @@ export function SessionDriverDetailCard({
   return (
     <Card
       data-testid="card-driver-detail"
-      className="overflow-hidden border-primary/30 ring-1 ring-primary/10"
+      className="overflow-hidden"
     >
       {/* Заголовок */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-secondary/40 px-4 py-3">

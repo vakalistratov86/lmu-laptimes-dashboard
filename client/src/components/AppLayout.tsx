@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Trophy, Flag, ListChecks, Upload, Moon, Sun, Menu, X, CalendarDays } from "lucide-react";
+import { LayoutDashboard, Trophy, Flag, ListChecks, Upload, Moon, Sun, Menu, X, CalendarDays, User } from "lucide-react";
 import { Logo } from "./Logo";
 import { useState, useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ function useNav() {
   return [
     { href: "/", label: t("nav.overview"), icon: LayoutDashboard, testId: "link-overview" },
     { href: "/leaderboards", label: t("nav.leaderboards"), icon: Trophy, testId: "link-leaderboards" },
+    { href: "/profile", label: t("nav.pilotProfile"), icon: User, testId: "link-pilot-profile" },
     { href: "/tracks", label: t("nav.tracks"), icon: Flag, testId: "link-tracks" },
     { href: "/sessions", label: t("nav.sessions"), icon: ListChecks, testId: "link-sessions" },
     { href: "/events", label: t("nav.events"), icon: CalendarDays, testId: "link-events" },

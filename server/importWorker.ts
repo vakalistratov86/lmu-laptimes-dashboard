@@ -435,11 +435,39 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       }
     }
 
+    // Stream-события (инциденты/секторы/трек-лимиты), ссылающиеся на пилота,
+    // которого нет среди участников этой сессии (напр. кто-то отключился
+    // или был исключён), раньше молча пропадали (continue без следа). Теперь
+    // такие записи фиксируются в DLQ (import_errors) и логируются как warn —
+    // видно и в GET /api/import/:id/errors, и в консоли, а не теряются бесследно.
+    const streamDlqRows: any[] = [];
+    const logUnknownStreamDriver = (
+      kind: "incident" | "sectorBest" | "trackLimit",
+      driverName: string,
+      payload: unknown,
+    ) => {
+      const message = `Stream-событие "${kind}" ссылается на неизвестного пилота "${driverName}" — не найден среди участников сессии`;
+      logParseError(
+        { importJobId: job.id, raw: JSON.stringify(payload), code: "SEMANTIC_ERROR" },
+        message,
+      );
+      streamDlqRows.push({
+        importJobId: job.id,
+        rawPayload: JSON.stringify(payload),
+        errorCode: "SEMANTIC_ERROR",
+        errorMessage: message,
+        occurredAt: Date.now(),
+      });
+    };
+
     // Инциденты
     for (const inc of parsed!.incidents) {
       const normalizedIncDriver = inc.driverName.trim().toLowerCase();
       const driverId = driverIdByName.get(normalizedIncDriver);
-      if (driverId == null) continue;
+      if (driverId == null) {
+        logUnknownStreamDriver("incident", inc.driverName, inc);
+        continue;
+      }
       const targetDriverId = inc.targetDriverName
         ? (driverIdByName.get(inc.targetDriverName.trim().toLowerCase()) ?? null)
         : null;
@@ -457,7 +485,10 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     for (const sb of parsed!.sectorBests) {
       const normalizedSbDriver = sb.driverName.trim().toLowerCase();
       const driverId = driverIdByName.get(normalizedSbDriver);
-      if (driverId == null) continue;
+      if (driverId == null) {
+        logUnknownStreamDriver("sectorBest", sb.driverName, sb);
+        continue;
+      }
       await tx.insert(sessionSectorBests).values({
         sessionId: session.id,
         driverId,
@@ -472,7 +503,10 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     for (const tl of parsed!.trackLimits) {
       const normalizedTlDriver = tl.driverName.trim().toLowerCase();
       const driverId = driverIdByName.get(normalizedTlDriver);
-      if (driverId == null) continue;
+      if (driverId == null) {
+        logUnknownStreamDriver("trackLimit", tl.driverName, tl);
+        continue;
+      }
       await tx.insert(sessionTrackLimits).values({
         sessionId: session.id,
         driverId,
@@ -483,6 +517,12 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
         resolution: tl.resolution ?? null,
         decision: tl.decision ?? null,
       });
+    }
+
+    // Batch insert DLQ для Stream-событий — отдельно от dlqRows кругов (#8):
+    // не должны влиять на порог валидных кругов, проверенный чуть выше.
+    for (let i = 0; i < streamDlqRows.length; i += CHUNK_SIZE) {
+      await tx.insert(importErrors).values(streamDlqRows.slice(i, i + CHUNK_SIZE));
     }
 
     // Атомарное обновление lapCount внутри транзакции (#11)

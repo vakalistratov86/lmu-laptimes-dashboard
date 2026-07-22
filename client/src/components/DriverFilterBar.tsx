@@ -22,22 +22,30 @@ import { useLanguage } from "@/lib/i18n";
 interface DriverFilterBarProps {
   selectedDriverIds: Set<number>;
   onToggleDriver: (id: number) => void;
-  onSetManyDrivers: (ids: number[], selected: boolean) => void;
+  onSetManyDrivers?: (ids: number[], selected: boolean) => void;
   onClear: () => void;
+  /**
+   * "multi" (по умолчанию) — обычный мультивыбор с чипами и «выбрать все»,
+   * как на Leaderboards. "single" — не более одного пилота одновременно:
+   * переключатель «выбрать все» скрыт, выбор нового пилота автозакрывает
+   * попап (используется на странице «Профиль пилота»).
+   */
+  mode?: "multi" | "single";
 }
 
 /**
- * Фильтр по пилотам — локальный контрол страницы Leaderboards (не глобальный
+ * Фильтр по пилотам — локальный контрол конкретной страницы (не глобальный
  * стейт). Выбор передаётся управляющими пропсами, а не контекстом: сброс при
  * уходе со страницы — ожидаемое поведение, а не побочный эффект.
  */
 export function DriverFilterBar({
-  selectedDriverIds, onToggleDriver, onSetManyDrivers, onClear,
+  selectedDriverIds, onToggleDriver, onSetManyDrivers, onClear, mode = "multi",
 }: DriverFilterBarProps) {
   const { t, tn } = useLanguage();
   const { data: drivers } = useDrivers();
   const [open, setOpen] = useState(false);
   const [hideAI, setHideAI] = useState(false);
+  const isSingle = mode === "single";
   const isFiltered = selectedDriverIds.size > 0;
 
   if (!drivers || drivers.length === 0) return null;
@@ -61,10 +69,17 @@ export function DriverFilterBar({
     (d) => !selectedDriverIds.has(d.id) && d.isPlayer !== 1,
   );
 
+  // В single-режиме попап закрывается сразу после выбора — как у обычного
+  // combobox, а не мультиселекта с чипами.
+  const handleSelect = (id: number) => {
+    onToggleDriver(id);
+    if (isSingle) setOpen(false);
+  };
+
   return (
     <div className="flex flex-col gap-1" data-testid="driver-filter-bar">
       <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        {t("driverFilter.label")}
+        {isSingle ? t("driverFilter.labelSingle") : t("driverFilter.label")}
       </span>
       <div className="flex items-center gap-1.5">
         <Popover open={open} onOpenChange={setOpen}>
@@ -76,7 +91,7 @@ export function DriverFilterBar({
               className="h-9 w-[200px] justify-between px-3 text-sm font-normal"
             >
               {selectedDrivers.length === 0
-                ? t("driverFilter.placeholderNone")
+                ? (isSingle ? t("driverFilter.placeholderNoneSingle") : t("driverFilter.placeholderNone"))
                 : selectedDrivers.length === 1
                 ? selectedDrivers[0].name
                 : `${tn(selectedDrivers.length, "pilots")} ${t("driverFilter.selectedSuffix")}`}
@@ -96,21 +111,23 @@ export function DriverFilterBar({
                   </span>
                   <Switch checked={!hideAI} onCheckedChange={(checked) => setHideAI(!checked)} />
                 </label>
-                <label className="flex cursor-pointer items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-2">
-                    <CheckCheck size={13} className="text-muted-foreground" />
-                    {t("driverFilter.selectAll")}
-                  </span>
-                  <Switch
-                    checked={allVisibleSelected}
-                    onCheckedChange={(checked) =>
-                      onSetManyDrivers(
-                        visibleDrivers.map((d) => d.id),
-                        checked,
-                      )
-                    }
-                  />
-                </label>
+                {!isSingle && (
+                  <label className="flex cursor-pointer items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                      <CheckCheck size={13} className="text-muted-foreground" />
+                      {t("driverFilter.selectAll")}
+                    </span>
+                    <Switch
+                      checked={allVisibleSelected}
+                      onCheckedChange={(checked) =>
+                        onSetManyDrivers?.(
+                          visibleDrivers.map((d) => d.id),
+                          checked,
+                        )
+                      }
+                    />
+                  </label>
+                )}
               </div>
 
               <CommandList>
@@ -125,7 +142,7 @@ export function DriverFilterBar({
                         key={d.id}
                         value={d.name}
                         data-testid={`driver-chip-${d.id}`}
-                        onSelect={() => onToggleDriver(d.id)}
+                        onSelect={() => handleSelect(d.id)}
                         className="text-xs"
                       >
                         <Check size={13} className="mr-2 shrink-0 opacity-100" />
@@ -143,7 +160,7 @@ export function DriverFilterBar({
                         key={d.id}
                         value={d.name}
                         data-testid={`driver-chip-${d.id}`}
-                        onSelect={() => onToggleDriver(d.id)}
+                        onSelect={() => handleSelect(d.id)}
                         className="text-xs"
                       >
                         <Check size={13} className="mr-2 shrink-0 opacity-0" />
@@ -160,7 +177,7 @@ export function DriverFilterBar({
                         key={d.id}
                         value={d.name}
                         data-testid={`driver-chip-${d.id}`}
-                        onSelect={() => onToggleDriver(d.id)}
+                        onSelect={() => handleSelect(d.id)}
                         className="text-xs"
                       >
                         <Check size={13} className="mr-2 shrink-0 opacity-0" />
