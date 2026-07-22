@@ -6,7 +6,7 @@ import type {
   Driver,
   DriverEnriched,
   LapTimeEnriched,
-  Session, SessionEnriched,
+  Session, SessionEnriched, SessionResult,
   DriverIncidentsResponse,
 } from '@shared/schema';
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -146,6 +146,13 @@ export class DatabaseStorage implements IStorage {
     return { incidents, trackLimits };
   }
 
+  /**
+   * #120: раньше грузила tracks/drivers/sessionResults целиком в память на
+   * КАЖДЫЙ вызов, независимо от фильтра. Теперь обогащение (трасса, пилот,
+   * его команда, isPlayer из session_results для этой же пары session+driver)
+   * делается через JOIN в самом SQL-запросе — Postgres фильтрует и джойнит,
+   * а не приложение вручную по Map после выгрузки всего датасета.
+   */
   async getLaps(filter: LapFilter = {}): Promise<LapTimeEnriched[]> {
     const conditions = [];
     if (filter.trackId != null) conditions.push(eq(lapTimes.trackId, filter.trackId));
@@ -155,77 +162,108 @@ export class DatabaseStorage implements IStorage {
     if (filter.sessionId != null) conditions.push(eq(lapTimes.sessionId, filter.sessionId));
     if (filter.sessionCourse) conditions.push(eq(sessions.course, filter.sessionCourse));
 
+    const selection = {
+      lap: lapTimes,
+      sessionCourse: sessions.course,
+      trackName: tracks.name,
+      driverName: drivers.name,
+      driverTeam: drivers.team,
+      isPlayer: sessionResults.isPlayer,
+    };
+    // Join sessionResults по паре (sessionId, driverId) — тот же результат
+    // пилота, что относится к сессии этого конкретного круга.
+    const sessionResultsJoin = and(
+      eq(sessionResults.sessionId, lapTimes.sessionId),
+      eq(sessionResults.driverId, lapTimes.driverId),
+    );
+
     const rows = conditions.length
       ? await db
-          .select({ lap: lapTimes, sessionCourse: sessions.course })
+          .select(selection)
           .from(lapTimes)
           .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
+          .leftJoin(tracks, eq(lapTimes.trackId, tracks.id))
+          .leftJoin(drivers, eq(lapTimes.driverId, drivers.id))
+          .leftJoin(sessionResults, sessionResultsJoin)
           .where(and(...conditions))
       : await db
-          .select({ lap: lapTimes, sessionCourse: sessions.course })
+          .select(selection)
           .from(lapTimes)
-          .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id));
+          .leftJoin(sessions, eq(lapTimes.sessionId, sessions.id))
+          .leftJoin(tracks, eq(lapTimes.trackId, tracks.id))
+          .leftJoin(drivers, eq(lapTimes.driverId, drivers.id))
+          .leftJoin(sessionResults, sessionResultsJoin);
 
-    const trackMap = new Map((await db.select().from(tracks)).map((t) => [t.id, t]));
-    const driverMap = new Map((await db.select().from(drivers)).map((d) => [d.id, d]));
-    const srRows = await db.select().from(sessionResults);
-
-    const isPlayerMap = new Map<string, number>();
-    for (const sr of srRows) {
-      isPlayerMap.set(`${sr.sessionId}:${sr.driverId}`, sr.isPlayer);
-    }
-
-    return rows.map(({ lap: r, sessionCourse }) => {
-      const isPlayer = r.sessionId != null
-        ? (isPlayerMap.get(`${r.sessionId}:${r.driverId}`) ?? null)
-        : null;
-
-      return {
-        ...r,
-        trackName: trackMap.get(r.trackId)?.name ?? "—",
-        driverName: driverMap.get(r.driverId)?.name ?? "—",
-        team: driverMap.get(r.driverId)?.team ?? "—",
-        isPlayer,
-        sessionCourse: sessionCourse ?? null,
-      } satisfies LapTimeEnriched;
-    });
+    return rows.map(({ lap, sessionCourse, trackName, driverName, driverTeam, isPlayer }) => ({
+      ...lap,
+      trackName: trackName ?? "—",
+      driverName: driverName ?? "—",
+      team: driverTeam ?? "—",
+      isPlayer: isPlayer ?? null,
+      sessionCourse: sessionCourse ?? null,
+    } satisfies LapTimeEnriched));
   }
 
+  /**
+   * #119: раньше enrichSession() делала 3 запроса НА КАЖДУЮ сессию (включая
+   * полный скан всей таблицы drivers), т.е. 1 + 3N запросов на getSessions().
+   * Теперь трасса джойнится прямо в запросе сессий, а результаты + имена
+   * пилотов всех сессий разом одним запросом и группируются в памяти —
+   * итого 2 запроса независимо от количества сессий.
+   */
   async getSessions(): Promise<SessionEnriched[]> {
-    const rows = await db.select().from(sessions).orderBy(desc(sessions.dateTime));
-    return await Promise.all(rows.map((s) => this.enrichSession(s)));
+    const sessionRows = await db
+      .select({ session: sessions, trackName: tracks.name })
+      .from(sessions)
+      .leftJoin(tracks, eq(sessions.trackId, tracks.id))
+      .orderBy(desc(sessions.dateTime));
+
+    return this.attachSessionResults(sessionRows);
   }
 
   async getSession(id: number): Promise<SessionEnriched | undefined> {
-    const rows = await db.select().from(sessions).where(eq(sessions.id, id));
-    const s = rows[0];
-    if (!s) return undefined;
-    return await this.enrichSession(s);
+    const sessionRows = await db
+      .select({ session: sessions, trackName: tracks.name })
+      .from(sessions)
+      .leftJoin(tracks, eq(sessions.trackId, tracks.id))
+      .where(eq(sessions.id, id));
+
+    const [enriched] = await this.attachSessionResults(sessionRows);
+    return enriched;
   }
 
-  private async enrichSession(s: Session): Promise<SessionEnriched> {
-    const trackRows = await db.select().from(tracks).where(eq(tracks.id, s.trackId));
-    const track = trackRows[0];
+  private async attachSessionResults(
+    sessionRows: { session: Session; trackName: string | null }[],
+  ): Promise<SessionEnriched[]> {
+    if (sessionRows.length === 0) return [];
 
-    const results = await db
-      .select()
+    const sessionIds = sessionRows.map((r) => r.session.id);
+    const resultRows = await db
+      .select({ result: sessionResults, driverName: drivers.name })
       .from(sessionResults)
-      .where(eq(sessionResults.sessionId, s.id));
+      .leftJoin(drivers, eq(sessionResults.driverId, drivers.id))
+      .where(inArray(sessionResults.sessionId, sessionIds));
 
-    const driverMap = new Map((await db.select().from(drivers)).map((d) => [d.id, d]));
+    const resultsBySession = new Map<
+      number,
+      Array<SessionResult & { driverName: string; teamName: string | null }>
+    >();
+    for (const { result, driverName } of resultRows) {
+      const list = resultsBySession.get(result.sessionId) ?? [];
+      list.push({
+        ...result,
+        driverName: driverName ?? "—",
+        // Нормализация: гарантируем что teamName не пустая строка
+        teamName: result.team && result.team !== "—" ? result.team : null,
+      });
+      resultsBySession.set(result.sessionId, list);
+    }
 
-    return {
-      ...s,
-      trackName: track?.name ?? s.venue,
-      results: results
-        .map((r) => ({
-          ...r,
-          driverName: driverMap.get(r.driverId)?.name ?? "—",
-          // Нормализация: гарантируем что teamName не пустая строка
-          teamName: r.team && r.team !== "—" ? r.team : null,
-        }))
-        .sort((a, b) => a.position - b.position),
-    };
+    return sessionRows.map(({ session, trackName }) => ({
+      ...session,
+      trackName: trackName ?? session.venue,
+      results: (resultsBySession.get(session.id) ?? []).sort((a, b) => a.position - b.position),
+    }));
   }
 }
 
