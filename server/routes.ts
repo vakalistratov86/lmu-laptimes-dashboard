@@ -15,6 +15,19 @@ import { requireAdminToken } from "./adminAuth";
  * unhandled rejections automatically (fixed only in Express 5).
  * Fixes issue #65.
  */
+/**
+ * Drizzle/pg query errors put the real Postgres reason (constraint violation,
+ * type mismatch, etc.) in `error.cause`, not in `error.message` (which is just
+ * "Failed query: <sql> params: <params>"). Without this, that reason was lost
+ * both to the client response and to the server logs.
+ */
+function errorMessageWithCause(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e);
+  const cause = e instanceof Error ? e.cause : undefined;
+  const causeMessage = cause instanceof Error ? cause.message : undefined;
+  return causeMessage ? `${message} — ${causeMessage}` : message;
+}
+
 const asyncRoute =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) =>
@@ -301,11 +314,13 @@ export async function registerRoutes(
             importId: id,
           });
         } else {
+          const message = errorMessageWithCause(e);
+          console.error(`[import] ${fileName} failed:`, e);
           await db.update(importJobs)
-            .set({ status: "failed", error: e.message, finishedAt: Date.now() })
+            .set({ status: "failed", error: message, finishedAt: Date.now() })
             .where(eq(importJobs.id, id));
           errors++;
-          results.push({ fileName, ok: false, skipped: false, status: 500, message: e.message, importId: id });
+          results.push({ fileName, ok: false, skipped: false, status: 500, message, importId: id });
         }
       }
     }
@@ -407,10 +422,12 @@ export async function registerRoutes(
 
         res.json({ ok: true, fileName, importId: id, telemetrySessionId, channelCount, sampleCount });
       } catch (e: any) {
+        const message = errorMessageWithCause(e);
+        console.error(`[telemetryImport] ${fileName} failed:`, e);
         await db.update(telemetryImportJobs)
-          .set({ status: "failed", error: e.message, finishedAt: Date.now() })
+          .set({ status: "failed", error: message, finishedAt: Date.now() })
           .where(eq(telemetryImportJobs.id, id));
-        res.status(500).json({ ok: false, fileName, message: e.message, importId: id });
+        res.status(500).json({ ok: false, fileName, message, importId: id });
       }
     })
   );
