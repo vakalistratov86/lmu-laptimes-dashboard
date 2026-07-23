@@ -1,26 +1,40 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { useLogImportEngine } from "@/lib/logImportEngine";
+import { useTelemetryImportEngine } from "@/lib/telemetryImportEngine";
 
 /**
- * Общее состояние "идёт ли сейчас сканирование/импорт" — раньше жило только
- * внутри страницы /import (отдельно в Import.tsx и в TelemetryImportPanel.tsx),
- * из-за чего индикатор активности в хедере (иконка перехода на /import)
- * не мог показать, что фоновый процесс всё ещё идёт, если пользователь
- * ушёл на другую страницу. Обе панели пишут в один и тот же контекст —
- * они никогда не активны одновременно (разные вкладки одной страницы).
+ * Общее состояние "идёт ли сейчас сканирование/импорт" — для индикатора
+ * активности в хедере (иконка перехода на /import), который должен
+ * показывать активность, даже если пользователь ушёл на другую страницу.
+ *
+ * С тех пор как оба движка импорта (логи и телеметрия, см.
+ * client/src/lib/logImportEngine.tsx и client/src/lib/telemetryImportEngine.tsx)
+ * вынесены в провайдеры уровня приложения, они смонтированы одновременно и
+ * ВСЕГДА (а не только когда открыта соответствующая вкладка /import) —
+ * поэтому у каждого движка теперь свой собственный, приватный mode, а этот
+ * контекст лишь производное значение (agregate), а не источник истины:
+ * общий записываемый mode гонялся бы, если оба импортёра активны одновременно
+ * (например, фоновый авто-импорт логов тикает, пока пользователь вручную
+ * сканирует телеметрию) — тот, кто первым закончит, сбросил бы mode в "idle"
+ * даже если второй ещё работает.
  */
 export type ImportActivityMode = "idle" | "scanning" | "importing";
 
 interface ImportActivityContextValue {
   mode: ImportActivityMode;
-  setMode: (mode: ImportActivityMode) => void;
 }
 
 const ImportActivityContext = createContext<ImportActivityContextValue | null>(null);
 
 export function ImportActivityProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<ImportActivityMode>("idle");
+  const logEngine = useLogImportEngine();
+  const telemetryEngine = useTelemetryImportEngine();
+  const mode = useMemo<ImportActivityMode>(
+    () => (logEngine.mode !== "idle" ? logEngine.mode : telemetryEngine.mode),
+    [logEngine.mode, telemetryEngine.mode],
+  );
   return (
-    <ImportActivityContext.Provider value={{ mode, setMode }}>
+    <ImportActivityContext.Provider value={{ mode }}>
       {children}
     </ImportActivityContext.Provider>
   );

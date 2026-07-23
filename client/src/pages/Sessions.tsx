@@ -57,8 +57,10 @@ type SessionItem = {
   event: string;
   driverCount: number;
   lapCount: number;
-  /** Настроенная длительность сессии в минутах (из лога игры). */
+  /** Настроенная длительность сессии в минутах (из лога игры; для практики/квалификации). */
   sessionDurationMin?: number | null;
+  /** Настроенная длительность гонки в минутах (из лога игры; для гонок). */
+  raceTimeMin?: number | null;
   results: {
     isPlayer: number;
     position: number;
@@ -99,8 +101,13 @@ function buildSessionsSummary(sessions: SessionItem[]): SessionsSummary {
   for (const s of sessions) {
     const cat = normalizeSessionCategory(s.sessionType);
     summary[cat].count += 1;
-    if (typeof s.sessionDurationMin === "number" && s.sessionDurationMin > 0) {
-      summary[cat].minutes += s.sessionDurationMin;
+    // В логе игры длительность гонки пишется в отдельное поле RaceTime
+    // (raceTimeMin), а не в Minutes (sessionDurationMin) — оно заполняется
+    // только у практики/квалификации. Без этого разделения время гонок
+    // никогда не попадало в сумму.
+    const durationMin = cat === "race" ? s.raceTimeMin : s.sessionDurationMin;
+    if (typeof durationMin === "number" && durationMin > 0) {
+      summary[cat].minutes += durationMin;
     }
   }
   return summary;
