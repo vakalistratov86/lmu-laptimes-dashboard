@@ -458,11 +458,19 @@ export function parseRaceResults(xml: string): ParsedSession | null {
   const fixedUpgrades = toInt(scalar(raceResults, "FixedUpgrades"));
   const tireWarmers = toInt(scalar(raceResults, "TireWarmers"));
   const dedicated = toInt(scalar(raceResults, "Dedicated"));
-  const sessionDurationMin = toInt(scalar(raceResults, "Minutes"));
-  const sessionMaxLaps = toInt(scalar(raceResults, "Laps"));
-  const mostLapsCompleted = toInt(scalar(raceResults, "MostLapsCompleted"));
 
   const { type: sessionType, node: sessionNode } = detectSessionType(raceResults);
+
+  // Minutes/Laps/MostLapsCompleted лежат ВНУТРИ секции конкретной сессии
+  // (<Practice1><Minutes>14</Minutes>...), а не на верхнем уровне RaceResults,
+  // как остальные настройки выше — проверено на реальном логе практики, где
+  // единственный <Minutes> нашёлся только под <Practice1>. Раньше это читалось
+  // с raceResults и было всегда null для практики/квалификации. Фолбэк на
+  // raceResults оставлен на случай другой версии формата лога, где тег всё же
+  // лежит на верхнем уровне.
+  const sessionDurationMin = toInt(scalar(sessionNode, "Minutes") ?? scalar(raceResults, "Minutes"));
+  const sessionMaxLaps = toInt(scalar(sessionNode, "Laps") ?? scalar(raceResults, "Laps"));
+  const mostLapsCompleted = toInt(scalar(sessionNode, "MostLapsCompleted") ?? scalar(raceResults, "MostLapsCompleted"));
 
   // Блоки <Driver>...</Driver> ищем внутри секции сессии
   const drivers: ParsedDriver[] = [];

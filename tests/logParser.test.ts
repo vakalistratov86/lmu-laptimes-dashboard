@@ -211,6 +211,75 @@ describe('parseRaceResults', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Minutes/Laps/MostLapsCompleted — в реальных логах LMU эти теги лежат
+  // ВНУТРИ секции конкретной сессии (<Practice1><Minutes>...), а не на
+  // верхнем уровне RaceResults, как RaceLaps/RaceTime. Регрессия на баг,
+  // из-за которого длительность практики/квалификации всегда парсилась как
+  // null (см. реальный лог сессии практики, приложенный к тикету).
+  // -------------------------------------------------------------------------
+  describe('настройки сессии, вложенные в тег типа сессии', () => {
+    const oneDriverXml = `<Driver>
+  <Name>Max Verstappen</Name>
+  <isPlayer>1</isPlayer>
+  <Position>1</Position>
+  <ClassPosition>1</ClassPosition>
+  <CarClass>Hypercar</CarClass>
+  <CarType>Toyota GR010</CarType>
+  <TeamName>Toyota</TeamName>
+  <Laps>2</Laps>
+  <Pitstops>0</Pitstops>
+  <BestLapTime>101.9073</BestLapTime>
+</Driver>`;
+
+    it('sessionDurationMin читается из <Minutes>, вложенного в <Practice1>, а не из корня RaceResults', () => {
+      const xml = makeXml({
+        sessionTag: 'Practice1',
+        drivers: `<Minutes>14</Minutes>\n${oneDriverXml}`,
+      });
+      const result = parseRaceResults(xml)!;
+      expect(result.sessionDurationMin).toBe(14);
+    });
+
+    it('sessionMaxLaps читается из <Laps>, вложенного в тег сессии', () => {
+      const xml = makeXml({
+        sessionTag: 'Qualify',
+        drivers: `<Laps>2147483647</Laps>\n${oneDriverXml}`,
+      });
+      const result = parseRaceResults(xml)!;
+      expect(result.sessionMaxLaps).toBe(2147483647);
+    });
+
+    it('mostLapsCompleted читается из <MostLapsCompleted>, вложенного в тег сессии', () => {
+      const xml = makeXml({
+        sessionTag: 'Practice1',
+        drivers: `<MostLapsCompleted>7</MostLapsCompleted>\n${oneDriverXml}`,
+      });
+      const result = parseRaceResults(xml)!;
+      expect(result.mostLapsCompleted).toBe(7);
+    });
+
+    it('sessionDurationMin = null, если <Minutes> нет ни в сессии, ни в корне', () => {
+      const result = parseRaceResults(makeXml({ sessionTag: 'Practice1', drivers: oneDriverXml }))!;
+      expect(result.sessionDurationMin).toBeNull();
+    });
+
+    it('фолбэк: sessionDurationMin читается из корня RaceResults, если тега нет внутри сессии', () => {
+      const xml = makeXml({ sessionTag: 'Practice1', drivers: oneDriverXml })
+        .replace('<TrackLength>13626.0</TrackLength>', '<TrackLength>13626.0</TrackLength>\n<Minutes>20</Minutes>');
+      const result = parseRaceResults(xml)!;
+      expect(result.sessionDurationMin).toBe(20);
+    });
+
+    it('гонка: raceTimeMin/raceLaps по-прежнему читаются с верхнего уровня RaceResults', () => {
+      const xml = makeXml({ sessionTag: 'Race' })
+        .replace('<TrackLength>13626.0</TrackLength>', '<TrackLength>13626.0</TrackLength>\n<RaceLaps>0</RaceLaps>\n<RaceTime>60</RaceTime>');
+      const result = parseRaceResults(xml)!;
+      expect(result.raceTimeMin).toBe(60);
+      expect(result.raceLaps).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Граничные случаи / невалидный ввод
   // -------------------------------------------------------------------------
   describe('граничные случаи', () => {
