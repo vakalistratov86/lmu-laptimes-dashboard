@@ -90,7 +90,7 @@ export async function registerRoutes(
 
   /**
    * GET /api/drivers/:id/incidents — инциденты и нарушения трек-лимитов
-   * пилота по всем сессиям. Используется страницей профиля пилота.
+   * пилота по гоночным сессиям. Используется страницей профиля пилота.
    */
   app.get("/api/drivers/:id/incidents", asyncRoute(async (req, res) => {
     const driverId = Number(req.params.id);

@@ -108,11 +108,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Инциденты и нарушения трек-лимитов конкретного пилота по всем сессиям —
-   * для страницы профиля пилота. Ни та, ни другая таблица нигде больше не
-   * читается на клиенте (только записываются при импорте), это первая точка
-   * входа, поэтому обогащение (трасса/дата/имя второго участника) выполняется
-   * здесь, а не переиспользуется из другого места.
+   * Инциденты и нарушения трек-лимитов конкретного пилота по его гоночным
+   * сессиям (те же нарушения на практике/квалификации на карточке пилота
+   * избыточны) — для страницы профиля пилота. Ни та, ни другая таблица нигде
+   * больше не читается на клиенте (только записываются при импорте), это
+   * первая точка входа, поэтому обогащение (трасса/дата/имя второго
+   * участника) выполняется здесь, а не переиспользуется из другого места.
    *
    * Инциденты выбираются по driver_id (виновник) ИЛИ target_driver_id
    * (пострадавший) — иначе пилот, в которого просто врезались, никогда не
@@ -120,7 +121,7 @@ export class DatabaseStorage implements IStorage {
    * запись к точке зрения запрошенного пилота.
    */
   async getDriverIncidents(driverId: number): Promise<DriverIncidentsResponse> {
-    const [incRows, tlRows] = await Promise.all([
+    const [incRowsAll, tlRowsAll] = await Promise.all([
       db.select().from(sessionIncidents).where(
         or(eq(sessionIncidents.driverId, driverId), eq(sessionIncidents.targetDriverId, driverId)),
       ),
@@ -128,9 +129,24 @@ export class DatabaseStorage implements IStorage {
     ]);
 
     const sessionIds = Array.from(new Set([
-      ...incRows.map((r) => r.sessionId),
-      ...tlRows.map((r) => r.sessionId),
+      ...incRowsAll.map((r) => r.sessionId),
+      ...tlRowsAll.map((r) => r.sessionId),
     ]));
+
+    const sessionRows = sessionIds.length
+      ? await db.select().from(sessions).where(inArray(sessions.id, sessionIds))
+      : [];
+    const sessionMap = new Map(sessionRows.map((s) => [s.id, s]));
+
+    // Профиль пилота показывает инциденты/трек-лимиты только из гоночных
+    // сессий — те же нарушения на практике/квалификации избыточны и просто
+    // засоряют карточку.
+    const isRaceSession = (sessionId: number): boolean => {
+      const raw = sessionMap.get(sessionId)?.sessionType.toLowerCase() ?? "";
+      return raw.includes("гонка") || raw.includes("race");
+    };
+    const incRows = incRowsAll.filter((r) => isRaceSession(r.sessionId));
+    const tlRows = tlRowsAll.filter((r) => isRaceSession(r.sessionId));
 
     // Только "другая сторона" инцидентов — а не вся таблица drivers на
     // каждый вызов профиля пилота (тот же класс full-table-scan, что и
@@ -142,9 +158,6 @@ export class DatabaseStorage implements IStorage {
       }),
     ));
 
-    const sessionRows = sessionIds.length
-      ? await db.select().from(sessions).where(inArray(sessions.id, sessionIds))
-      : [];
     const trackIds = Array.from(new Set(sessionRows.map((s) => s.trackId)));
 
     const [trackRows, driverRows] = await Promise.all([
@@ -152,7 +165,6 @@ export class DatabaseStorage implements IStorage {
       otherDriverIds.length ? db.select().from(drivers).where(inArray(drivers.id, otherDriverIds)) : Promise.resolve([]),
     ]);
 
-    const sessionMap = new Map(sessionRows.map((s) => [s.id, s]));
     const trackMap = new Map(trackRows.map((t) => [t.id, t]));
     const driverMap = new Map(driverRows.map((d) => [d.id, d]));
 
