@@ -105,9 +105,11 @@
 | `fixed_upgrades` | INTEGER | `FixedUpgrades` (1/0) |
 | `tire_warmers` | INTEGER | `TireWarmers` (1/0) |
 | `dedicated` | INTEGER | Флаг выделенного сервера |
-| `session_duration_min` | INTEGER | Длительность в минутах (для практики/квалификации) |
-| `session_max_laps` | INTEGER | Лимит кругов для практики |
-| `most_laps_completed` | INTEGER | `MostLapsCompleted` |
+| `session_duration_min` | INTEGER | `Minutes` — длительность в минутах (для практики/квалификации). Тег лежит ВНУТРИ секции конкретной сессии (`<Practice1><Minutes>`), а не на верхнем уровне `<RaceResults>`, в отличие от `race_laps`/`race_time_min` выше |
+| `session_max_laps` | INTEGER | `Laps` — лимит кругов для практики. Тоже читается из тега сессии, не из корня |
+| `most_laps_completed` | INTEGER | `MostLapsCompleted` — тоже читается из тега сессии, не из корня |
+
+**Дедупликация при импорте (реконнект).** Выделенный сервер LMU при разрыве соединения пишет новый файл лога вместо дополнения старого — устойчивого тега-идентификатора сессии в формате нет. При импорте сессия-продолжение определяется по совпадению `event` + точного `session_type` + `track_id` + пересечения состава пилотов (коэффициент Шимкевича — Симпсона ≥ 0.5), в пределах ±24 часов от `date_time` нового файла — см. `server/sessionSupersede.ts`. При обнаружении более полный по суммарному числу кругов дамп заменяет менее полный: старая строка `sessions` и все её данные (`session_results`, `session_laps`, `lap_times`, `session_incidents`, `session_sector_bests`, `session_track_limits`) удаляются, новый дамп вставляется как отдельная сессия. Запись в `import_jobs` от старого (заменённого) импорта не удаляется и остаётся со ссылкой на уже несуществующий `session_id` — не используется ни в одном запросе, кроме статуса самой задачи импорта.
 
 ---
 
