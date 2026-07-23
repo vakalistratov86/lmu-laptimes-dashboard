@@ -1,8 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from "react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { promptAdminToken, clearStoredAdminToken } from "@/lib/adminToken";
-import type { ImportFileResult } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
+import { useRef, useState } from "react";
 import {
   FolderOpen,
   FileUp,
@@ -19,7 +15,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useImportActivity } from "@/lib/importActivity";
+import { AUTO_INTERVAL_MS, FSA_SUPPORTED, useLogImportEngine, type LogLevel } from "@/lib/logImportEngine";
 import TelemetryImportPanel from "@/components/TelemetryImportPanel";
 
 type MainTab = "logs" | "telemetry";
@@ -32,406 +28,33 @@ declare module "react" {
   }
 }
 
-// ─── Типы ────────────────────────────────────────────────────────────────────
-type LogLevel = "info" | "ok" | "skip" | "error";
-type LogEntry = { ts: number; level: LogLevel; text: string };
-type Counters = { total: number; queued: number; imported: number; skipped: number; failed: number };
-
-const FSA_SUPPORTED = typeof window !== "undefined" && "showDirectoryPicker" in window;
-const DB_NAME = "lmu-import-db";
-const DB_VERSION = 1;
-const STORE_HANDLE = "dirHandle";
-const STORE_SEEN = "seenFiles";
-const AUTO_INTERVAL_MS = 30_000;
-
-// ─── localStorage ключи для персистентности журнала ──────────────────────────
-const LS_LOG_KEY = "lmu-import-log";
-const LS_COUNTERS_KEY = "lmu-import-counters";
-const MAX_LOG_ENTRIES = 500;
-
-const DEFAULT_COUNTERS: Counters = { total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 };
-
-function loadLog(): LogEntry[] {
-  try {
-    const raw = localStorage.getItem(LS_LOG_KEY);
-    return raw ? (JSON.parse(raw) as LogEntry[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveLog(entries: LogEntry[]): void {
-  try {
-    // Храним только последние MAX_LOG_ENTRIES записей
-    const trimmed = entries.slice(-MAX_LOG_ENTRIES);
-    localStorage.setItem(LS_LOG_KEY, JSON.stringify(trimmed));
-  } catch {
-    // ignore quota errors
-  }
-}
-
-function loadCounters(): Counters {
-  try {
-    const raw = localStorage.getItem(LS_COUNTERS_KEY);
-    return raw ? (JSON.parse(raw) as Counters) : { ...DEFAULT_COUNTERS };
-  } catch {
-    return { ...DEFAULT_COUNTERS };
-  }
-}
-
-function saveCounters(c: Counters): void {
-  try {
-    localStorage.setItem(LS_COUNTERS_KEY, JSON.stringify(c));
-  } catch {
-    // ignore
-  }
-}
-
 /**
- * Убирает из сообщения об ошибке длинный XML-контент.
- * Оставляет только первые 300 символов до первого '<' (если есть).
+ * Страница /import: тонкий view над движком импорта логов
+ * (client/src/lib/logImportEngine.tsx), вынесенным выше роутера — навигация
+ * между вкладками приложения больше не прерывает фоновый импорт/авто-скан,
+ * т.к. состояние и цикл импорта больше не привязаны к жизненному циклу этой
+ * страницы.
  */
-function trimErrorMessage(msg: string): string {
-  const xmlStart = msg.indexOf("<");
-  if (xmlStart === -1) return msg;
-  const prefix = msg.slice(0, xmlStart).trim();
-  return prefix.length > 0 ? prefix : msg.slice(0, 300);
-}
-
-// ─── IndexedDB helpers ───────────────────────────────────────────────────────
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE_HANDLE);
-      req.result.createObjectStore(STORE_SEEN);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function dbGet<T>(store: string, key: string): Promise<T | undefined> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, "readonly");
-    const req = tx.objectStore(store).get(key);
-    req.onsuccess = () => resolve(req.result as T);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function dbPut(store: string, key: string, value: unknown): Promise<void> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, "readwrite");
-    tx.objectStore(store).put(value, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function dbGetSeenSet(): Promise<Set<string>> {
-  const db = await openDB();
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORE_SEEN, "readonly");
-    const req = tx.objectStore(STORE_SEEN).get("seen");
-    req.onsuccess = () => resolve(new Set<string>(req.result ?? []));
-    req.onerror = () => resolve(new Set());
-  });
-}
-
-async function dbSaveSeenSet(set: Set<string>): Promise<void> {
-  await dbPut(STORE_SEEN, "seen", Array.from(set));
-}
-
-function fileKey(f: File): string {
-  return `${f.name}|${f.size}|${f.lastModified}`;
-}
-
-// ─── Компонент ───────────────────────────────────────────────────────────────
 export default function Import() {
   const { t } = useLanguage();
-  const { toast } = useToast();
   const folderInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef = useRef<HTMLInputElement>(null);
-  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // FSA-состояние
-  const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
-  const [dirName, setDirName] = useState<string | null>(null);
-  const [dirPerm, setDirPerm] = useState<"granted" | "prompt" | "denied" | null>(null);
-  const [autoImport, setAutoImport] = useState(false);
+  const engine = useLogImportEngine();
+  const {
+    dirHandle, dirName, dirPerm, autoImport,
+    log, counters, mode, clearingDb,
+    pickFolderFSA, requestPermission, scanFSAFolder, importFiles,
+    clearDatabase, setAutoImport, addLog, clearLog,
+  } = engine;
 
-  // Журнал — инициализируем из localStorage
-  const [log, setLogState] = useState<LogEntry[]>(() => loadLog());
-  const [counters, setCountersState] = useState<Counters>(() => loadCounters());
-  // Общий с хедером стейт (индикатор активности на иконке /import) — см. lib/importActivity.tsx
-  const { mode, setMode } = useImportActivity();
-  const [clearingDb, setClearingDb] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>("logs");
-
-  // Обёртки, которые одновременно обновляют state и localStorage
-  const setLog = useCallback((updater: (prev: LogEntry[]) => LogEntry[]) => {
-    setLogState((prev) => {
-      const next = updater(prev);
-      saveLog(next);
-      return next;
-    });
-  }, []);
-
-  const setCounters = useCallback((updater: (prev: Counters) => Counters) => {
-    setCountersState((prev) => {
-      const next = updater(prev);
-      saveCounters(next);
-      return next;
-    });
-  }, []);
-
-  const addLog = useCallback((level: LogLevel, text: string) => {
-    setLog((prev) => [...prev, { ts: Date.now(), level, text }]);
-  }, [setLog]);
-
-  // ─── Восстановить dirHandle из IndexedDB ─────────────────────────────────
-  useEffect(() => {
-    if (!FSA_SUPPORTED) return;
-    (async () => {
-      try {
-        const saved = await dbGet<FileSystemDirectoryHandle>(STORE_HANDLE, "dir");
-        if (!saved) return;
-        setDirHandle(saved);
-        setDirName(saved.name);
-        const perm = await (saved as FileSystemDirectoryHandle & {
-          queryPermission: (d: { mode: string }) => Promise<PermissionState>;
-        }).queryPermission({ mode: "read" });
-        setDirPerm(perm);
-      } catch {
-        // нет сохранённого handle
-      }
-    })();
-  }, []);
-
-  // ─── FSA: выбор папки ─────────────────────────────────────────────────────
-  async function pickFolderFSA() {
-    if (!FSA_SUPPORTED) return;
-    try {
-      const handle = await (window as unknown as Window & {
-        showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
-      }).showDirectoryPicker();
-      setDirHandle(handle);
-      setDirName(handle.name);
-      await dbPut(STORE_HANDLE, "dir", handle);
-      const perm = await (handle as FileSystemDirectoryHandle & {
-        queryPermission: (d: { mode: string }) => Promise<PermissionState>;
-      }).queryPermission({ mode: "read" });
-      setDirPerm(perm);
-      addLog("info", t("imp.logFolderPicked", { name: handle.name }));
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name !== "AbortError") {
-        addLog("error", t("imp.logFolderPickError", { msg: e.message }));
-      }
-    }
-  }
-
-  // ─── FSA: запросить разрешение ────────────────────────────────────────────
-  async function requestPermission(): Promise<boolean> {
-    if (!dirHandle) return false;
-    try {
-      const perm = await (dirHandle as FileSystemDirectoryHandle & {
-        requestPermission: (d: { mode: string }) => Promise<PermissionState>;
-      }).requestPermission({ mode: "read" });
-      setDirPerm(perm);
-      return perm === "granted";
-    } catch {
-      return false;
-    }
-  }
-
-  // ─── Стриминговый импорт файлов ──────────────────────────────────────────
-  const importFiles = useCallback(
-    async (files: File[], seenSet?: Set<string>) => {
-      const xmlFiles = files.filter((f) => f.name.toLowerCase().endsWith(".xml"));
-      if (xmlFiles.length === 0) {
-        addLog("info", t("imp.logNoXmlFiles"));
-        return;
-      }
-
-      const localSeen = seenSet ?? (await dbGetSeenSet());
-      const alreadySeenFiles = xmlFiles.filter((f) => localSeen.has(fileKey(f)));
-      const newFiles = xmlFiles.filter((f) => !localSeen.has(fileKey(f)));
-
-      // fix: файлы, уже отмеченные локально как обработанные (по имени/размеру/
-      // дате изменения), раньше молча выбрасывались из newFiles ДО цикла,
-      // который обновляет счётчики — total/queued/skipped их вообще не видели.
-      // Теперь они логируются и учитываются как пропуск, как и дубликаты,
-      // которые обнаруживает сервер по хэшу содержимого.
-      if (alreadySeenFiles.length > 0) {
-        setCounters((c) => ({
-          ...c,
-          total: c.total + alreadySeenFiles.length,
-          skipped: c.skipped + alreadySeenFiles.length,
-        }));
-        for (const file of alreadySeenFiles) {
-          addLog("skip", t("imp.logImportSkip", { name: file.name, msg: t("imp.logImportSkipLocalDuplicate") }));
-        }
-      }
-
-      if (newFiles.length === 0) {
-        addLog("info", t("imp.logNoNewFiles"));
-        return;
-      }
-
-      addLog("info", t("imp.logNewFilesFound", { n: newFiles.length }));
-      setCounters((c) => ({ ...c, total: c.total + newFiles.length, queued: c.queued + newFiles.length }));
-      setMode("importing");
-
-      for (const file of newFiles) {
-        addLog("info", t("imp.logImporting", { name: file.name }));
-        try {
-          const content = await file.text();
-          const res = await apiRequest("POST", "/api/import", {
-            files: [{ fileName: file.name, content }],
-          });
-          const data: { results: ImportFileResult[]; imported: number; skipped: number; totalLaps: number } =
-            await res.json();
-          const r = data.results[0];
-          // ВАЖНО: проверяем `skipped` ПЕРВЫМ. Сервер возвращает `ok: false` и
-          // для пропуска (пустой/дубликат/0 кругов), и для настоящей ошибки —
-          // единственное надёжное различие даёт поле `skipped`. Раньше здесь
-          // проверялось только `r?.ok`, из-за чего пропуск с 0 кругами (у него
-          // `ok` был исторически true) попадал в ветку "успех" — журнал писал
-          // запись с пустым названием сессии, а счётчики imported/skipped
-          // оставались нетронутыми (файл "пропадал" из статистики бесследно).
-          if (r?.skipped) {
-            // Обрезаем XML из сообщения о пропуске — в лог пишем только имя файла и краткую причину
-            const skipMsg = trimErrorMessage(r?.message ?? t("imp.logImportSkipDefault"));
-            addLog("skip", t("imp.logImportSkip", { name: file.name, msg: skipMsg }));
-            setCounters((c) => ({ ...c, queued: c.queued - 1, skipped: c.skipped + 1 }));
-          } else if (r?.ok) {
-            addLog("ok", t("imp.logImportOk", {
-              name: file.name,
-              event: r.event ?? r.venue ?? "",
-              sessionType: r.sessionType ?? "",
-              drivers: r.drivers ?? 0,
-              n: r.laps ?? 0,
-            }));
-            setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + 1 }));
-          } else {
-            // Настоящая ошибка (не пропуск) — валидация, БД и т.п.
-            const errMsg = trimErrorMessage(r?.message ?? t("imp.logImportErrorDefault"));
-            addLog("error", t("imp.logImportError", { name: file.name, msg: errMsg }));
-            setCounters((c) => ({ ...c, queued: c.queued - 1, failed: c.failed + 1 }));
-          }
-          localSeen.add(fileKey(file));
-          await dbSaveSeenSet(localSeen);
-        } catch (e: unknown) {
-          // Никогда не пишем содержимое XML в лог — только имя файла и краткое сообщение
-          const rawMsg = e instanceof Error ? e.message : String(e);
-          const msg = trimErrorMessage(rawMsg);
-          addLog("error", t("imp.logImportError", { name: file.name, msg }));
-          setCounters((c) => ({ ...c, queued: c.queued - 1, failed: c.failed + 1 }));
-        }
-      }
-
-      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/laps"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tracks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/drivers"] });
-      setMode("idle");
-      addLog("info", t("imp.logImportDone"));
-    },
-    [addLog, setCounters, t]
-  );
-
-  // ─── Очистка БД ───────────────────────────────────────────────────────────
-  const clearDatabase = useCallback(async () => {
-    if (!window.confirm(t("imp.confirmClearDb"))) return;
-    const token = promptAdminToken(t("imp.adminTokenPrompt"));
-    if (!token) return;
-    setClearingDb(true);
-    addLog("info", t("imp.logClearingDb"));
-    try {
-      await apiRequest("DELETE", "/api/import/all", undefined, { Authorization: `Bearer ${token}` });
-      await dbSaveSeenSet(new Set());
-      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/laps"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tracks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/drivers"] });
-      const reset: Counters = { total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 };
-      setCountersState(reset);
-      saveCounters(reset);
-      addLog("ok", t("imp.logDbCleared"));
-      toast({ title: t("imp.toastDbClearedTitle"), description: t("imp.toastDbClearedDesc") });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? trimErrorMessage(e.message) : String(e);
-      if (msg.startsWith("401")) clearStoredAdminToken();
-      addLog("error", t("imp.logDbClearError", { msg }));
-      toast({ title: t("imp.toastErrorTitle"), description: msg, variant: "destructive" });
-    } finally {
-      setClearingDb(false);
-    }
-  }, [addLog, setCountersState, toast, t]);
-
-  // ─── Скан FSA-папки ───────────────────────────────────────────────────────
-  const scanFSAFolder = useCallback(async () => {
-    if (!dirHandle) return;
-    addLog("info", t("imp.logScanningFolder", { name: dirHandle.name }));
-    setMode("scanning");
-    try {
-      let perm = dirPerm;
-      if (perm !== "granted") {
-        const ok = await requestPermission();
-        if (!ok) {
-          addLog("error", t("imp.logNoPermission"));
-          setMode("idle");
-          return;
-        }
-        perm = "granted";
-      }
-      const files: File[] = [];
-      for await (const [, entry] of (dirHandle as FileSystemDirectoryHandle & {
-        [Symbol.asyncIterator]?: never;
-        entries: () => AsyncIterable<[string, FileSystemHandle]>;
-      }).entries()) {
-        if (entry.kind === "file" && entry.name.toLowerCase().endsWith(".xml")) {
-          const fh = entry as FileSystemFileHandle;
-          files.push(await fh.getFile());
-        }
-      }
-      addLog("info", t("imp.logXmlFound", { n: files.length }));
-      setMode("idle");
-      await importFiles(files);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      addLog("error", t("imp.logScanError", { msg }));
-      setMode("idle");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirHandle, dirPerm, importFiles, t]);
-
-  // ─── Авто-импорт: таймер ─────────────────────────────────────────────────
-  useEffect(() => {
-    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
-    if (!autoImport || !dirHandle) return;
-
-    const tick = async () => {
-      if (mode === "idle") await scanFSAFolder();
-      autoTimerRef.current = setTimeout(tick, AUTO_INTERVAL_MS);
-    };
-    autoTimerRef.current = setTimeout(tick, AUTO_INTERVAL_MS);
-    return () => {
-      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
-    };
-  }, [autoImport, dirHandle, mode, scanFSAFolder]);
 
   // ─── Fallback: обычный input ──────────────────────────────────────────────
   async function handleFileInput(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
-    setMode("scanning");
     addLog("info", t("imp.logFilesPicked", { n: fileList.length }));
-    const files = Array.from(fileList);
-    setMode("idle");
-    await importFiles(files);
+    await importFiles(Array.from(fileList));
   }
 
   // ─── Цвет и иконка записи журнала ─────────────────────────────────────────
@@ -685,13 +308,7 @@ export default function Import() {
             <span>{t("imp.logTitle", { n: log.length })}</span>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => {
-                  setLogState([]);
-                  saveLog([]);
-                  const reset: Counters = { total: 0, queued: 0, imported: 0, skipped: 0, failed: 0 };
-                  setCountersState(reset);
-                  saveCounters(reset);
-                }}
+                onClick={clearLog}
                 className="text-xs text-muted-foreground hover:text-card-foreground"
               >
                 {t("imp.logClear")}
