@@ -308,8 +308,10 @@ export async function registerRoutes(
       }
 
       try {
-        const { sessionId, totalLaps: laps, validLaps, errorLaps, event, venue, sessionType, driverCount } =
-          await runImport({ id, fileHash, fileName, content });
+        const {
+          sessionId, totalLaps: laps, validLaps, errorLaps, event, venue, sessionType, driverCount,
+          replacedSessionId, replacedLapCount,
+        } = await runImport({ id, fileHash, fileName, content });
 
         await db.update(importJobs)
           .set({ status: "completed", sessionId, totalLaps: laps, validLaps, errorLaps, finishedAt: Date.now() })
@@ -329,10 +331,14 @@ export async function registerRoutes(
           venue,
           sessionType,
           drivers: driverCount,
+          replacedSessionId,
+          replacedLapCount,
         });
       } catch (e: any) {
-        if (e.code === "ZERO_LAPS") {
-          // Файл валидный, но кругов/участников нет — считаем пропуском, не ошибкой
+        if (e.code === "ZERO_LAPS" || e.code === "SUPERSEDED") {
+          // ZERO_LAPS: файл валидный, но кругов/участников нет.
+          // SUPERSEDED: в БД уже есть более полный дамп этой же сессии
+          // (см. server/sessionSupersede.ts) — оба считаются пропуском, не ошибкой.
           await db.update(importJobs)
             .set({ status: "skipped", error: e.message, finishedAt: Date.now() })
             .where(eq(importJobs.id, id));
@@ -344,6 +350,9 @@ export async function registerRoutes(
             status: 200,
             message: e.message,
             importId: id,
+            ...(e.code === "SUPERSEDED"
+              ? { reason: "SUPERSEDED", existingSessionId: e.existingSessionId, existingLapCount: e.existingLapCount, newLapCount: e.newLapCount }
+              : {}),
           });
         } else {
           const message = errorMessageWithCause(e);

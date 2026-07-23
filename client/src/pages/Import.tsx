@@ -64,6 +64,7 @@ export default function Import() {
     if (level === "ok") return "text-emerald-400";
     if (level === "error") return "text-red-400";
     if (level === "skip") return "text-yellow-400";
+    if (level === "warn") return "text-amber-400";
     return "text-muted-foreground";
   }
 
@@ -72,6 +73,7 @@ export default function Import() {
     if (level === "ok") return <CheckCircle2 size={14} className={cls} />;
     if (level === "error") return <XCircle size={14} className={cls} />;
     if (level === "skip") return <CircleSlash size={14} className={cls} />;
+    if (level === "warn") return <AlertTriangle size={14} className={cls} />;
     return <Info size={14} className={cls} />;
   }
 
