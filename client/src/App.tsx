@@ -14,6 +14,8 @@ import Tracks from "@/pages/Tracks";
 import TrackDetail from "@/pages/TrackDetail";
 import Sessions from "@/pages/Sessions";
 import SessionDetail from "@/pages/SessionDetail";
+import Telemetry from "@/pages/Telemetry";
+import TelemetryDetail from "@/pages/TelemetryDetail";
 import DriverDetail from "@/pages/DriverDetail";
 import PilotProfile from "@/pages/PilotProfile";
 import Import from "@/pages/Import";
@@ -28,6 +30,8 @@ function AppRouter() {
       <Route path="/tracks/:id" component={TrackDetail} />
       <Route path="/sessions" component={Sessions} />
       <Route path="/sessions/:id" component={SessionDetail} />
+      <Route path="/telemetry" component={Telemetry} />
+      <Route path="/telemetry/:id" component={TelemetryDetail} />
       <Route path="/drivers/:id" component={DriverDetail} />
       <Route path="/profile" component={PilotProfile} />
       <Route path="/events" component={Events} />

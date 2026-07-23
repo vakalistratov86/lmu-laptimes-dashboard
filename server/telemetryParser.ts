@@ -5,9 +5,16 @@
  * - `metadata` — key/value пары о заезде (пилот, трасса, сетап и т.д.)
  * - `channelsList` (channelName, frequency Гц, unit) — реестр непрерывных каналов.
  *   Каждый хранится в одноимённой таблице с колонками `value` либо `value1..value4`,
- *   без явного `ts` — время восстанавливается потребителем как seq / frequency.
+ *   без явного `ts` в файле.
  * - `eventsList` (eventName, unit) — реестр событийных каналов. Таблицы с колонками
  *   `ts, value` либо `ts, value1..value4` — запись добавляется только при изменении.
+ *
+ * Все event-таблицы одного файла показывают одинаковый `ts` в самой первой строке —
+ * это момент старта записи (recordingBaseTs). Канальные (channel) строки такого `ts`
+ * не содержат, поэтому здесь он вычисляется и проставляется вручную как
+ * `recordingBaseTs + seq / frequencyHz` — иначе каналы и события лежат на разных
+ * временных шкалах и их нельзя корректно сопоставить (напр. семплы GPS с границами
+ * кругов из события `Lap`).
  */
 import { DuckDBInstance } from "@duckdb/node-api";
 
@@ -45,7 +52,9 @@ function toNumberOrNull(v: unknown): number | null {
 
 async function readTableRows(
   conn: Awaited<ReturnType<DuckDBInstance["connect"]>>,
-  tableName: string
+  tableName: string,
+  /** Для каналов без собственного `ts` в файле: recordingBaseTs + seq/frequencyHz. */
+  syntheticTs: { baseTs: number; frequencyHz: number } | null
 ): Promise<TelemetryChannelData["rows"]> {
   const reader = await conn.runAndReadAll(`SELECT * FROM ${quoteIdent(tableName)}`);
   const cols = reader.columnNames();
@@ -55,7 +64,11 @@ async function readTableRows(
 
   return objects.map((row, seq) => ({
     seq,
-    ts: hasTs ? toNumberOrNull(row.ts) : null,
+    ts: hasTs
+      ? toNumberOrNull(row.ts)
+      : syntheticTs
+        ? syntheticTs.baseTs + seq / syntheticTs.frequencyHz
+        : null,
     value1: hasMulti ? toNumberOrNull(row.value1) : toNumberOrNull(row.value),
     value2: hasMulti ? toNumberOrNull(row.value2) : null,
     value3: hasMulti ? toNumberOrNull(row.value3) : null,
@@ -92,14 +105,36 @@ export async function parseTelemetryFile(filePath: string): Promise<ParsedTeleme
 
       const channels: TelemetryChannelData[] = [];
 
-      for (const def of channelDefs) {
-        const rows = await readTableRows(conn, def.name);
-        channels.push({ name: def.name, kind: "channel", frequencyHz: def.frequencyHz, unit: def.unit, rows });
+      // Сначала события — по их первым строкам вычисляем recordingBaseTs,
+      // нужный ниже для восстановления ts у каналов.
+      const eventRowsByName = new Map<string, TelemetryChannelData["rows"]>();
+      let recordingBaseTs: number | null = null;
+      for (const def of eventDefs) {
+        const rows = await readTableRows(conn, def.name, null);
+        eventRowsByName.set(def.name, rows);
+        const firstTs = rows[0]?.ts;
+        if (firstTs != null && (recordingBaseTs == null || firstTs < recordingBaseTs)) {
+          recordingBaseTs = firstTs;
+        }
       }
 
       for (const def of eventDefs) {
-        const rows = await readTableRows(conn, def.name);
-        channels.push({ name: def.name, kind: "event", frequencyHz: null, unit: def.unit, rows });
+        channels.push({
+          name: def.name,
+          kind: "event",
+          frequencyHz: null,
+          unit: def.unit,
+          rows: eventRowsByName.get(def.name) ?? [],
+        });
+      }
+
+      for (const def of channelDefs) {
+        const syntheticTs =
+          recordingBaseTs != null && def.frequencyHz
+            ? { baseTs: recordingBaseTs, frequencyHz: def.frequencyHz }
+            : null;
+        const rows = await readTableRows(conn, def.name, syntheticTs);
+        channels.push({ name: def.name, kind: "channel", frequencyHz: def.frequencyHz, unit: def.unit, rows });
       }
 
       return { metadata, channels };

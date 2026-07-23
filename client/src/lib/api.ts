@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./queryClient";
-import type { Track, DriverEnriched, LapTimeEnriched, SessionEnriched, DriverIncidentsResponse } from "@shared/schema";
+import type { Track, DriverEnriched, LapTimeEnriched, SessionEnriched, TelemetrySession, DriverIncidentsResponse } from "@shared/schema";
 
 export function useTracks() {
   return useQuery<Track[]>({ queryKey: ["/api/tracks"] });
@@ -130,5 +130,79 @@ export type ImportResponse = {
   totalLaps: number;
   results: ImportFileResult[];
 };
+
+// ── Телеметрия ────────────────────────────────────────────────────
+
+export function useTelemetrySessions() {
+  return useQuery<TelemetrySession[]>({ queryKey: ["/api/telemetry/sessions"] });
+}
+
+export type TelemetryChannelInfo = {
+  id: number;
+  name: string;
+  kind: string;
+  frequencyHz: number | null;
+  unit: string | null;
+  sampleCount: number;
+};
+
+export type TelemetrySessionDetail = {
+  session: TelemetrySession;
+  channels: TelemetryChannelInfo[];
+};
+
+export function useTelemetrySession(id: number | undefined) {
+  return useQuery<TelemetrySessionDetail>({
+    queryKey: ["/api/telemetry/sessions", id],
+    enabled: id != null && !Number.isNaN(id),
+  });
+}
+
+export type TelemetryLap = {
+  lapNumber: number;
+  startTs: number;
+  endTs: number;
+  durationSec: number;
+};
+
+export function useTelemetryLaps(id: number | undefined) {
+  return useQuery<TelemetryLap[]>({
+    queryKey: ["/api/telemetry/sessions", id, "laps"],
+    enabled: id != null && !Number.isNaN(id),
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/telemetry/sessions/${id}/laps`);
+      return res.json();
+    },
+  });
+}
+
+export type TelemetryLapPoint = {
+  seq: number;
+  t: number;
+  lapDist: number | null;
+  lat: number | null;
+  lon: number | null;
+  throttle: number | null;
+  brake: number | null;
+  speedKph: number | null;
+};
+
+export type TelemetryLapSeries = {
+  lapNumber: number;
+  startTs: number;
+  endTs: number;
+  points: TelemetryLapPoint[];
+};
+
+export function useTelemetryLapSeries(id: number | undefined, lapNumber: number | undefined) {
+  return useQuery<TelemetryLapSeries>({
+    queryKey: ["/api/telemetry/sessions", id, "laps", lapNumber, "series"],
+    enabled: id != null && !Number.isNaN(id) && lapNumber != null && !Number.isNaN(lapNumber),
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/telemetry/sessions/${id}/laps/${lapNumber}/series`);
+      return res.json();
+    },
+  });
+}
 
 export type { Track, DriverEnriched as Driver, LapTimeEnriched, SessionEnriched };
