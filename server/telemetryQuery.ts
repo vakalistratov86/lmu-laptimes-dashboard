@@ -13,7 +13,7 @@
  * фильтрации/сглаживания данных и без ступенчатых дублей (как было бы при
  * простом копировании ближайшего сэмпла).
  */
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, max } from "drizzle-orm";
 import { db } from "./storage";
 import { telemetryChannels, telemetrySamples, telemetrySessions } from "@shared/schema";
 
@@ -181,16 +181,14 @@ async function getRecordingEndTs(sessionId: number): Promise<number | null> {
   const channelIds = rows.map((r) => r.id);
   if (channelIds.length === 0) return null;
 
-  const sampleRows = await db
-    .select({ ts: telemetrySamples.ts })
+  // MAX(ts) на стороне Postgres — не тянуть в Node все сэмплы сессии (могут быть
+  // миллионы строк) только чтобы найти максимум.
+  const result = await db
+    .select({ maxTs: max(telemetrySamples.ts) })
     .from(telemetrySamples)
     .where(inArray(telemetrySamples.channelId, channelIds));
 
-  let max: number | null = null;
-  for (const r of sampleRows) {
-    if (r.ts != null && (max == null || r.ts > max)) max = r.ts;
-  }
-  return max;
+  return result[0]?.maxTs ?? null;
 }
 
 interface SampleRow {
