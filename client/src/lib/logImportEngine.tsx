@@ -13,7 +13,7 @@ import { dbGet, dbGetSeenSet, dbPut, dbSaveSeenSet, fileKey, STORE_HANDLE } from
  * компонент и не обрывал фоновый импорт/авто-скан на полпути.
  */
 
-export type LogLevel = "info" | "ok" | "skip" | "error";
+export type LogLevel = "info" | "ok" | "skip" | "warn" | "error";
 export type LogEntry = { ts: number; level: LogLevel; text: string };
 export type Counters = { total: number; queued: number; imported: number; skipped: number; failed: number };
 
@@ -232,17 +232,37 @@ function useLogImportEngineInternal(): LogImportEngineState {
             await res.json();
           const r = data.results[0];
           if (r?.skipped) {
-            const skipMsg = trimErrorMessage(r?.message ?? t("imp.logImportSkipDefault"));
-            addLog("skip", t("imp.logImportSkip", { name: file.name, msg: skipMsg }));
+            if (r.reason === "SUPERSEDED") {
+              addLog("skip", t("imp.logImportSkipSuperseded", {
+                name: file.name,
+                existingLaps: r.existingLapCount ?? 0,
+                newLaps: r.newLapCount ?? 0,
+              }));
+            } else {
+              const skipMsg = trimErrorMessage(r?.message ?? t("imp.logImportSkipDefault"));
+              addLog("skip", t("imp.logImportSkip", { name: file.name, msg: skipMsg }));
+            }
             setCounters((c) => ({ ...c, queued: c.queued - 1, skipped: c.skipped + 1 }));
           } else if (r?.ok) {
-            addLog("ok", t("imp.logImportOk", {
-              name: file.name,
-              event: r.event ?? r.venue ?? "",
-              sessionType: r.sessionType ?? "",
-              drivers: r.drivers ?? 0,
-              n: r.laps ?? 0,
-            }));
+            if (r.replacedSessionId != null) {
+              addLog("warn", t("imp.logImportReplaced", {
+                name: file.name,
+                event: r.event ?? r.venue ?? "",
+                sessionType: r.sessionType ?? "",
+                drivers: r.drivers ?? 0,
+                n: r.laps ?? 0,
+                oldId: r.replacedSessionId,
+                oldLaps: r.replacedLapCount ?? 0,
+              }));
+            } else {
+              addLog("ok", t("imp.logImportOk", {
+                name: file.name,
+                event: r.event ?? r.venue ?? "",
+                sessionType: r.sessionType ?? "",
+                drivers: r.drivers ?? 0,
+                n: r.laps ?? 0,
+              }));
+            }
             setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + 1 }));
           } else {
             const errMsg = trimErrorMessage(r?.message ?? t("imp.logImportErrorDefault"));

@@ -26,6 +26,7 @@ import { parseRaceResults, type ParsedSession } from "./logParser";
 import { validateLapTime } from "@shared/validators";
 import { normalizeLapTime, normalizeDriverNameForStorage, normalizeTrackName, toMilliseconds } from "./normalizer";
 import type { Track, Driver } from "@shared/schema";
+import { findSupersedeCandidate, deleteSupersededSessionData, decideSupersedeAction } from "./sessionSupersede";
 import {
   logImportStarted,
   logImportCompleted,
@@ -191,6 +192,10 @@ export interface ImportResult {
   venue: string;
   sessionType: string;
   driverCount: number;
+  // Заполнено, если этот импорт заменил более раннюю/неполную сессию-дамп
+  // той же реальной гонки (реконнект) — см. server/sessionSupersede.ts.
+  replacedSessionId: number | null;
+  replacedLapCount: number | null;
 }
 
 /**
@@ -252,6 +257,40 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
   const result = await db.transaction(async (tx) => {
     const track = await findOrCreateTrack(tx, parsed!);
     const dateOnly = parsed!.dateTimeIso.slice(0, 10);
+
+    // Реконнект: сервер LMU пишет НОВЫЙ файл вместо дополнения старого —
+    // если это дамп той же самой реальной сессии (совпадает событие/тип/
+    // трасса/ростер пилотов в пределах суток), заменяем менее полный дамп
+    // более полным вместо задвоения строки в sessions (см. sessionSupersede.ts).
+    const candidate = await findSupersedeCandidate(tx, {
+      event: parsed!.event,
+      sessionType: parsed!.sessionType,
+      trackId: track.id,
+      newDriverNames: parsed!.drivers.map((d) => d.name),
+      newDateTimeIso: parsed!.dateTimeIso,
+    });
+
+    let replacedSessionId: number | null = null;
+    let replacedLapCount: number | null = null;
+
+    if (candidate) {
+      const action = decideSupersedeAction(totalParsedLaps, candidate.session.lapCount);
+      if (action === "SKIP") {
+        logImportSkipped({ importJobId: job.id, fileName: job.fileName, reason: 'SUPERSEDED' });
+        const err = new Error(
+          `Файл пропущен: в БД уже есть более полная версия этой сессии ` +
+          `(session #${candidate.session.id}: ${candidate.session.lapCount} кругов >= ${totalParsedLaps} кругов в этом файле)`
+        );
+        (err as any).code = 'SUPERSEDED';
+        (err as any).existingSessionId = candidate.session.id;
+        (err as any).existingLapCount = candidate.session.lapCount;
+        (err as any).newLapCount = totalParsedLaps;
+        throw err;
+      }
+      replacedSessionId = candidate.session.id;
+      replacedLapCount = candidate.session.lapCount;
+      await deleteSupersededSessionData(tx, candidate.session.id);
+    }
 
     const sessionRows = await tx.insert(sessions).values({
       trackId: track.id,
@@ -571,6 +610,8 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       venue: parsed!.venue,
       sessionType: parsed!.sessionType,
       driverCount: parsed!.drivers.length,
+      replacedSessionId,
+      replacedLapCount,
     };
   });
 

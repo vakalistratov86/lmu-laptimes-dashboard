@@ -122,6 +122,17 @@ export type ImportFileResult = {
   laps?: number;
   errorLaps?: number;
   drivers?: number;
+  // ── Замена сессии-продолжения при реконнекте (server/sessionSupersede.ts) ──
+  // ok:true и заполнено — этот импорт заменил более раннюю/неполную версию
+  // той же сессии.
+  replacedSessionId?: number | null;
+  replacedLapCount?: number | null;
+  // skipped:true с reason "SUPERSEDED" — наоборот, в БД уже есть более полная
+  // версия этой сессии, этот файл (более ранний/неполный) пропущен.
+  reason?: "SUPERSEDED";
+  existingSessionId?: number;
+  existingLapCount?: number;
+  newLapCount?: number;
 };
 
 export type ImportResponse = {
