@@ -117,8 +117,12 @@ export default function Overview() {
     for (const s of sessions ?? []) {
       const cat = normalizeSessionCategory(s.sessionType);
       summary[cat].count += 1;
-      if (typeof s.sessionDurationMin === "number" && s.sessionDurationMin > 0) {
-        summary[cat].minutes += s.sessionDurationMin;
+      // Длительность гонки в логе игры лежит в RaceTime (raceTimeMin), а не
+      // в Minutes (sessionDurationMin) — то поле заполняется только для
+      // практики/квалификации, поэтому для гонок берём отдельное поле.
+      const durationMin = cat === "race" ? s.raceTimeMin : s.sessionDurationMin;
+      if (typeof durationMin === "number" && durationMin > 0) {
+        summary[cat].minutes += durationMin;
       }
     }
     return summary;
