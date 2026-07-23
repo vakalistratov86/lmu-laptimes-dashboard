@@ -22,7 +22,8 @@
 - **Session Detail** — статичная плитка трассы/сессии (не зависит от активной вкладки) + всегда видимая карточка выбранного пилота (по умолчанию — позиция 1, весь набор его статистики за сессию, включая раскраску секторов) + вкладки «Результаты / Круги / Прогресс», встроенные в шапку общей карточки. Сектора и медали топ‑3 подсвечиваются цветом (личный лучший / абсолютный лучший сессии; золото/серебро/бронза).
 - **Leaderboards** — вертикальный список полноширинных карточек по трассе (группировка по `trackName + course`), внутри каждой — разбивка по классам машин, медали, отставания, дата и время рекорда, фильтр по конфигурации трассы.
 - **Tracks** — каталог трасс с амбер-подсветкой контура на карте, рекордами, блоком «Интересно» и рейтингом по трассе.
-- **Import** — загрузка XML-логов через выбор папки (File System Access API с fallback для браузеров без поддержки), автоимпорт новых файлов по таймеру, устойчивый к перезагрузке журнал импорта, определение дубликатов по хэшу файла, кнопка очистки БД.
+- **Telemetry** — список импортированных записей телеметрии (`.duckdb`-файлы LMU) с датой/временем заезда, трассой и пилотом; **Telemetry Detail** — карта трассы (GPS-трек круга) + графики каналов телеметрии (скорость, педали и др.) с выбором круга и синхронизированным зумом/легендой.
+- **Import** — загрузка XML-логов через выбор папки (File System Access API с fallback для браузеров без поддержки), автоимпорт новых файлов по таймеру, устойчивый к перезагрузке журнал импорта, определение дубликатов по хэшу файла, кнопка очистки БД; отдельно — загрузка `.duckdb`-файлов телеметрии с собственным журналом импорта.
 - **Events** — разделён на две вкладки: **Daily Races** и **Special Events** с корректным форматом дат (DD.MM.YYYY).
 
 ### 🏁 Ключевые функции
@@ -35,6 +36,7 @@
   - Общие компоненты `SessionTypeBadge` (плашка фиксированной ширины, одинаковая везде) и `StatTile` (переиспользуемая мини-плитка статистики)
   - Селекторы `sessionDetailSelectors.ts`: `buildResultRows`, `buildDriverLapGroups`, `buildSectorSummary`, `buildLapProgressSeries`, `buildTabs`
   - Компоненты `session-detail/*`: `SessionInfoCard`, `SessionDriverDetailCard`, `SessionResultsTable`, `SessionTabs`, `DriverLapTable`, `SessionLapProgressChart`, `SessionLoadingSkeleton`, `SessionEmptyState`
+- **Телеметрия LMU** (`server/telemetryParser.ts`, `server/telemetryImportWorker.ts`, `server/telemetryQuery.ts`) — импорт бинарных `.duckdb`-файлов записи телеметрии (до 150 МБ), отдаваемых игрой: каналы (GPS, скорость, педали, обороты и др., до сотен Гц) и события (круги, инциденты) читаются из DuckDB **потоково** (`conn.stream()` + чанки по `CHUNK_SIZE`) и сразу батчами пишутся в Postgres — пиковая память процесса не зависит от размера файла/количества сэмплов (важно на серверах с малым RAM). Идемпотентность — по SHA-256 хэшу содержимого файла, как в основном импорте. На чтении круги и графики выборки одного круга строятся линейной интерполяцией нескольких каналов на сетке самого частого из них (`getLapSeries`); границы кругов (`getSessionLaps`) и агрегаты (`MAX(ts)`) считаются на стороне Postgres, а не вычитыванием всех сэмплов в Node.
 - **Единая иконка пилота** (`DriverName`) — зелёный человечек для реального игрока, жёлтый робот для ИИ; используется в Sessions, Session Detail, Leaderboards, Tracks и `DriverFilterBar`.
 - **`DriverFilterBar`** — searchable multi-select с секциями «Выбрано / Игроки / ИИ», переключателями «Показать ИИ» и «Выбрать все» (массовый выбор видимого списка).
 - Тематизированный скроллбар во всём приложении (не системный) — под цвет тёмной/светлой темы.
@@ -50,6 +52,7 @@
 | **Frontend** | React 18, Vite 7, TypeScript 5.6, Tailwind CSS 3, shadcn/ui, wouter, TanStack Query, Recharts |
 | **Backend** | Express 5 (TypeScript) |
 | **База данных** | PostgreSQL (drizzle-orm + postgres-js), миграции drizzle-kit |
+| **Телеметрия** | `@duckdb/node-api` — чтение `.duckdb`-файлов записи LMU |
 | **Тестирование** | Vitest 2 + coverage-v8 |
 
 ---
@@ -61,16 +64,19 @@
 ├── client/              # Frontend (React)
 │   └── src/
 │       ├── pages/       # Overview, Sessions, SessionDetail, Leaderboards,
-│       │                #   Tracks, TrackDetail, Events, Import, not-found
+│       │                #   Tracks, TrackDetail, Events, Import, Telemetry,
+│       │                #   TelemetryDetail, not-found
 │       ├── components/  # AppLayout, Logo, DriverName, DriverFilterBar,
 │       │                #   SessionTypeBadge, StatTile, TrackMap,
 │       │                #   session-detail/* (SessionInfoCard, SessionDriverDetailCard,
 │       │                #   SessionResultsTable, SessionTabs, DriverLapTable,
-│       │                #   SessionLapProgressChart, ...), UI (shadcn)
+│       │                #   SessionLapProgressChart, ...),
+│       │                #   telemetry-detail/* (TelemetryTrackMap, TelemetryChart,
+│       │                #   TelemetryLapPicker), UI (shadcn)
 │       ├── hooks/       # Кастомные React-хуки
 │       └── lib/         # API-хуки, форматирование времён, classStyles.ts
 │                        #   (единый источник цветов/подписей типов сессии, классов
-│                        #   машин и медалей), sessionDetailSelectors.ts
+│                        #   машин и медалей), sessionDetailSelectors.ts, telemetryGeo.ts
 ├── server/              # Backend (Express)
 │   ├── index.ts         # Точка входа, инициализация Express
 │   ├── routes.ts        # REST API маршруты (async, PostgreSQL)
@@ -80,10 +86,13 @@
 │   ├── importWorker.ts  # Разбор и синхронная запись импортируемого файла в БД
 │   ├── normalizer.ts    # Нормализация и валидация распознанных данных
 │   ├── eventsParser.ts  # Парсер данных Events (Daily Races / Special Events)
+│   ├── telemetryParser.ts       # Потоковое чтение .duckdb файлов телеметрии
+│   ├── telemetryImportWorker.ts # Запись телеметрии в Postgres (батчами, в транзакции)
+│   ├── telemetryQuery.ts        # Селекторы чтения: список/круги/график одного круга
 │   ├── logger.ts        # Утилита логирования
 │   ├── static.ts        # Раздача статики (продакшен)
 │   └── vite.ts          # Интеграция Vite Dev Server (разработка)
-├── shared/              # Общая схема данных (Drizzle + Zod), 11 таблиц PostgreSQL
+├── shared/              # Общая схема данных (Drizzle + Zod), 15 таблиц PostgreSQL
 ├── script/              # Скрипты сборки (build.ts)
 ├── tests/               # Тесты (Vitest): routes, schema, storage, logParser,
 │                        #   normalizer, validators, eventsParser, format,
@@ -112,6 +121,10 @@
 - **session_track_limits** — нарушения трек-лимитов
 - **import_jobs** — журнал импортированных файлов (статус, хэш содержимого для идемпотентности, счётчики кругов)
 - **import_errors** — DLQ: записи, не прошедшие валидацию при импорте
+- **telemetry_import_jobs** — журнал импортированных `.duckdb`-файлов телеметрии (статус, хэш содержимого)
+- **telemetry_sessions** — метаданные записи телеметрии (пилот, трасса, сетап, погода — распарсено из файла)
+- **telemetry_channels** — реестр каналов/событий одной записи (имя, частота Гц, единица измерения, число сэмплов)
+- **telemetry_samples** — сами сэмплы канала (`seq`, `ts`, `value1..value4`); самая крупная таблица, до нескольких миллионов строк на запись — читается и пишется только потоково/батчами, не целиком
 
 > Приложение не подставляет фейковые данные: при пустой БД все разделы (Overview/Leaderboards/Tracks/Sessions/Session Detail) показывают пустое состояние с призывом импортировать логи, пока пользователь не загрузит реальные XML-логи через **Import**. Исключение — таблица **tracks**: при каждом старте сервера в неё гарантированно добавляется каталог из 14 известных трасс LMU (для отображения схемы даже без единой сессии по ним), но их статистика (рекорды, сессии, круги) остаётся нулевой до импорта.
 
@@ -198,6 +211,12 @@ DATABASE_URL=postgres://lmu:lmu_password@localhost:5432/lmu_laptimes
 ## Импорт данных
 
 Выберите папку с XML-логами rFactor2/LMU через раздел **Import** (File System Access API; для браузеров без поддержки — обычный выбор файлов). Каждый файл отправляется отдельным запросом `POST /api/import`, сервер разбирает его (`logParser.ts`), нормализует (`normalizer.ts`) и синхронно записывает в БД (`importWorker.ts`), возвращая результат сразу в ответе. Дубликаты определяются по SHA-256 хэшу содержимого, файлы без кругов пропускаются с предупреждением (не как ошибка), а невалидные записи попадают в DLQ (`import_errors`). Журнал импорта и список уже обработанных файлов сохраняются в localStorage/IndexedDB и переживают перезагрузку страницы; опционально можно включить автоимпорт — повторное сканирование папки по таймеру.
+
+---
+
+## Импорт телеметрии
+
+Раздел **Import** также принимает бинарные `.duckdb`-файлы записи телеметрии LMU (до 150 МБ) — отдельным запросом `POST /api/import/telemetry` с сырыми байтами файла в теле (`application/octet-stream`). Сервер (`telemetryParser.ts`) открывает файл через `@duckdb/node-api` в режиме read-only и читает каналы/события **потоково**, чанками — вся запись, включая многомиллионные наборы сэмплов, ни разу не материализуется в памяти Node целиком: батчи сразу пишутся в `telemetry_samples` внутри одной транзакции (`telemetryImportWorker.ts`). Это принципиально для серверов с малым объёмом RAM — до перехода на потоковую схему импорт больших файлов приводил к `JavaScript heap out of memory` и падению всего процесса. Идемпотентность — по SHA-256 хэшу содержимого файла (`telemetry_import_jobs`), как и в основном импорте. На чтении (`telemetryQuery.ts`) агрегаты вроде границ записи считаются `MAX(ts)` силами Postgres, а не выгрузкой всех сэмплов в Node — по той же причине.
 
 ---
 

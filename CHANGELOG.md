@@ -9,6 +9,14 @@
 
 ## [Unreleased]
 
+### Added
+- **Раздел «Телеметрия»** — импорт и просмотр записей телеметрии LMU (`.duckdb`-файлы игры)
+  - Страница **Telemetry** — список импортированных записей (пилот, трасса, дата)
+  - Страница **Telemetry Detail** — карта трассы по GPS-треку круга (`TelemetryTrackMap`) + график каналов телеметрии с выбором круга, зумом и легендой (`TelemetryChart`, `TelemetryLapPicker`)
+  - Загрузка `.duckdb`-файла (до 150 МБ) через раздел **Import**: `POST /api/import/telemetry`, идемпотентность по SHA-256 хэшу содержимого — `server/telemetryImportWorker.ts`, `server/telemetryParser.ts`
+  - REST: `GET /api/telemetry/sessions`, `GET /api/telemetry/sessions/:id`, `GET /api/telemetry/sessions/:id/laps`, `GET /api/telemetry/sessions/:id/laps/:lapNumber/series`, `DELETE /api/import/telemetry/all` — `server/telemetryQuery.ts`
+  - Новые таблицы БД: `telemetry_import_jobs`, `telemetry_sessions`, `telemetry_channels`, `telemetry_samples`
+
 ### Removed
 - **Автозаполнение демо-данными убрано** — при пустой БД приложение больше не создаёт фейковые трассы/пилотов/заезды (`seedIfEmpty()` удалена вместе с вызовом при старте сервера). При старте с пустой БД все разделы (Overview/Leaderboards/Tracks/Sessions) показывают пустое состояние с призывом импортировать логи через **Import**
   - Убрана колонка `lap_times.source` (`demo`/`import`) и эндпоинт `DELETE /api/demo` — источник данных теперь всегда «импорт», различать было нечего
@@ -26,6 +34,8 @@
   - Названия стран трасс переводятся на лету (`translateCountry()`) без изменения серверных данных
 
 ### Fixed
+- **Импорт телеметрии ронял весь сервер на больших `.duckdb`-файлах** (`FATAL ERROR: JavaScript heap out of memory`, весь Node-процесс падал и перезапускался, остальные пользователи получали `502`). Причина — `telemetryParser.ts`/`telemetryImportWorker.ts` дважды материализовали весь набор сэмплов в JS-памяти перед записью в Postgres. Переписано на потоковое чтение через `conn.stream()`/`yieldRowObjectJs()` (`@duckdb/node-api`) с батч-вставкой по `CHUNK_SIZE` — пиковая память процесса больше не зависит от размера файла. Проверено на реальном файле, ронявшем прод (98 каналов, 2 637 082 сэмпла): импорт проходит и локально, и на боевом сервере (961 МБ RAM) без падения, память держится в пределах ~130 МБ
+- **`/api/telemetry/sessions/:id/laps` и `/laps/:lapNumber/series` отдавали `499`/`502` на больших сессиях** — `getRecordingEndTs()` в `telemetryQuery.ts` вычитывал в Node `ts` вообще всех сэмплов сессии, чтобы найти максимум вручную; для сессий с миллионами сэмплов это было медленно и памятиёмко. Заменено на `SELECT MAX(ts)` силами Postgres
 - Мобильная таблица сессий: колонка «Трек» с чистым `1fr` в контейнере, чья `min-width` была ровно равна сумме остальных фиксированных колонок, схлопывалась в 0 и текст наезжал на соседний заголовок «Классы» — исправлено на `minmax(180px, 1fr)` с пересчитанной `min-width`
 - Дата рекорда на странице Leaderboards показывала бессмысленное «12:00 AM»/«00:00» (данные хранятся без времени) — убрано время из форматирования, остаётся только дата
 - **Session Detail — полный рефакторинг архитектуры компонентов (SD-1 – SD-14)**

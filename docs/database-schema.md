@@ -4,13 +4,17 @@
 
 Проект использует **SQLite** в качестве СУБД и **Drizzle ORM** для декларативного описания схемы и выполнения запросов. Файл схемы расположен в `shared/schema.ts` — он является единым источником истины как для сервера, так и для клиента.
 
-База данных содержит **9 таблиц**, объединённых в две логические группы:
+База данных содержит **15 таблиц**, объединённых в логические группы:
 
 | Группа | Таблицы | Назначение |
 |--------|---------|------------|
 | Справочники | `tracks`, `drivers` | Статические данные о трассах и пилотах |
 | Сессии | `sessions`, `session_results`, `session_laps`, `session_incidents`, `session_sector_bests`, `session_track_limits` | Данные, импортированные из XML-логов игры rFactor2 / LMU |
 | Ручные замеры | `lap_times` | «Плоские» времена кругов, импортированные из XML-логов |
+| Импорт XML | `import_jobs`, `import_errors` | Журнал импортированных файлов и DLQ невалидных записей |
+| Телеметрия | `telemetry_import_jobs`, `telemetry_sessions`, `telemetry_channels`, `telemetry_samples` | Данные, импортированные из `.duckdb`-файлов записи телеметрии LMU |
+
+> ⚠️ Начиная с версии 0.1.0 проект использует **PostgreSQL**, а не SQLite — вводный абзац и раздел «Технологический стек БД» ниже описывают исходную SQLite-редакцию и требуют актуализации отдельно от этого изменения; типы колонок в таблицах ниже соответствуют исходной схеме и не всегда совпадают с реальными типами Postgres в `shared/schema.ts`.
 
 ---
 
@@ -224,6 +228,102 @@
 | `current_points` | INTEGER | `CurrentPoints` — текущее накопленное количество очков |
 | `resolution` | INTEGER | `Resolution` |
 | `decision` | TEXT | Решение, напр. `"No Further Action"` |
+
+---
+
+## Таблицы импорта XML-логов
+
+### `import_jobs` — Журнал импорта
+
+Одна запись на загруженный XML-файл. `file_hash` — SHA-256 сырого содержимого, обеспечивает идемпотентность повторной загрузки того же файла.
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | TEXT PK | nanoid |
+| `file_hash` | TEXT NOT NULL, UNIQUE | SHA-256 содержимого файла |
+| `file_name` | TEXT NOT NULL | Имя файла |
+| `status` | TEXT NOT NULL | `queued` \| `processing` \| `completed` \| `failed` |
+| `session_id` | INTEGER | Заполняется после успешного импорта, FK → `sessions.id` |
+| `total_laps` / `valid_laps` / `error_laps` | INTEGER | Счётчики кругов: всего / прошли валидацию / в DLQ |
+| `error` | TEXT | Сообщение об ошибке при `failed` |
+| `log_format_version` | TEXT | Версия формата лога (`1.0` \| `1.1` \| `2.0`) |
+| `created_at` / `finished_at` | BIGINT | Unix ms |
+
+### `import_errors` — DLQ невалидных записей
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | INTEGER PK | Первичный ключ |
+| `import_job_id` | TEXT NOT NULL | Ссылка на `import_jobs.id` |
+| `raw_payload` | TEXT NOT NULL | Исходная запись (JSON) |
+| `error_code` | TEXT NOT NULL | `VALIDATION_ERROR` \| `PARSE_ERROR` \| `SEMANTIC_ERROR` |
+| `error_message` | TEXT NOT NULL | Текст ошибки |
+| `occurred_at` | BIGINT NOT NULL | Unix ms |
+
+---
+
+## Таблицы телеметрии
+
+Импортируются из бинарных `.duckdb`-файлов записи телеметрии Le Mans Ultimate (см. `server/telemetryParser.ts`). Каналы/события читаются из файла потоково и пишутся батчами — `telemetry_samples` может содержать миллионы строк на одну запись, поэтому запросы к ней (`server/telemetryQuery.ts`) всегда ограничены по времени (`ts`) или сводятся к SQL-агрегатам (`MAX(ts)`), а не читают таблицу целиком.
+
+### `telemetry_import_jobs` — Журнал импорта телеметрии
+
+Аналог `import_jobs` для `.duckdb`-файлов; `file_hash` — идемпотентность по SHA-256 сырых байт.
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | TEXT PK | nanoid |
+| `file_hash` | TEXT NOT NULL, UNIQUE | SHA-256 содержимого файла |
+| `file_name` | TEXT NOT NULL | Имя файла |
+| `status` | TEXT NOT NULL | `processing` \| `completed` \| `failed` |
+| `telemetry_session_id` | INTEGER | FK → `telemetry_sessions.id`, заполняется после успеха |
+| `channel_count` / `sample_count` | INTEGER | Число каналов / сэмплов, записанных импортом |
+| `error` | TEXT | Сообщение об ошибке при `failed` |
+| `created_at` / `finished_at` | BIGINT | Unix ms |
+
+### `telemetry_sessions` — Метаданные записи
+
+Одна строка на импортированный `.duckdb`-файл — данные из его таблицы `metadata` (пилот, трасса, сетап и т.д.).
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | INTEGER PK | Первичный ключ |
+| `import_job_id` | TEXT NOT NULL | Ссылка на `telemetry_import_jobs.id` |
+| `file_name` | TEXT NOT NULL | Имя файла |
+| `driver_name` / `steam_id` | TEXT | Пилот |
+| `recording_time` / `session_time` | TEXT | Момент записи / игровое время сессии |
+| `session_type` | TEXT | Тип сессии |
+| `track_name` / `track_layout` | TEXT | Трасса и конфигурация |
+| `weather_conditions` | TEXT | Погода |
+| `car_name` / `car_class` | TEXT | Машина и класс |
+| `car_setup` | TEXT | Сырой JSON сетапа автомобиля |
+| `created_at` | BIGINT NOT NULL | Unix ms |
+
+### `telemetry_channels` — Реестр каналов/событий
+
+Одна строка на каждый канал (`channel`, непрерывный, напр. GPS/скорость) или событие (`event`, напр. `Lap`), найденные в файле.
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | INTEGER PK | Первичный ключ |
+| `telemetry_session_id` | INTEGER NOT NULL | FK → `telemetry_sessions.id` |
+| `name` | TEXT NOT NULL | Имя канала/события |
+| `kind` | TEXT NOT NULL | `channel` \| `event` |
+| `frequency_hz` | INTEGER | Частота записи, только для `channel` |
+| `unit` | TEXT | Единица измерения |
+| `sample_count` | INTEGER NOT NULL | Число сэмплов (посчитано на импорте через `COUNT(*)`, без чтения строк) |
+
+### `telemetry_samples` — Сэмплы
+
+EAV-таблица: одна строка на сэмпл любого канала/события (вместо отдельной Postgres-таблицы на каждый канал, как в исходном `.duckdb`). Самая крупная таблица в БД.
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | INTEGER PK | Первичный ключ |
+| `channel_id` | INTEGER NOT NULL, индекс | FK → `telemetry_channels.id` |
+| `seq` | INTEGER NOT NULL | Порядковый номер строки в исходном файле |
+| `ts` | REAL | Для `event` — реальное время (сек) из файла; для `channel` — `NULL` (потребитель восстанавливает как `recordingBaseTs + seq / frequencyHz`) |
+| `value1..value4` | REAL | Значения сэмпла (1 для одноканальных, до 4 для составных, напр. GPS lat/lon) |
 
 ---
 
