@@ -129,7 +129,7 @@ async function fetchAndParse(): Promise<ParsedRaw> {
   // Паттерн: «w/c DD/MM – N Hours Track – Classes»
   // Тире может быть коротким (–), длинным (—) или обычным дефисом (-) —
   // WordPress-редакторы нередко подменяют символ при правках страницы.
-  const lineRe = /w\/c\s+(\d+\/(\d+))\s*[–—\-]\s*(\d+)\s*Hours\s+([^–—\-<\n]+?)\s*[–—\-]\s*([^<\n]+)/gi;
+  const lineRe = /w\/c\s+(\d+\/(\d+))\s*[–—-]\s*(\d+)\s*Hours\s+([^–—<\n-]+?)\s*[–—-]\s*([^<\n]+)/gi;
   const events: SpecialEvent[] = [];
   let match;
 

@@ -259,7 +259,7 @@ function useTelemetryImportEngineInternal(): TelemetryImportEngineState {
     addLog("info", t("telemetry.logScanningFolder", { name: dirHandle.name }));
     setMode("scanning");
     try {
-      let perm = dirPerm;
+      const perm = dirPerm;
       if (perm !== "granted") {
         const ok = await requestPermission();
         if (!ok) {
