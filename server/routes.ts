@@ -19,7 +19,7 @@ import {
   telemetryChannels,
   telemetrySamples,
 } from "@shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
 import { computeFileHash, generateId, getJobStatus, getJobErrors, runImport } from "./importWorker";
 import { computeFileHashBinary, runTelemetryImport } from "./telemetryImportWorker";
@@ -251,6 +251,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
    * GET /api/sessions/:id/laps — детальные данные по кругам сессии.
    * Возвращает записи из таблицы session_laps, обогащённые именем пилота.
    * Используется вкладками «Круги», «Секторы» и «Прогресс» на странице SessionDetail.
+   *
+   * #126: обогащение (driverName/carNumber/isPlayer) раньше собиралось вручную
+   * через 3 запроса + JS Map — теперь один JOIN-запрос в storage.getSessionLapsEnriched().
    */
   app.get(
     "/api/sessions/:id/laps",
@@ -258,36 +261,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const sessionId = parseIdParam(req.params.id, res, "id сессии");
       if (sessionId === undefined) return;
 
-      const lapsRows = await db.select().from(sessionLaps).where(eq(sessionLaps.sessionId, sessionId));
-
-      // Только пилоты этой сессии — а не вся таблица drivers на каждый показ
-      // вкладок «Круги»/«Секторы»/«Прогресс» страницы сессии.
-      const driverIds = Array.from(new Set(lapsRows.map((l) => l.driverId)));
-      const driversInSession = driverIds.length
-        ? await db.select().from(drivers).where(inArray(drivers.id, driverIds))
-        : [];
-      const driverMap = new Map(driversInSession.map((d) => [d.id, d]));
-
-      // Получаем isPlayer из sessionResults для каждого пилота
-      const srRows = await db.select().from(sessionResults).where(eq(sessionResults.sessionId, sessionId));
-      const isPlayerMap = new Map(srRows.map((r) => [r.driverId, r.isPlayer]));
-      const carNumberMap = new Map(srRows.map((r) => [r.driverId, r.carNumber ?? null]));
-
-      const enriched = lapsRows.map((lap) => ({
-        ...lap,
-        // Поля для совместимости с sessionDetailSelectors (buildDriverLapGroups / buildLapProgressSeries)
-        lapNumber: lap.lapNum,
-        lapTimeSeconds: lap.lapTimeMs != null ? lap.lapTimeMs / 1000 : null,
-        sector1: lap.sector1Ms != null ? lap.sector1Ms / 1000 : null,
-        sector2: lap.sector2Ms != null ? lap.sector2Ms / 1000 : null,
-        sector3: lap.sector3Ms != null ? lap.sector3Ms / 1000 : null,
-        isPitLap: lap.isPitLap === 1,
-        driverName: driverMap.get(lap.driverId)?.name ?? "—",
-        carNumber: carNumberMap.get(lap.driverId) ?? null,
-        isPlayer: isPlayerMap.get(lap.driverId) ?? 0,
-      }));
-
-      res.json(enriched);
+      res.json(await storage.getSessionLapsEnriched(sessionId));
     }),
   );
 

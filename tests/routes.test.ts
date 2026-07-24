@@ -44,6 +44,7 @@ vi.mock("../server/storage", () => ({
     getBestLaps: vi.fn().mockResolvedValue([]),
     getSessions: vi.fn().mockResolvedValue([]),
     getSession: vi.fn(),
+    getSessionLapsEnriched: vi.fn().mockResolvedValue([]),
   },
   db,
 }));
@@ -469,6 +470,44 @@ describe("API Routes", () => {
       const res = await makeRequest(app, "GET", "/api/sessions/1");
       expect(res.status).toBe(200);
       expect((res.body as typeof mockSession).event).toBe("6 Hours of Le Mans");
+    });
+  });
+
+  // ── GET /api/sessions/:id/laps ───────────────────────────────────────────
+  // #126: роут больше не собирает driverName/carNumber/isPlayer вручную через
+  // 3 запроса + Map — делегирует storage.getSessionLapsEnriched() (один JOIN).
+  describe("GET /api/sessions/:id/laps", () => {
+    it("возвращает 400 для нечислового id, не вызывая storage.getSessionLapsEnriched", async () => {
+      const res = await makeRequest(app, "GET", "/api/sessions/abc/laps");
+      expect(res.status).toBe(400);
+      expect(storage.getSessionLapsEnriched).not.toHaveBeenCalled();
+    });
+
+    it("передаёт id сессии как число в storage.getSessionLapsEnriched", async () => {
+      await makeRequest(app, "GET", "/api/sessions/7/laps");
+      expect(storage.getSessionLapsEnriched).toHaveBeenCalledWith(7);
+    });
+
+    it("возвращает круги из storage как есть", async () => {
+      const mockLaps = [
+        {
+          id: 1,
+          sessionId: 7,
+          driverId: 3,
+          lapNum: 1,
+          lapNumber: 1,
+          lapTimeMs: 95000,
+          lapTimeSeconds: 95,
+          isPitLap: false,
+          driverName: "Пилот А",
+          carNumber: "24",
+          isPlayer: 1,
+        },
+      ];
+      (storage.getSessionLapsEnriched as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockLaps);
+      const res = await makeRequest(app, "GET", "/api/sessions/7/laps");
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(mockLaps);
     });
   });
 

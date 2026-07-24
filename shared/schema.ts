@@ -350,6 +350,21 @@ export type SessionTrackLimitsEnriched = SessionTrackLimits & {
   dateTime: string;
 };
 
+// Круги сессии, обогащённые данными пилота — для GET /api/sessions/:id/laps
+// (вкладки «Круги»/«Секторы»/«Прогресс» на SessionDetail). lapNumber/lapTimeSeconds/
+// sector1-3 — алиасы полей *Ms в секундах для sessionDetailSelectors на клиенте.
+export type SessionLapEnriched = Omit<SessionLap, "isPitLap"> & {
+  lapNumber: number;
+  lapTimeSeconds: number | null;
+  sector1: number | null;
+  sector2: number | null;
+  sector3: number | null;
+  isPitLap: boolean;
+  driverName: string;
+  carNumber: string | null;
+  isPlayer: number;
+};
+
 export type DriverIncidentsResponse = {
   incidents: SessionIncidentEnriched[];
   trackLimits: SessionTrackLimitsEnriched[];
