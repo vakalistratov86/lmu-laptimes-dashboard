@@ -9,6 +9,10 @@ import { computeFileHash, generateId, getJobStatus, getJobErrors, runImport } fr
 import { computeFileHashBinary, runTelemetryImport } from "./telemetryImportWorker";
 import { listTelemetrySessions, getTelemetrySessionWithChannels, getSessionLaps, getLapSeries } from "./telemetryQuery";
 import { requireAdminToken } from "./adminAuth";
+import {
+  IdParamSchema, LapNumberParamSchema, PaginationQuerySchema, LapsQuerySchema, BestLapsQuerySchema, formatZodError,
+} from "@shared/validators";
+import type { z } from "zod";
 
 /**
  * Wraps an async route handler so that any rejected Promise is forwarded
@@ -35,26 +39,42 @@ const asyncRoute =
     fn(req, res, next).catch(next);
 
 /**
- * #121: разбор limit/offset из query-параметров списочных эндпоинтов.
- * defaultLimit применяется только когда клиент НЕ передал limit явно —
- * так эндпоинт никогда не отдаёт безусловно весь датасет, но не мешает
- * осознанному запросу большей страницы (в пределах maxLimit).
+ * #121: разбор limit/offset из уже провалидированных Zod-схемой query-параметров
+ * списочных эндпоинтов. defaultLimit применяется только когда клиент НЕ передал
+ * limit явно — так эндпоинт никогда не отдаёт безусловно весь датасет, но не
+ * мешает осознанному запросу большей страницы (в пределах maxLimit).
+ *
+ * #124: сам разбор строка→число и его корректность (конечное положительное
+ * целое) проверяются на входе Zod-схемой (PaginationQuerySchema и её
+ * расширения) — сюда попадают только уже валидные limit/offset либо undefined.
  */
-function parsePagination(
-  query: Request["query"],
+function resolvePagination(
+  parsed: { limit?: number; offset?: number },
   { defaultLimit, maxLimit }: { defaultLimit: number; maxLimit: number },
 ): { limit: number; offset: number } {
-  let limit = defaultLimit;
-  if (query.limit != null) {
-    const n = Number(query.limit);
-    if (Number.isFinite(n) && n > 0) limit = Math.min(Math.floor(n), maxLimit);
-  }
-  let offset = 0;
-  if (query.offset != null) {
-    const n = Number(query.offset);
-    if (Number.isFinite(n) && n >= 0) offset = Math.floor(n);
-  }
+  const limit = parsed.limit != null ? Math.min(parsed.limit, maxLimit) : defaultLimit;
+  const offset = parsed.offset ?? 0;
   return { limit, offset };
+}
+
+/**
+ * #124: валидация числового параметра пути через Zod. При ошибке сама
+ * отправляет 400 и возвращает undefined — вызывающий роут должен в этом
+ * случае немедленно завершить обработку (return). По умолчанию — PK-схема
+ * (положительное целое); для :lapNumber передаётся LapNumberParamSchema.
+ */
+function parseIdParam(
+  raw: string | string[],
+  res: Response,
+  label = "id",
+  schema: z.ZodType<number> = IdParamSchema,
+): number | undefined {
+  const result = schema.safeParse(Array.isArray(raw) ? raw[0] : raw);
+  if (!result.success) {
+    res.status(400).json({ message: `Некорректный ${label}` });
+    return undefined;
+  }
+  return result.data;
 }
 
 export async function registerRoutes(
@@ -67,7 +87,9 @@ export async function registerRoutes(
   }));
 
   app.get("/api/tracks/:id", asyncRoute(async (req, res) => {
-    const track = await storage.getTrack(Number(req.params.id));
+    const id = parseIdParam(req.params.id, res);
+    if (id === undefined) return;
+    const track = await storage.getTrack(id);
     if (!track) return res.status(404).json({ message: "Трасса не найдена" });
     res.json(track);
   }));
@@ -79,12 +101,18 @@ export async function registerRoutes(
   // сессий, а не с числом кругов — гораздо медленнее lap_times, поэтому
   // здесь достаточно высокого потолка вместо полноценной пагинации в UI.
   app.get("/api/drivers", asyncRoute(async (req, res) => {
-    const pagination = parsePagination(req.query, { defaultLimit: 5000, maxLimit: 5000 });
+    const parsed = PaginationQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Некорректные параметры запроса", details: formatZodError(parsed.error) });
+    }
+    const pagination = resolvePagination(parsed.data, { defaultLimit: 5000, maxLimit: 5000 });
     res.json(await storage.getDrivers(pagination));
   }));
 
   app.get("/api/drivers/:id", asyncRoute(async (req, res) => {
-    const driver = await storage.getDriver(Number(req.params.id));
+    const id = parseIdParam(req.params.id, res);
+    if (id === undefined) return;
+    const driver = await storage.getDriver(id);
     if (!driver) return res.status(404).json({ message: "Пилот не найден" });
     res.json(driver);
   }));
@@ -94,31 +122,34 @@ export async function registerRoutes(
    * пилота по гоночным сессиям. Используется страницей профиля пилота.
    */
   app.get("/api/drivers/:id/incidents", asyncRoute(async (req, res) => {
-    const driverId = Number(req.params.id);
-    if (!Number.isFinite(driverId)) {
-      return res.status(400).json({ message: "Некорректный id пилота" });
-    }
+    const driverId = parseIdParam(req.params.id, res, "id пилота");
+    if (driverId === undefined) return;
     res.json(await storage.getDriverIncidents(driverId));
   }));
 
   app.get("/api/laps", asyncRoute(async (req, res) => {
+    const parsed = LapsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Некорректные параметры запроса", details: formatZodError(parsed.error) });
+    }
+    const { limit, offset, ...filterFields } = parsed.data;
     const filter: LapFilter = {};
-    if (req.query.trackId) filter.trackId = Number(req.query.trackId);
-    if (req.query.driverId) filter.driverId = Number(req.query.driverId);
-    if (req.query.carClass) filter.carClass = String(req.query.carClass);
-    if (req.query.conditions) filter.conditions = String(req.query.conditions);
-    if (req.query.sessionId) filter.sessionId = Number(req.query.sessionId);
-    if (req.query.sessionCourse) filter.sessionCourse = String(req.query.sessionCourse);
+    if (filterFields.trackId !== undefined) filter.trackId = filterFields.trackId;
+    if (filterFields.driverId !== undefined) filter.driverId = filterFields.driverId;
+    if (filterFields.carClass !== undefined) filter.carClass = filterFields.carClass;
+    if (filterFields.conditions !== undefined) filter.conditions = filterFields.conditions;
+    if (filterFields.sessionId !== undefined) filter.sessionId = filterFields.sessionId;
+    if (filterFields.sessionCourse !== undefined) filter.sessionCourse = filterFields.sessionCourse;
 
     // #121: без фильтра и без явного limit — эндпоинт больше никогда не
     // отдаёт ВЕСЬ lap_times безусловно. С любым фильтром (уже ограничен
     // реальным числом строк по смыслу) лимит применяется только если его
     // явно попросили.
     const hasFilter = Object.keys(filter).length > 0;
-    const explicitLimit = req.query.limit != null;
+    const explicitLimit = limit != null;
     const pagination = hasFilter && !explicitLimit
       ? undefined
-      : parsePagination(req.query, { defaultLimit: 500, maxLimit: 5000 });
+      : resolvePagination({ limit, offset }, { defaultLimit: 500, maxLimit: 5000 });
 
     res.json(await storage.getLaps(filter, pagination));
   }));
@@ -131,11 +162,15 @@ export async function registerRoutes(
    * числом кругов, поэтому отдельной пагинации не требует.
    */
   app.get("/api/laps/best", asyncRoute(async (req, res) => {
+    const parsed = BestLapsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Некорректные параметры запроса", details: formatZodError(parsed.error) });
+    }
     const filter: { trackId?: number; driverId?: number; carClass?: string; sessionCourse?: string } = {};
-    if (req.query.trackId) filter.trackId = Number(req.query.trackId);
-    if (req.query.driverId) filter.driverId = Number(req.query.driverId);
-    if (req.query.carClass) filter.carClass = String(req.query.carClass);
-    if (req.query.sessionCourse) filter.sessionCourse = String(req.query.sessionCourse);
+    if (parsed.data.trackId !== undefined) filter.trackId = parsed.data.trackId;
+    if (parsed.data.driverId !== undefined) filter.driverId = parsed.data.driverId;
+    if (parsed.data.carClass !== undefined) filter.carClass = parsed.data.carClass;
+    if (parsed.data.sessionCourse !== undefined) filter.sessionCourse = parsed.data.sessionCourse;
     res.json(await storage.getBestLaps(filter));
   }));
 
@@ -143,12 +178,18 @@ export async function registerRoutes(
   // вызывает этот эндпоинт БЕЗ limit — раньше молча обрезалось до 500 самых
   // свежих сессий, без какой-либо пагинации в UI и без индикации усечения.
   app.get("/api/sessions", asyncRoute(async (req, res) => {
-    const pagination = parsePagination(req.query, { defaultLimit: 5000, maxLimit: 5000 });
+    const parsed = PaginationQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Некорректные параметры запроса", details: formatZodError(parsed.error) });
+    }
+    const pagination = resolvePagination(parsed.data, { defaultLimit: 5000, maxLimit: 5000 });
     res.json(await storage.getSessions(pagination));
   }));
 
   app.get("/api/sessions/:id", asyncRoute(async (req, res) => {
-    const session = await storage.getSession(Number(req.params.id));
+    const id = parseIdParam(req.params.id, res);
+    if (id === undefined) return;
+    const session = await storage.getSession(id);
     if (!session) return res.status(404).json({ message: "Сессия не найдена" });
     res.json(session);
   }));
@@ -159,10 +200,8 @@ export async function registerRoutes(
    * Используется вкладками «Круги», «Секторы» и «Прогресс» на странице SessionDetail.
    */
   app.get("/api/sessions/:id/laps", asyncRoute(async (req, res) => {
-    const sessionId = Number(req.params.id);
-    if (!Number.isFinite(sessionId)) {
-      return res.status(400).json({ message: "Некорректный id сессии" });
-    }
+    const sessionId = parseIdParam(req.params.id, res, "id сессии");
+    if (sessionId === undefined) return;
 
     const lapsRows = await db
       .select()
@@ -208,25 +247,24 @@ export async function registerRoutes(
   }));
 
   app.get("/api/telemetry/sessions/:id", asyncRoute(async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ message: "Некорректный id" });
+    const id = parseIdParam(req.params.id, res);
+    if (id === undefined) return;
     const result = await getTelemetrySessionWithChannels(id);
     if (!result) return res.status(404).json({ message: "Запись телеметрии не найдена" });
     res.json(result);
   }));
 
   app.get("/api/telemetry/sessions/:id/laps", asyncRoute(async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ message: "Некорректный id" });
+    const id = parseIdParam(req.params.id, res);
+    if (id === undefined) return;
     res.json(await getSessionLaps(id));
   }));
 
   app.get("/api/telemetry/sessions/:id/laps/:lapNumber/series", asyncRoute(async (req, res) => {
-    const id = Number(req.params.id);
-    const lapNumber = Number(req.params.lapNumber);
-    if (!Number.isFinite(id) || !Number.isFinite(lapNumber)) {
-      return res.status(400).json({ message: "Некорректные параметры" });
-    }
+    const id = parseIdParam(req.params.id, res);
+    if (id === undefined) return;
+    const lapNumber = parseIdParam(req.params.lapNumber, res, "номер круга", LapNumberParamSchema);
+    if (lapNumber === undefined) return;
     const laps = await getSessionLaps(id);
     const lap = laps.find((l) => l.lapNumber === lapNumber);
     if (!lap) return res.status(404).json({ message: "Круг не найден" });
