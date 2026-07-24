@@ -33,7 +33,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { parseRaceResults, type ParsedSession } from "./logParser";
 import { validateLapTime } from "@shared/validators";
 import { normalizeLapTime, normalizeDriverNameForStorage, normalizeTrackName, toMilliseconds } from "./normalizer";
-import type { Track, Driver } from "@shared/schema";
+import type { Track, Driver, InsertLapTime, InsertSessionLap, InsertImportError } from "@shared/schema";
 import { findSupersedeCandidate, deleteSupersededSessionData, decideSupersedeAction } from "./sessionSupersede";
 import { logImportStarted, logImportCompleted, logImportFailed, logImportSkipped, logParseError } from "./logger";
 
@@ -343,9 +343,9 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     );
 
     const driverIdByName = new Map<string, number>();
-    const lapTimeRows: any[] = [];
-    const sessionLapRows: any[] = [];
-    const dlqRows: any[] = [];
+    const lapTimeRows: InsertLapTime[] = [];
+    const sessionLapRows: InsertSessionLap[] = [];
+    const dlqRows: InsertImportError[] = [];
     let totalLapsCount = 0;
     let validLapsCount = 0;
 
@@ -524,7 +524,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     // или был исключён), раньше молча пропадали (continue без следа). Теперь
     // такие записи фиксируются в DLQ (import_errors) и логируются как warn —
     // видно и в GET /api/import/:id/errors, и в консоли, а не теряются бесследно.
-    const streamDlqRows: any[] = [];
+    const streamDlqRows: InsertImportError[] = [];
     const logUnknownStreamDriver = (
       kind: "incident" | "sectorBest" | "trackLimit",
       driverName: string,
