@@ -389,7 +389,7 @@ telemetry_sessions
 | СУБД | PostgreSQL |
 | Драйвер | `postgres-js` |
 | ORM | Drizzle ORM (`drizzle-orm/pg-core`) |
-| Миграции | Версионированные SQL-файлы в `migrations/` (`npm run db:generate`), применяются автоматически при старте сервера через `drizzle-orm`'s migrator (`server/migrate.ts`) |
+| Миграции | drizzle-kit (`npm run db:push`) |
 | Валидация схемы | drizzle-zod + Zod |
 | Конфигурация | `drizzle.config.ts` |
 | Расположение схемы | `shared/schema.ts` |

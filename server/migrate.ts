@@ -1,99 +1,339 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { createHash } from "node:crypto";
-import { drizzle } from "drizzle-orm/postgres-js";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
-
-const MIGRATIONS_FOLDER = path.resolve(import.meta.dirname, "..", "migrations");
-// Совпадает с дефолтами drizzle-orm (server/pg-core/dialect.ts) — не менять
-// без синхронной правки baselineExistingDatabase() ниже.
-const MIGRATIONS_SCHEMA = "drizzle";
-const MIGRATIONS_TABLE = "__drizzle_migrations";
 
 /**
  * Runs DB migrations on startup.
- * Применяет SQL-файлы из migrations/ (сгенерированы `drizzle-kit generate` из
- * shared/schema.ts) через drizzle-orm migrator — учёт применённых миграций
- * ведётся в служебной таблице drizzle.__drizzle_migrations, поэтому повторный
- * запуск на каждом старте сервера безопасен и идемпотентен.
+ * CREATE TABLE IF NOT EXISTS for each table in the schema, plus a handful of
+ * one-off ALTER TABLE fixups for columns changed after their initial release.
  */
 export async function runMigrations(): Promise<void> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
 
-  // Отдельное соединение для миграций (max 1, без idle timeout)
+  // Separate connection for migrations (max 1 connection, no idle timeout)
   const migrationClient = postgres(url, { max: 1 });
-  const db = drizzle(migrationClient);
 
   try {
     console.log("[migrate] Running database migrations...");
-    await baselineExistingDatabase(migrationClient);
-    await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
-    console.log("[migrate] All migrations applied.");
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS tracks (
+        id        SERIAL PRIMARY KEY,
+        name      TEXT NOT NULL,
+        country   TEXT NOT NULL,
+        length_km REAL NOT NULL,
+        turns     INTEGER NOT NULL,
+        layout    TEXT NOT NULL
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS drivers (
+        id      SERIAL PRIMARY KEY,
+        name    TEXT NOT NULL,
+        team    TEXT NOT NULL,
+        country TEXT NOT NULL
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id                    SERIAL PRIMARY KEY,
+        track_id              INTEGER NOT NULL,
+        event                 TEXT NOT NULL,
+        session_type          TEXT NOT NULL,
+        venue                 TEXT NOT NULL,
+        course                TEXT,
+        track_length_m        REAL,
+        game_version          TEXT,
+        date_time             TEXT NOT NULL,
+        date_time_unix        BIGINT,
+        file_name             TEXT NOT NULL,
+        setting               TEXT,
+        driver_count          INTEGER NOT NULL,
+        lap_count             INTEGER NOT NULL,
+        race_laps             INTEGER,
+        race_time_min         INTEGER,
+        mech_fail_rate        INTEGER,
+        damage_mult           INTEGER,
+        fuel_mult             REAL,
+        tire_mult             REAL,
+        vehicles_allowed      TEXT,
+        parc_ferme            INTEGER,
+        fixed_setups          INTEGER,
+        free_settings         INTEGER,
+        fixed_upgrades        INTEGER,
+        tire_warmers          INTEGER,
+        dedicated             INTEGER,
+        session_duration_min  INTEGER,
+        session_max_laps      INTEGER,
+        most_laps_completed   INTEGER
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS lap_times (
+        id          SERIAL PRIMARY KEY,
+        track_id    INTEGER NOT NULL,
+        driver_id   INTEGER NOT NULL,
+        car_class   TEXT NOT NULL,
+        car         TEXT NOT NULL,
+        lap_ms      INTEGER NOT NULL,
+        sector1_ms  INTEGER,
+        sector2_ms  INTEGER,
+        sector3_ms  INTEGER,
+        conditions  TEXT NOT NULL,
+        tyre        TEXT NOT NULL,
+        date        TEXT NOT NULL,
+        session_id  INTEGER
+      )
+    `;
+
+    // Убираем демо-данные и больше не различающую ничего колонку source:
+    // приложение больше не сеет фейковые заезды при пустой БД (issue-запрос
+    // "избавиться от демо-данных"), поэтому все круги в lap_times теперь
+    // всегда из реального импорта.
+    await migrationClient`ALTER TABLE lap_times DROP COLUMN IF EXISTS source`;
+
+    // Fix: allow NULL sector times for incomplete/formation laps from LMU XML.
+    // Older databases were created with NOT NULL on sector columns; drop those constraints.
+    await migrationClient`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'lap_times'
+            AND column_name = 'sector1_ms'
+            AND is_nullable = 'NO'
+        ) THEN
+          ALTER TABLE lap_times
+            ALTER COLUMN sector1_ms DROP NOT NULL,
+            ALTER COLUMN sector2_ms DROP NOT NULL,
+            ALTER COLUMN sector3_ms DROP NOT NULL;
+          RAISE NOTICE '[migrate] lap_times sector columns: NOT NULL constraint dropped';
+        END IF;
+      END
+      $$;
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS import_jobs (
+        id                  TEXT PRIMARY KEY,
+        file_hash           TEXT NOT NULL UNIQUE,
+        file_name           TEXT NOT NULL,
+        status              TEXT NOT NULL DEFAULT 'queued',
+        session_id          INTEGER,
+        total_laps          INTEGER,
+        valid_laps          INTEGER,
+        error_laps          INTEGER,
+        error               TEXT,
+        log_format_version  TEXT,
+        created_at          BIGINT NOT NULL,
+        finished_at         BIGINT
+      )
+    `;
+
+    // Fix: migrate created_at and finished_at from INTEGER to BIGINT for existing databases.
+    // INTEGER (int4) max is ~2.1B, but Date.now() returns Unix ms timestamps (~1.78T in 2026),
+    // causing "value out of range for type integer" (PostgreSQL error code 22003).
+    await migrationClient`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'import_jobs'
+            AND column_name = 'created_at'
+            AND data_type = 'integer'
+        ) THEN
+          ALTER TABLE import_jobs ALTER COLUMN created_at TYPE BIGINT;
+          RAISE NOTICE '[migrate] import_jobs.created_at migrated from INTEGER to BIGINT';
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'import_jobs'
+            AND column_name = 'finished_at'
+            AND data_type = 'integer'
+        ) THEN
+          ALTER TABLE import_jobs ALTER COLUMN finished_at TYPE BIGINT;
+          RAISE NOTICE '[migrate] import_jobs.finished_at migrated from INTEGER to BIGINT';
+        END IF;
+      END
+      $$;
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS import_errors (
+        id              SERIAL PRIMARY KEY,
+        import_job_id   TEXT NOT NULL,
+        raw_payload     TEXT NOT NULL,
+        error_code      TEXT NOT NULL,
+        error_message   TEXT NOT NULL,
+        occurred_at     BIGINT NOT NULL
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS session_results (
+        id                        SERIAL PRIMARY KEY,
+        session_id                INTEGER NOT NULL,
+        driver_id                 INTEGER NOT NULL,
+        is_player                 INTEGER NOT NULL DEFAULT 0,
+        position                  INTEGER NOT NULL,
+        class_position            INTEGER NOT NULL,
+        lap_rank_including_discos INTEGER,
+        car_class                 TEXT NOT NULL,
+        car                       TEXT NOT NULL,
+        car_type                  TEXT,
+        team                      TEXT NOT NULL,
+        car_number                TEXT,
+        veh_file                  TEXT,
+        veh_name                  TEXT,
+        category                  TEXT,
+        laps                      INTEGER NOT NULL,
+        pitstops                  INTEGER NOT NULL,
+        best_lap_ms               INTEGER,
+        finish_status             TEXT,
+        control_and_aids          TEXT,
+        connected                 INTEGER
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS session_laps (
+        id                      SERIAL PRIMARY KEY,
+        session_result_id       INTEGER NOT NULL,
+        session_id              INTEGER NOT NULL,
+        driver_id               INTEGER NOT NULL,
+        lap_num                 INTEGER NOT NULL,
+        position                INTEGER,
+        lap_time_ms             REAL,
+        elapsed_time_sec        REAL,
+        sector1_ms              REAL,
+        sector2_ms              REAL,
+        sector3_ms              REAL,
+        top_speed_kph           REAL,
+        fuel_level              REAL,
+        fuel_used               REAL,
+        vehicle_condition       REAL,
+        vehicle_condition_used  REAL,
+        tyre_fl_condition       REAL,
+        tyre_fr_condition       REAL,
+        tyre_rl_condition       REAL,
+        tyre_rr_condition       REAL,
+        front_compound          TEXT,
+        rear_compound           TEXT,
+        tyre_fl                 TEXT,
+        tyre_fr                 TEXT,
+        tyre_rl                 TEXT,
+        tyre_rr                 TEXT,
+        is_pit_lap              INTEGER NOT NULL DEFAULT 0
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS session_incidents (
+        id                SERIAL PRIMARY KEY,
+        session_id        INTEGER NOT NULL,
+        driver_id         INTEGER NOT NULL,
+        target_driver_id  INTEGER,
+        elapsed_time_sec  REAL NOT NULL,
+        severity          REAL NOT NULL,
+        is_immovable      INTEGER NOT NULL DEFAULT 0
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS session_sector_bests (
+        id                SERIAL PRIMARY KEY,
+        session_id        INTEGER NOT NULL,
+        driver_id         INTEGER NOT NULL,
+        car_class         TEXT NOT NULL,
+        sector            INTEGER NOT NULL,
+        elapsed_time_sec  REAL NOT NULL,
+        lap_num           INTEGER
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS session_track_limits (
+        id                SERIAL PRIMARY KEY,
+        session_id        INTEGER NOT NULL,
+        driver_id         INTEGER NOT NULL,
+        lap_num           INTEGER NOT NULL,
+        elapsed_time_sec  REAL NOT NULL,
+        warning_points    INTEGER,
+        current_points    INTEGER,
+        resolution        INTEGER,
+        decision          TEXT
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS telemetry_import_jobs (
+        id                    TEXT PRIMARY KEY,
+        file_hash             TEXT NOT NULL UNIQUE,
+        file_name             TEXT NOT NULL,
+        status                TEXT NOT NULL DEFAULT 'processing',
+        telemetry_session_id  INTEGER,
+        channel_count         INTEGER,
+        sample_count          INTEGER,
+        error                 TEXT,
+        created_at            BIGINT NOT NULL,
+        finished_at           BIGINT
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS telemetry_sessions (
+        id                   SERIAL PRIMARY KEY,
+        import_job_id        TEXT NOT NULL,
+        file_name            TEXT NOT NULL,
+        driver_name          TEXT,
+        steam_id             TEXT,
+        recording_time       TEXT,
+        session_time         TEXT,
+        session_type         TEXT,
+        track_name           TEXT,
+        track_layout         TEXT,
+        weather_conditions   TEXT,
+        car_name             TEXT,
+        car_class            TEXT,
+        car_setup            TEXT,
+        created_at           BIGINT NOT NULL
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS telemetry_channels (
+        id                     SERIAL PRIMARY KEY,
+        telemetry_session_id   INTEGER NOT NULL,
+        name                   TEXT NOT NULL,
+        kind                   TEXT NOT NULL,
+        frequency_hz           INTEGER,
+        unit                   TEXT,
+        sample_count           INTEGER NOT NULL
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS telemetry_samples (
+        id          SERIAL PRIMARY KEY,
+        channel_id  INTEGER NOT NULL,
+        seq         INTEGER NOT NULL,
+        ts          REAL,
+        value1      REAL,
+        value2      REAL,
+        value3      REAL,
+        value4      REAL
+      )
+    `;
+
+    await migrationClient`
+      CREATE INDEX IF NOT EXISTS telemetry_samples_channel_id_idx ON telemetry_samples (channel_id)
+    `;
+
+    console.log("[migrate] All tables are up to date.");
   } finally {
     await migrationClient.end();
   }
-}
-
-/**
- * До перехода на drizzle-kit-миграции таблицы создавались вручную (CREATE
- * TABLE IF NOT EXISTS в этом же файле). У уже развёрнутых баз данных все
- * таблицы приложения уже существуют, но служебной таблицы
- * drizzle.__drizzle_migrations ещё нет — если просто запустить migrate(),
- * он попытается выполнить CREATE TABLE из начальной миграции и упадёт с
- * "relation already exists".
- *
- * Здесь такой случай определяется один раз: если таблицы приложения (напр.
- * tracks) уже есть, а таблицы учёта миграций ещё нет — начальная миграция
- * помечается как уже применённая (создаём ту же служебную таблицу, что и
- * drizzle, и вставляем в неё запись с хэшем и timestamp начальной миграции)
- * вместо повторного выполнения её SQL. Дальше migrate() увидит эту запись и
- * само ничего не сделает — таблицы уже соответствуют схеме от старого
- * ручного CREATE TABLE, который вручную поддерживался в синхроне с
- * shared/schema.ts.
- *
- * На полностью новой БД (нет ни tracks, ни __drizzle_migrations) — функция
- * ничего не делает, migrate() создаёт все таблицы штатно из миграции.
- */
-async function baselineExistingDatabase(sql: postgres.Sql): Promise<void> {
-  const [migrationsTableRow] = await sql<{ exists: boolean }[]>`
-    SELECT EXISTS (
-      SELECT 1 FROM information_schema.tables
-      WHERE table_schema = ${MIGRATIONS_SCHEMA} AND table_name = ${MIGRATIONS_TABLE}
-    ) AS "exists"
-  `;
-  if (migrationsTableRow.exists) return;
-
-  const [appTablesRow] = await sql<{ exists: boolean }[]>`
-    SELECT EXISTS (
-      SELECT 1 FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_name = 'tracks'
-    ) AS "exists"
-  `;
-  if (!appTablesRow.exists) return;
-
-  const journalPath = path.join(MIGRATIONS_FOLDER, "meta", "_journal.json");
-  const journal = JSON.parse(readFileSync(journalPath, "utf-8")) as {
-    entries: { tag: string; when: number }[];
-  };
-  const initialEntry = journal.entries[0];
-  if (!initialEntry) return;
-
-  const migrationSql = readFileSync(path.join(MIGRATIONS_FOLDER, `${initialEntry.tag}.sql`), "utf-8");
-  const hash = createHash("sha256").update(migrationSql).digest("hex");
-
-  console.log("[migrate] Existing pre-drizzle-kit database detected — baselining without re-running CREATE TABLE");
-  await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${MIGRATIONS_SCHEMA}`);
-  await sql.unsafe(`
-    CREATE TABLE IF NOT EXISTS ${MIGRATIONS_SCHEMA}.${MIGRATIONS_TABLE} (
-      id SERIAL PRIMARY KEY,
-      hash text NOT NULL,
-      created_at bigint
-    )
-  `);
-  await sql.unsafe(`INSERT INTO ${MIGRATIONS_SCHEMA}.${MIGRATIONS_TABLE} (hash, created_at) VALUES ($1, $2)`, [
-    hash,
-    initialEntry.when,
-  ]);
 }
