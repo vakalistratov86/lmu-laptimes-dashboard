@@ -109,6 +109,7 @@
 ├── tailwind.config.ts   # Конфигурация Tailwind CSS
 ├── eslint.config.js     # Конфигурация ESLint (flat config)
 ├── .prettierrc.json     # Конфигурация Prettier
+├── .markdownlint.jsonc  # Конфигурация markdownlint (docs-lint CI)
 └── tsconfig.json        # Конфигурация TypeScript
 ```
 

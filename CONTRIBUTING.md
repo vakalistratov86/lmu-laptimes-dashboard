@@ -60,6 +60,7 @@ npm run dev
 ├── tests/               # Тесты (Vitest)
 ├── eslint.config.js     # Конфигурация ESLint
 ├── .prettierrc.json     # Конфигурация Prettier
+├── .markdownlint.jsonc  # Конфигурация markdownlint (docs-lint CI)
 └── drizzle.config.ts    # Конфигурация Drizzle ORM
 ```
 
@@ -178,6 +179,12 @@ npm run format:check
 - Конфигурация: `eslint.config.js` (flat config) и `.prettierrc.json` в корне репозитория
 - Правила для клиента (React + `react-hooks`) и сервера/shared (Node globals) заданы отдельно в `eslint.config.js`
 - Оба шага (`lint`, `format:check`) — обязательные проверки CI (`.github/workflows/lint.yml`) на каждый push/PR
+
+### Markdown
+
+- `.md`-файлы (README, CHANGELOG, docs/) проверяются `markdownlint-cli2` в CI (`.github/workflows/docs-lint.yml`)
+- Конфигурация — `.markdownlint.jsonc`: `MD013` (лимит длины строки) и `MD024` (дублирующиеся заголовки) отключены осознанно — документация проекта написана длинными строками-абзацами, а `CHANGELOG.md` намеренно повторяет заголовки `### Added`/`### Fixed`/`### Removed` в каждом рабочем блоке (формат Keep a Changelog)
+- Остальные правила (пустые строки вокруг заголовков/списков, язык у code-блоков и т.п.) — действующие, при добавлении .md-файлов проверяйте их локально: `npx markdownlint-cli2 "**/*.md" "!node_modules/**/*.md"`
 
 ---
 

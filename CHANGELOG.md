@@ -9,6 +9,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`docs-lint` (markdownlint) падал в CI на каждом прогоне** — линтер работал без конфига, на чистых дефолтах: `MD013` (лимит строки 80 символов) и `MD024` (дубли заголовков) конфликтовали с осознанным стилем документации проекта (длинные строки-абзацы, повторяющиеся `### Added`/`### Fixed` в каждом блоке CHANGELOG.md). Добавлен `.markdownlint.jsonc`, отключающий именно эти два правила; остальные ~30 настоящих огрехов разметки (пропущенные пустые строки вокруг заголовков/списков, code-блоки без языка, пустая строка в blockquote) исправлены точечно
+- **`server/vite.ts`: HMR-конфигурация и `allowedHosts` дев-сервера Vite не применялись** — переменная `serverOptions` (с `hmr: { server, path: "/vite-hmr" }` и `allowedHosts: true`) была объявлена, но ни разу не передавалась в `createViteServer()`; вместо неё использовался отдельный неполный инлайн-объект `{ middlewareMode: true }`. Обнаружено при чистке ESLint-предупреждений (`serverOptions` числился неиспользуемым) — теперь `createViteServer()` реально получает `serverOptions`
+
+### Changed
+
+- Устранена вся ESLint-задолженность (26 предупреждений → 0): удалён мёртвый код (`TrackMap.tsx#PATHS`, неиспользуемые импорты в `server/migrate.ts`/`importWorker.ts`/тестах), убран неиспользуемый параметр `rawContent` из `assertSupportedVersion()` в `shared/validators.ts`, устаревшие `eslint-disable`-комментарии на уже глобально выключенном `no-explicit-any` заменены/убраны, намеренно отброшенные поля в `tests/schema.test.ts` (паттерн `const { x, ...rest } = obj`) переименованы в `x: _x`
+- `server/migrate.ts` — убраны мёртвые импорты drizzle-orm migrator (`drizzle`, `migrate`): функция `runMigrations()` никогда не использовала миграционный путь, только фолбэк `CREATE TABLE IF NOT EXISTS`; докстрока, заявлявшая обратное, приведена в соответствие с фактическим поведением
+
 ### Added
 
 - **ESLint + Prettier** — `eslint.config.js` (flat config, `typescript-eslint` + `eslint-plugin-react`/`react-hooks`) и `.prettierrc.json`; npm-скрипты `lint`/`lint:fix`/`format`/`format:check`; отдельные джобы ESLint/Prettier в CI (`.github/workflows/lint.yml`); весь репозиторий приведён к единому формату (#125)
