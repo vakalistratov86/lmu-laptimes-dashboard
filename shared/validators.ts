@@ -102,3 +102,47 @@ export function validateRawLap(
 ): { ok: true; data: LapTimeInput } | { ok: false; errorCode: string; errorMessage: string } {
   return validateLapTime(raw);
 }
+
+// ──────────────────────────────────────────────
+// Query/route-параметры REST API (#124)
+// ──────────────────────────────────────────────
+// req.query/req.params всегда строки (или отсутствуют) — z.coerce приводит
+// их к нужному типу и отбраковывает мусор (напр. "abc" для trackId) вместо
+// того чтобы молча превращать его в NaN и пропускать дальше в SQL-фильтр.
+
+/** Валидация числового :id из пути (SERIAL PK в БД — положительное целое). */
+export const IdParamSchema = z.coerce.number().int().positive();
+
+/** Номер круга (:lapNumber) — не PK, у телеметрии встречается lap 0 (формационный/выездной круг). */
+export const LapNumberParamSchema = z.coerce.number().int().nonnegative();
+
+export const PaginationQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().optional(),
+  offset: z.coerce.number().int().nonnegative().optional(),
+});
+export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
+
+export const LapsQuerySchema = PaginationQuerySchema.extend({
+  trackId: z.coerce.number().int().positive().optional(),
+  driverId: z.coerce.number().int().positive().optional(),
+  carClass: z.string().min(1).max(100).optional(),
+  conditions: z.string().min(1).max(100).optional(),
+  sessionId: z.coerce.number().int().positive().optional(),
+  sessionCourse: z.string().min(1).max(200).optional(),
+});
+export type LapsQuery = z.infer<typeof LapsQuerySchema>;
+
+export const BestLapsQuerySchema = z.object({
+  trackId: z.coerce.number().int().positive().optional(),
+  driverId: z.coerce.number().int().positive().optional(),
+  carClass: z.string().min(1).max(100).optional(),
+  sessionCourse: z.string().min(1).max(200).optional(),
+});
+export type BestLapsQuery = z.infer<typeof BestLapsQuerySchema>;
+
+/**
+ * Форматирует ошибки Zod в компактное сообщение для 400-ответа.
+ */
+export function formatZodError(error: z.ZodError): string {
+  return error.errors.map((e) => `${e.path.join(".") || "value"}: ${e.message}`).join("; ");
+}

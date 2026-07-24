@@ -196,6 +196,13 @@ describe('API Routes', () => {
       await makeRequest(app, 'GET', '/api/tracks/42');
       expect(storage.getTrack).toHaveBeenCalledWith(42);
     });
+
+    // #124: нечисловой :id раньше молча превращался в NaN и уходил в SQL-запрос.
+    it('возвращает 400 для нечислового id, не вызывая storage.getTrack', async () => {
+      const res = await makeRequest(app, 'GET', '/api/tracks/abc');
+      expect(res.status).toBe(400);
+      expect(storage.getTrack).not.toHaveBeenCalled();
+    });
   });
 
   // ── GET /api/drivers ─────────────────────────────────────────────────────
@@ -211,6 +218,34 @@ describe('API Routes', () => {
       (storage.getDrivers as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockDrivers);
       const res = await makeRequest(app, 'GET', '/api/drivers');
       expect((res.body as typeof mockDrivers)[0].name).toBe('Пилот А');
+    });
+
+    // #124: невалидный limit (не число / ≤ 0) отклоняется явной 400-ошибкой
+    // вместо молчаливого fallback на дефолт.
+    it('#124: нечисловой limit возвращает 400, не вызывая storage.getDrivers', async () => {
+      const mockReq = {
+        method: 'GET',
+        url: '/api/drivers?limit=abc',
+        path: '/api/drivers',
+        query: { limit: 'abc' },
+        params: {},
+        headers: { 'content-type': 'application/json' },
+        body: {},
+      } as unknown as import('express').Request;
+      const res = await new Promise<{ status: number; body: unknown }>((resolve) => {
+        const mockRes = {
+          statusCode: 200,
+          _headers: {} as Record<string, string>,
+          status(code: number) { this.statusCode = code; return this; },
+          json(data: unknown) { resolve({ status: this.statusCode, body: data }); return this; },
+          setHeader(k: string, v: string) { this._headers[k] = v; return this; },
+          getHeader(k: string) { return this._headers[k]; },
+          send(data: unknown) { resolve({ status: this.statusCode, body: data }); return this; },
+        } as unknown as import('express').Response;
+        app.handle(mockReq, mockRes, () => resolve({ status: 404, body: { message: 'Not Found' } }));
+      });
+      expect(res.status).toBe(400);
+      expect(storage.getDrivers).not.toHaveBeenCalled();
     });
   });
 
@@ -291,6 +326,34 @@ describe('API Routes', () => {
         setTimeout(resolve, 50);
       });
       expect(storage.getLaps).toHaveBeenCalledWith({}, { limit: 500, offset: 0 });
+    });
+
+    // #124: раньше `Number(req.query.trackId)` превращал невалидный trackId в
+    // NaN и молча передавал его дальше в SQL-фильтр вместо явной ошибки.
+    it('#124: нечисловой trackId возвращает 400, не вызывая storage.getLaps', async () => {
+      const mockReq = {
+        method: 'GET',
+        url: '/api/laps?trackId=abc',
+        path: '/api/laps',
+        query: { trackId: 'abc' },
+        params: {},
+        headers: { 'content-type': 'application/json' },
+        body: {},
+      } as unknown as import('express').Request;
+      const res = await new Promise<{ status: number; body: unknown }>((resolve) => {
+        const mockRes = {
+          statusCode: 200,
+          _headers: {} as Record<string, string>,
+          status(code: number) { this.statusCode = code; return this; },
+          json(data: unknown) { resolve({ status: this.statusCode, body: data }); return this; },
+          setHeader(k: string, v: string) { this._headers[k] = v; return this; },
+          getHeader(k: string) { return this._headers[k]; },
+          send(data: unknown) { resolve({ status: this.statusCode, body: data }); return this; },
+        } as unknown as import('express').Response;
+        app.handle(mockReq, mockRes, () => resolve({ status: 404, body: { message: 'Not Found' } }));
+      });
+      expect(res.status).toBe(400);
+      expect(storage.getLaps).not.toHaveBeenCalled();
     });
   });
 
