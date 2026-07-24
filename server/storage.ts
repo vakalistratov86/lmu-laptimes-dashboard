@@ -4,6 +4,7 @@ import {
   lapTimes,
   sessions,
   sessionResults,
+  sessionLaps,
   sessionIncidents,
   sessionTrackLimits,
 } from "@shared/schema";
@@ -16,6 +17,7 @@ import type {
   Session,
   SessionEnriched,
   SessionResult,
+  SessionLapEnriched,
   DriverIncidentsResponse,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -71,6 +73,7 @@ export interface IStorage {
   getBestLaps(filter?: LapRecordFilter): Promise<LapTimeEnriched[]>;
   getSessions(pagination?: Pagination): Promise<SessionEnriched[]>;
   getSession(id: number): Promise<SessionEnriched | undefined>;
+  getSessionLapsEnriched(sessionId: number): Promise<SessionLapEnriched[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -369,6 +372,45 @@ export class DatabaseStorage implements IStorage {
 
     const [enriched] = await this.attachSessionResults(sessionRows);
     return enriched;
+  }
+
+  /**
+   * #126: раньше роут GET /api/sessions/:id/laps делал 3 отдельных запроса
+   * (session_laps, все пилоты сессии, все sessionResults сессии) и склеивал
+   * driverName/carNumber/isPlayer вручную через Map в JS — тот же паттерн
+   * N-запросов-плюс-Map, что уже заменён на JOIN в getLaps() (#120). Здесь
+   * джойн даже точнее: session_laps.session_result_id — прямой FK на
+   * session_results.id, а не пара (sessionId, driverId), как в lap_times.
+   */
+  async getSessionLapsEnriched(sessionId: number): Promise<SessionLapEnriched[]> {
+    const rows = await db
+      .select({
+        lap: sessionLaps,
+        driverName: drivers.name,
+        carNumber: sessionResults.carNumber,
+        isPlayer: sessionResults.isPlayer,
+      })
+      .from(sessionLaps)
+      .leftJoin(drivers, eq(sessionLaps.driverId, drivers.id))
+      .leftJoin(sessionResults, eq(sessionLaps.sessionResultId, sessionResults.id))
+      .where(eq(sessionLaps.sessionId, sessionId));
+
+    return rows.map(({ lap, driverName, carNumber, isPlayer }) => {
+      const { isPitLap, ...rest } = lap;
+      return {
+        ...rest,
+        // Поля для совместимости с sessionDetailSelectors (buildDriverLapGroups / buildLapProgressSeries)
+        lapNumber: lap.lapNum,
+        lapTimeSeconds: lap.lapTimeMs != null ? lap.lapTimeMs / 1000 : null,
+        sector1: lap.sector1Ms != null ? lap.sector1Ms / 1000 : null,
+        sector2: lap.sector2Ms != null ? lap.sector2Ms / 1000 : null,
+        sector3: lap.sector3Ms != null ? lap.sector3Ms / 1000 : null,
+        isPitLap: isPitLap === 1,
+        driverName: driverName ?? "—",
+        carNumber: carNumber ?? null,
+        isPlayer: isPlayer ?? 0,
+      } satisfies SessionLapEnriched;
+    });
   }
 
   private async attachSessionResults(

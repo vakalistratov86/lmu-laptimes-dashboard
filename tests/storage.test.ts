@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { tracks, drivers, lapTimes, sessions, sessionResults } from "@shared/schema";
+import { tracks, drivers, lapTimes, sessions, sessionResults, sessionLaps } from "@shared/schema";
 
 // ---------------------------------------------------------------------------
 // Helpers: in-memory DB для изолированных тестов
@@ -94,6 +94,35 @@ function createTestDb() {
       finish_status TEXT,
       control_and_aids TEXT,
       connected INTEGER
+    );
+    CREATE TABLE session_laps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_result_id INTEGER NOT NULL,
+      session_id INTEGER NOT NULL,
+      driver_id INTEGER NOT NULL,
+      lap_num INTEGER NOT NULL,
+      position INTEGER,
+      lap_time_ms REAL,
+      elapsed_time_sec REAL,
+      sector1_ms REAL,
+      sector2_ms REAL,
+      sector3_ms REAL,
+      top_speed_kph REAL,
+      fuel_level REAL,
+      fuel_used REAL,
+      vehicle_condition REAL,
+      vehicle_condition_used REAL,
+      tyre_fl_condition REAL,
+      tyre_fr_condition REAL,
+      tyre_rl_condition REAL,
+      tyre_rr_condition REAL,
+      front_compound TEXT,
+      rear_compound TEXT,
+      tyre_fl TEXT,
+      tyre_fr TEXT,
+      tyre_rl TEXT,
+      tyre_rr TEXT,
+      is_pit_lap INTEGER NOT NULL DEFAULT 0
     );
   `);
   return drizzle(sqlite);
@@ -371,5 +400,183 @@ describe("getLaps() — sessionCourse via JOIN", () => {
     const courseB = rows.find((r) => r.lap.sessionId === sessB.id)?.sessionCourse;
     expect(courseA).toBe("Full 24h");
     expect(courseB).toBe("Bugatti");
+  });
+});
+
+// #126: getSessionLapsEnriched() раньше собирала driverName/carNumber/isPlayer
+// вручную через 3 запроса + JS Map — здесь проверяется тот же JOIN-паттерн
+// (session_laps.session_result_id — прямой FK на session_results.id), которым
+// storage.ts заменил ручную склейку. Ключевой риск при переходе с Map на JOIN —
+// чтобы каждая строка круга независимо резолвила СВОЕГО пилота/результат, а не
+// путала их между разными пилотами одной сессии.
+describe("getSessionLapsEnriched() — JOIN вместо ручной склейки через Map (#126)", () => {
+  let testDb: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    testDb = createTestDb();
+  });
+
+  it("резолвит driverName/carNumber/isPlayer каждого круга через JOIN по своему пилоту", async () => {
+    const { eq } = await import("drizzle-orm");
+
+    const track = testDb
+      .insert(tracks)
+      .values({ name: "Le Mans", country: "FR", lengthKm: 13.6, turns: 38, layout: "Full" })
+      .returning()
+      .get();
+    const driverA = testDb.insert(drivers).values({ name: "Пилот А", team: "Team A", country: "FR" }).returning().get();
+    const driverB = testDb.insert(drivers).values({ name: "Пилот Б", team: "Team B", country: "DE" }).returning().get();
+
+    const session = testDb
+      .insert(sessions)
+      .values({
+        trackId: track.id,
+        event: "Test Race",
+        sessionType: "Race",
+        venue: "Le Mans",
+        dateTime: "2026-07-14T15:00:00.000Z",
+        fileName: "race.xml",
+        driverCount: 2,
+        lapCount: 2,
+      })
+      .returning()
+      .get();
+
+    const resultA = testDb
+      .insert(sessionResults)
+      .values({
+        sessionId: session.id,
+        driverId: driverA.id,
+        isPlayer: 1,
+        position: 1,
+        classPosition: 1,
+        carClass: "Hypercar",
+        car: "Toyota GR010",
+        team: "Team A",
+        carNumber: "7",
+        laps: 1,
+        pitstops: 0,
+      })
+      .returning()
+      .get();
+    const resultB = testDb
+      .insert(sessionResults)
+      .values({
+        sessionId: session.id,
+        driverId: driverB.id,
+        isPlayer: 0,
+        position: 2,
+        classPosition: 2,
+        carClass: "Hypercar",
+        car: "Ferrari 499P",
+        team: "Team B",
+        carNumber: "50",
+        laps: 1,
+        pitstops: 0,
+      })
+      .returning()
+      .get();
+
+    testDb
+      .insert(sessionLaps)
+      .values({
+        sessionResultId: resultA.id,
+        sessionId: session.id,
+        driverId: driverA.id,
+        lapNum: 1,
+        lapTimeMs: 204000,
+        isPitLap: 0,
+      })
+      .run();
+    testDb
+      .insert(sessionLaps)
+      .values({
+        sessionResultId: resultB.id,
+        sessionId: session.id,
+        driverId: driverB.id,
+        lapNum: 1,
+        lapTimeMs: 206000,
+        isPitLap: 0,
+      })
+      .run();
+
+    // Тот же JOIN-паттерн, что и storage.getSessionLapsEnriched()
+    const rows = testDb
+      .select({
+        lap: sessionLaps,
+        driverName: drivers.name,
+        carNumber: sessionResults.carNumber,
+        isPlayer: sessionResults.isPlayer,
+      })
+      .from(sessionLaps)
+      .leftJoin(drivers, eq(sessionLaps.driverId, drivers.id))
+      .leftJoin(sessionResults, eq(sessionLaps.sessionResultId, sessionResults.id))
+      .where(eq(sessionLaps.sessionId, session.id))
+      .all();
+
+    expect(rows).toHaveLength(2);
+    const rowA = rows.find((r) => r.lap.driverId === driverA.id);
+    const rowB = rows.find((r) => r.lap.driverId === driverB.id);
+    expect(rowA?.driverName).toBe("Пилот А");
+    expect(rowA?.carNumber).toBe("7");
+    expect(rowA?.isPlayer).toBe(1);
+    expect(rowB?.driverName).toBe("Пилот Б");
+    expect(rowB?.carNumber).toBe("50");
+    expect(rowB?.isPlayer).toBe(0);
+  });
+
+  it("круг без пилота в справочнике drivers получает driverName=null через LEFT JOIN (маппится в «—» в storage.ts)", async () => {
+    const { eq } = await import("drizzle-orm");
+
+    const track = testDb
+      .insert(tracks)
+      .values({ name: "Spa", country: "BE", lengthKm: 7.0, turns: 19, layout: "GP" })
+      .returning()
+      .get();
+    const session = testDb
+      .insert(sessions)
+      .values({
+        trackId: track.id,
+        event: "Test Race",
+        sessionType: "Race",
+        venue: "Spa",
+        dateTime: "2026-07-14T15:00:00.000Z",
+        fileName: "race.xml",
+        driverCount: 1,
+        lapCount: 1,
+      })
+      .returning()
+      .get();
+
+    // Круг ссылается на driverId/sessionResultId, которых нет в drivers/session_results
+    testDb
+      .insert(sessionLaps)
+      .values({
+        sessionResultId: 999,
+        sessionId: session.id,
+        driverId: 999,
+        lapNum: 1,
+        lapTimeMs: 100000,
+        isPitLap: 0,
+      })
+      .run();
+
+    const rows = testDb
+      .select({
+        lap: sessionLaps,
+        driverName: drivers.name,
+        carNumber: sessionResults.carNumber,
+        isPlayer: sessionResults.isPlayer,
+      })
+      .from(sessionLaps)
+      .leftJoin(drivers, eq(sessionLaps.driverId, drivers.id))
+      .leftJoin(sessionResults, eq(sessionLaps.sessionResultId, sessionResults.id))
+      .where(eq(sessionLaps.sessionId, session.id))
+      .all();
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].driverName).toBeNull();
+    expect(rows[0].carNumber).toBeNull();
+    expect(rows[0].isPlayer).toBeNull();
   });
 });
