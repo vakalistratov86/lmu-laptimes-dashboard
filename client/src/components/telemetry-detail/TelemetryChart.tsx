@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import type { TelemetryLapPoint } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
@@ -76,9 +68,7 @@ export function TelemetryChart({ points, onHoverIndexChange }: TelemetryChartPro
   }, [zoom, lapDurationSec]);
 
   if (points.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">{t("telemetryPage.noChartData")}</p>
-    );
+    return <p className="py-8 text-center text-sm text-muted-foreground">{t("telemetryPage.noChartData")}</p>;
   }
 
   return (
@@ -124,12 +114,15 @@ export function TelemetryChart({ points, onHoverIndexChange }: TelemetryChartPro
                   dataKey="lapTimeSec"
                   type="number"
                   domain={["dataMin", "dataMax"]}
-                  {...(xAxisTicksProp
-                    ? { ticks: xAxisTicksProp }
-                    : { tickCount: Math.min(40, 8 * zoom) })}
+                  {...(xAxisTicksProp ? { ticks: xAxisTicksProp } : { tickCount: Math.min(40, 8 * zoom) })}
                   tickFormatter={formatLapTime}
                   tick={{ fontSize: 11 }}
-                  label={{ value: t("telemetryPage.axisLapTime"), position: "insideBottomRight", offset: -4, fontSize: 11 }}
+                  label={{
+                    value: t("telemetryPage.axisLapTime"),
+                    position: "insideBottomRight",
+                    offset: -4,
+                    fontSize: 11,
+                  }}
                 />
                 <YAxis yAxisId="pct" domain={[0, 100]} tick={{ fontSize: 11 }} width={36} />
                 <YAxis yAxisId="speed" orientation="right" domain={[0, "dataMax"]} tick={{ fontSize: 11 }} width={44} />

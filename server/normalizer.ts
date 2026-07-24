@@ -16,50 +16,50 @@ import type { LapTimeInput } from "@shared/validators";
 const TRACK_ALIASES: Record<string, string> = {
   // Le Mans
   "le mans": "Circuit de la Sarthe",
-  "lemans": "Circuit de la Sarthe",
-  "le_mans": "Circuit de la Sarthe",
+  lemans: "Circuit de la Sarthe",
+  le_mans: "Circuit de la Sarthe",
   "circuit de la sarthe": "Circuit de la Sarthe",
   // Spa
-  "spa": "Spa-Francorchamps",
+  spa: "Spa-Francorchamps",
   "spa francorchamps": "Spa-Francorchamps",
   "spa-francorchamps": "Spa-Francorchamps",
   // Monza
-  "monza": "Monza",
+  monza: "Monza",
   "autodromo nazionale monza": "Monza",
   // Silverstone
-  "silverstone": "Silverstone",
+  silverstone: "Silverstone",
   // Nürburgring
-  "nurburgring": "Nürburgring",
-  "nürburgring": "Nürburgring",
-  "nordschleife": "Nürburgring Nordschleife",
+  nurburgring: "Nürburgring",
+  nürburgring: "Nürburgring",
+  nordschleife: "Nürburgring Nordschleife",
   // Sebring
-  "sebring": "Sebring",
+  sebring: "Sebring",
   "sebring international raceway": "Sebring",
   // Imola
-  "imola": "Imola",
+  imola: "Imola",
   "autodromo enzo e dino ferrari": "Imola",
   // Portimão
-  "portimao": "Portimão",
-  "portimão": "Portimão",
-  "algarve": "Portimão",
+  portimao: "Portimão",
+  portimão: "Portimão",
+  algarve: "Portimão",
   // COTA
-  "cota": "COTA",
+  cota: "COTA",
   "circuit of the americas": "COTA",
-  "americas": "COTA",
+  americas: "COTA",
   // Fuji
-  "fuji": "Fuji Speedway",
+  fuji: "Fuji Speedway",
   "fuji speedway": "Fuji Speedway",
   // Interlagos
-  "interlagos": "Interlagos",
+  interlagos: "Interlagos",
   "carlos pace": "Interlagos",
   "autodromo jose carlos pace": "Interlagos",
   // Bahrain
-  "bahrain": "Bahrain International Circuit",
-  "sakhir": "Bahrain International Circuit",
+  bahrain: "Bahrain International Circuit",
+  sakhir: "Bahrain International Circuit",
   "bahrain international circuit": "Bahrain International Circuit",
   // Losail / Qatar
-  "losail": "Losail International Circuit",
-  "qatar": "Losail International Circuit",
+  losail: "Losail International Circuit",
+  qatar: "Losail International Circuit",
 };
 
 /**

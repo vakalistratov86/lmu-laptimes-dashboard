@@ -78,9 +78,7 @@ function getBestLapForSession(session: SessionItem): number | null {
 
 /** Уникальные классы машин, участвовавшие в сессии, в порядке CLASS_ORDER. */
 function getSessionClasses(session: SessionItem): string[] {
-  const present = new Set(
-    session.results.map((r) => r.carClass).filter((c): c is string => !!c),
-  );
+  const present = new Set(session.results.map((r) => r.carClass).filter((c): c is string => !!c));
   const ordered = CLASS_ORDER.filter((c) => present.has(c));
   // Классы вне известного порядка (на всякий случай) — в конец, по алфавиту.
   const rest = Array.from(present)
@@ -168,16 +166,12 @@ export default function Sessions() {
   const [, navigate] = useLocation();
 
   const activeFilter = useMemo(() => {
-    const normalizedSearch = searchString.startsWith("?")
-      ? searchString.slice(1)
-      : searchString;
+    const normalizedSearch = searchString.startsWith("?") ? searchString.slice(1) : searchString;
 
     const params = new URLSearchParams(normalizedSearch);
     const filter = params.get("filter");
 
-    return filter === "practice" || filter === "qualify" || filter === "race"
-      ? filter
-      : "all";
+    return filter === "practice" || filter === "qualify" || filter === "race" ? filter : "all";
   }, [searchString]);
 
   const setActiveFilter = (key: string) => {
@@ -187,11 +181,7 @@ export default function Sessions() {
       // clears an existing one, so switching to "all" from another filter
       // silently keeps the old ?filter= param. Clear it explicitly first.
       if (window.location.search) {
-        window.history.replaceState(
-          window.history.state,
-          "",
-          window.location.pathname + window.location.hash,
-        );
+        window.history.replaceState(window.history.state, "", window.location.pathname + window.location.hash);
       }
       navigate("/sessions");
     } else {
@@ -200,10 +190,7 @@ export default function Sessions() {
   };
 
   // Сводка по ВСЕМ сессиям — не зависит от текущего фильтра типа.
-  const summary = useMemo(
-    () => buildSessionsSummary((sessions ?? []) as SessionItem[]),
-    [sessions],
-  );
+  const summary = useMemo(() => buildSessionsSummary((sessions ?? []) as SessionItem[]), [sessions]);
 
   const filtered = useMemo(() => {
     if (!sessions) return [] as SessionItem[];
@@ -215,13 +202,16 @@ export default function Sessions() {
   }, [sessions, activeFilter]);
 
   // Sort by date descending, then by session type order
-  const sorted = useMemo(() =>
-    [...filtered].sort((a, b) => {
-      const dateCmp = b.dateTime.localeCompare(a.dateTime);
-      if (dateCmp !== 0) return dateCmp;
-      return SESSION_TYPE_ORDER[normalizeSessionCategory(a.sessionType)] -
-             SESSION_TYPE_ORDER[normalizeSessionCategory(b.sessionType)];
-    }),
+  const sorted = useMemo(
+    () =>
+      [...filtered].sort((a, b) => {
+        const dateCmp = b.dateTime.localeCompare(a.dateTime);
+        if (dateCmp !== 0) return dateCmp;
+        return (
+          SESSION_TYPE_ORDER[normalizeSessionCategory(a.sessionType)] -
+          SESSION_TYPE_ORDER[normalizeSessionCategory(b.sessionType)]
+        );
+      }),
     [filtered],
   );
 
@@ -242,9 +232,27 @@ export default function Sessions() {
       {hasSessions && (
         <Card className="p-4">
           <div className="grid grid-cols-3 gap-2.5">
-            <ActivityTile category="practice" label={t("sessionType.practice")} count={summary.practice.count} minutes={summary.practice.minutes} locale={locale} />
-            <ActivityTile category="qualify" label={t("sessionType.qualify")} count={summary.qualify.count} minutes={summary.qualify.minutes} locale={locale} />
-            <ActivityTile category="race" label={t("sessionType.race")} count={summary.race.count} minutes={summary.race.minutes} locale={locale} />
+            <ActivityTile
+              category="practice"
+              label={t("sessionType.practice")}
+              count={summary.practice.count}
+              minutes={summary.practice.minutes}
+              locale={locale}
+            />
+            <ActivityTile
+              category="qualify"
+              label={t("sessionType.qualify")}
+              count={summary.qualify.count}
+              minutes={summary.qualify.minutes}
+              locale={locale}
+            />
+            <ActivityTile
+              category="race"
+              label={t("sessionType.race")}
+              count={summary.race.count}
+              minutes={summary.race.minutes}
+              locale={locale}
+            />
           </div>
         </Card>
       )}
@@ -276,10 +284,10 @@ export default function Sessions() {
                     ? "bg-accent text-accent-foreground"
                     : "bg-background text-muted-foreground hover:bg-accent/40"
                   : isActive
-                    // Активная цветная секция: тот же цвет, что и плашка этого типа
-                    ? getSessionTypeBadgeClass(key)
-                    // Неактивная: нейтральный фон
-                    : "bg-background text-muted-foreground/80 hover:bg-accent/10",
+                    ? // Активная цветная секция: тот же цвет, что и плашка этого типа
+                      getSessionTypeBadgeClass(key)
+                    : // Неактивная: нейтральный фон
+                      "bg-background text-muted-foreground/80 hover:bg-accent/10",
               )}
             >
               {Icon && <Icon size={13} />}
@@ -300,9 +308,7 @@ export default function Sessions() {
           </div>
           <div>
             <p className="font-semibold">{t("sessions.emptyTitle")}</p>
-            <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">
-              {t("sessions.emptyBody")}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">{t("sessions.emptyBody")}</p>
           </div>
           <Link
             href="/import"
@@ -317,9 +323,7 @@ export default function Sessions() {
       {/* No-results state — sessions exist but filter yields nothing */}
       {!isLoading && hasSessions && !hasFiltered && (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-card p-12 text-center">
-          <p className="font-semibold text-muted-foreground">
-            {t("sessions.noFilterResultsTitle")}
-          </p>
+          <p className="font-semibold text-muted-foreground">{t("sessions.noFilterResultsTitle")}</p>
           <button
             type="button"
             onClick={() => setActiveFilter("all")}
@@ -354,9 +358,15 @@ export default function Sessions() {
             <div role="columnheader">{t("sessions.colTrack")}</div>
             <div role="columnheader">{t("sessions.colConfig")}</div>
             <div role="columnheader">{t("sessions.colClasses")}</div>
-            <div role="columnheader" className="text-right">{t("sessions.colBestLap")}</div>
-            <div role="columnheader" className="text-right">{t("sessions.colLaps")}</div>
-            <div role="columnheader" className="text-right">{t("sessions.colDate")}</div>
+            <div role="columnheader" className="text-right">
+              {t("sessions.colBestLap")}
+            </div>
+            <div role="columnheader" className="text-right">
+              {t("sessions.colLaps")}
+            </div>
+            <div role="columnheader" className="text-right">
+              {t("sessions.colDate")}
+            </div>
             <div role="columnheader" />
           </div>
 
@@ -365,9 +375,7 @@ export default function Sessions() {
             const cat = normalizeSessionCategory(session.sessionType);
             const bestLap = getBestLapForSession(session);
             const classes = getSessionClasses(session);
-            const filterParam = activeFilter !== "all"
-              ? `?from_filter=${encodeURIComponent(activeFilter)}`
-              : "";
+            const filterParam = activeFilter !== "all" ? `?from_filter=${encodeURIComponent(activeFilter)}` : "";
             const href = `/sessions/${session.id}${filterParam}`;
 
             return (

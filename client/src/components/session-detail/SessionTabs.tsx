@@ -5,8 +5,8 @@
  * теперь единственный «заголовок» этой карточки (текст «Итоговые
  * результаты» убран, вкладки сами обозначают текущий раздел).
  */
-import type { SessionTabItem, SessionTabKey } from './types';
-import { useLanguage } from '@/lib/i18n';
+import type { SessionTabItem, SessionTabKey } from "./types";
+import { useLanguage } from "@/lib/i18n";
 
 interface SessionTabsProps {
   tabs: SessionTabItem[];
@@ -19,7 +19,7 @@ export function SessionTabs({ tabs, active, onChange }: SessionTabsProps) {
   return (
     <nav
       role="tablist"
-      aria-label={t('sessionDetail.tabsAriaLabel')}
+      aria-label={t("sessionDetail.tabsAriaLabel")}
       className="flex gap-1 border-b border-border bg-secondary/40 px-2 pt-2"
     >
       {tabs.map((tab) => {
@@ -32,12 +32,12 @@ export function SessionTabs({ tabs, active, onChange }: SessionTabsProps) {
             aria-controls={`tabpanel-${tab.key}`}
             onClick={() => onChange(tab.key)}
             className={[
-              'px-4 py-2 text-sm font-medium transition-colors',
-              '-mb-px border-b-2',
+              "px-4 py-2 text-sm font-medium transition-colors",
+              "-mb-px border-b-2",
               isActive
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
-            ].join(' ')}
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+            ].join(" ")}
           >
             {tab.label}
           </button>

@@ -2,12 +2,7 @@
  * validators.test.ts — unit-тесты для shared/validators.ts (#9)
  */
 import { describe, it, expect } from "vitest";
-import {
-  LapTimeSchema,
-  SessionEventSchema,
-  validateLapTimeSemantic,
-  validateLapTime,
-} from "../shared/validators";
+import { LapTimeSchema, SessionEventSchema, validateLapTimeSemantic, validateLapTime } from "../shared/validators";
 
 describe("LapTimeSchema — структурная валидация", () => {
   const validLap = {
@@ -115,7 +110,12 @@ describe("validateLapTime — полный pipeline", () => {
   });
 
   it("возвращает VALIDATION_ERROR для структурно невалидных данных", () => {
-    const result = validateLapTime({ driverName: "", trackName: "Monza", lapTimeMs: 80_000, sessionDate: "2024-09-01" });
+    const result = validateLapTime({
+      driverName: "",
+      trackName: "Monza",
+      lapTimeMs: 80_000,
+      sessionDate: "2024-09-01",
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errorCode).toBe("VALIDATION_ERROR");
   });

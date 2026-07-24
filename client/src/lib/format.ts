@@ -53,9 +53,9 @@ export function getClassChartColor(carClass?: string | null): string {
 }
 
 export const CONDITION_LABELS: Record<string, string> = {
-  "Сухо": "Сухо",
-  "Дождь": "Дождь",
-  "Смешанно": "Смешанно",
+  Сухо: "Сухо",
+  Дождь: "Дождь",
+  Смешанно: "Смешанно",
 };
 
 /**
@@ -77,8 +77,13 @@ export function normalizeCourse(course: string | null | undefined, trackName: st
 
 export function countryFlag(code: string): string {
   const map: Record<string, string> = {
-    RU: "🇷🇺", IT: "🇮🇹", GB: "🇬🇧", JP: "🇯🇵", FR: "🇫🇷",
-    DE: "🇩🇪", US: "🇺🇸",
+    RU: "🇷🇺",
+    IT: "🇮🇹",
+    GB: "🇬🇧",
+    JP: "🇯🇵",
+    FR: "🇫🇷",
+    DE: "🇩🇪",
+    US: "🇺🇸",
   };
   return map[code] ?? "🏁";
 }

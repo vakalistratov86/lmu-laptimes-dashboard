@@ -14,12 +14,7 @@ export interface SvgPoint {
   y: number;
 }
 
-export function projectTrackPoints(
-  points: GeoPoint[],
-  width: number,
-  height: number,
-  padding = 16
-): SvgPoint[] {
+export function projectTrackPoints(points: GeoPoint[], width: number, height: number, padding = 16): SvgPoint[] {
   if (points.length === 0) return [];
 
   const meanLat = points.reduce((sum, p) => sum + p.lat, 0) / points.length;

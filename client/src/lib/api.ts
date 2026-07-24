@@ -1,6 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./queryClient";
-import type { Track, DriverEnriched, LapTimeEnriched, SessionEnriched, TelemetrySession, DriverIncidentsResponse } from "@shared/schema";
+import type {
+  Track,
+  DriverEnriched,
+  LapTimeEnriched,
+  SessionEnriched,
+  TelemetrySession,
+  DriverIncidentsResponse,
+} from "@shared/schema";
 
 export function useTracks() {
   return useQuery<Track[]>({ queryKey: ["/api/tracks"] });
@@ -56,11 +63,7 @@ export function useLaps(
  * сравнения: Leaderboards, Overview, Tracks, сравнение с рекордом трассы
  * в профиле пилота.
  */
-export function useBestLaps(filter?: {
-  trackId?: number;
-  driverId?: number;
-  carClass?: string;
-}) {
+export function useBestLaps(filter?: { trackId?: number; driverId?: number; carClass?: string }) {
   const params = new URLSearchParams();
   if (filter?.trackId) params.set("trackId", String(filter.trackId));
   if (filter?.driverId) params.set("driverId", String(filter.driverId));

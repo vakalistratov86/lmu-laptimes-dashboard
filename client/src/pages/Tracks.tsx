@@ -33,7 +33,7 @@ export default function Tracks() {
       bestDriver: string;
       lapCount: number;
       sessionCount: number;
-      lastSession: string | null;   // ISO дата
+      lastSession: string | null; // ISO дата
       sessionTypes: Set<string>;
       carClasses: Set<string>;
     };
@@ -88,7 +88,9 @@ export default function Tracks() {
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-36" />)}
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-36" />
+          ))}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
@@ -99,7 +101,6 @@ export default function Tracks() {
             return (
               <Link key={track.id} href={`/tracks/${track.id}`} data-testid={`card-track-${track.id}`}>
                 <Card className="group flex h-full flex-row items-stretch p-4 hover-elevate gap-4">
-
                   {/* Левая часть: схема трассы — увеличенная, единый фирменный акцентный цвет.
                       Уже на телефонах ширина карточки — это почти вся ширина экрана, поэтому
                       фиксированные 144px схемы почти не оставляли места для правой колонки —
@@ -111,13 +112,15 @@ export default function Tracks() {
                         className="h-20 w-24 text-primary/80 transition-colors group-hover:text-primary sm:h-28 sm:w-36"
                       />
                     ) : (
-                      <ArrowRight size={16} className="text-muted-foreground transition-transform group-hover:translate-x-1" />
+                      <ArrowRight
+                        size={16}
+                        className="text-muted-foreground transition-transform group-hover:translate-x-1"
+                      />
                     )}
                   </div>
 
                   {/* Правая часть: вся информация */}
                   <div className="flex flex-col flex-1 min-w-0">
-
                     {/* Название + страна */}
                     <h2 className="font-display text-base font-bold tracking-tight leading-tight">{track.name}</h2>
                     <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
@@ -126,8 +129,12 @@ export default function Tracks() {
 
                     {/* Физические характеристики */}
                     <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Ruler size={12} /> {track.lengthKm} {t("tracks.km")}</span>
-                      <span className="flex items-center gap-1"><RotateCw size={12} /> {track.turns} {t("tracks.turns")}</span>
+                      <span className="flex items-center gap-1">
+                        <Ruler size={12} /> {track.lengthKm} {t("tracks.km")}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <RotateCw size={12} /> {track.turns} {t("tracks.turns")}
+                      </span>
                     </div>
 
                     {/* Классы автомобилей */}
@@ -149,7 +156,6 @@ export default function Tracks() {
                         без них длинное время круга (напр. "3:25.180") не оборачивалось и не
                         обрезалось, а вылезало поверх соседней ячейки "Сессий" на узких экранах. */}
                     <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2">
-
                       {/* Рекорд круга */}
                       <div className="col-span-1 min-w-0">
                         <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -159,9 +165,7 @@ export default function Tracks() {
                           <span className="block truncate font-data text-xs font-bold tabular-nums text-green-500 sm:text-sm">
                             {hasBest ? formatLap(st.bestMs) : "—"}
                           </span>
-                          {hasBest && (
-                            <div className="truncate text-[10px] text-muted-foreground">{st.bestDriver}</div>
-                          )}
+                          {hasBest && <div className="truncate text-[10px] text-muted-foreground">{st.bestDriver}</div>}
                         </div>
                       </div>
 
@@ -170,9 +174,7 @@ export default function Tracks() {
                         <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                           <Layers size={10} /> {t("tracks.sessionsCount")}
                         </div>
-                        <div className="mt-0.5 truncate text-sm font-semibold">
-                          {st?.sessionCount ?? 0}
-                        </div>
+                        <div className="mt-0.5 truncate text-sm font-semibold">{st?.sessionCount ?? 0}</div>
                       </div>
 
                       {/* Кругов */}
@@ -180,11 +182,8 @@ export default function Tracks() {
                         <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                           <Timer size={10} /> {t("tracks.lapsCount")}
                         </div>
-                        <div className="mt-0.5 truncate text-sm font-semibold">
-                          {st?.lapCount ?? 0}
-                        </div>
+                        <div className="mt-0.5 truncate text-sm font-semibold">{st?.lapCount ?? 0}</div>
                       </div>
-
                     </div>
 
                     {/* Последняя сессия */}
@@ -193,9 +192,7 @@ export default function Tracks() {
                         <CalendarClock size={10} /> {t("tracks.lastSession")}: {formatDate(st.lastSession, intlLocale)}
                       </div>
                     )}
-
                   </div>
-
                 </Card>
               </Link>
             );

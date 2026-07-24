@@ -10,8 +10,11 @@ export default function DriverDetail() {
 
   return (
     <div className="space-y-5">
-      <Link href="/leaderboards" data-testid="link-back-leaderboards"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <Link
+        href="/leaderboards"
+        data-testid="link-back-leaderboards"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
         <ChevronLeft size={16} /> {t("driverDetail.back")}
       </Link>
 

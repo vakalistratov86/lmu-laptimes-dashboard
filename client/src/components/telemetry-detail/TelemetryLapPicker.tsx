@@ -27,7 +27,7 @@ export function TelemetryLapPicker({ laps, activeLap, onSelect }: TelemetryLapPi
             "flex shrink-0 flex-col items-center gap-0.5 rounded-md px-3.5 py-2 text-sm font-medium transition-colors",
             activeLap === lap.lapNumber
               ? "bg-primary text-primary-foreground shadow"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           <span>{t("telemetryPage.lapLabel", { n: lap.lapNumber })}</span>

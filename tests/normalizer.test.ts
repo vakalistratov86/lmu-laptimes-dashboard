@@ -99,7 +99,7 @@ describe("normalizeLapTime", () => {
   const base = {
     driverName: "  Fernando  Alonso  ",
     trackName: "le mans",
-    lapTimeMs: 210,       // секунды — 3:30
+    lapTimeMs: 210, // секунды — 3:30
     sessionDate: new Date("2024-07-01T10:00:00Z"),
     carClass: "LMH",
   };

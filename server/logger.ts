@@ -6,7 +6,7 @@
  * Совместим с любым агрегатором логов (Supabase Logs, stdout).
  */
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 0,
@@ -15,8 +15,7 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   error: 3,
 };
 
-const currentLevel: LogLevel =
-  (process.env.LOG_LEVEL as LogLevel | undefined) ?? 'info';
+const currentLevel: LogLevel = (process.env.LOG_LEVEL as LogLevel | undefined) ?? "info";
 
 function shouldLog(level: LogLevel): boolean {
   return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[currentLevel];
@@ -27,14 +26,14 @@ function emit(level: LogLevel, context: Record<string, unknown>, message: string
   const entry = {
     time: new Date().toISOString(),
     level,
-    service: 'lmu-parser',
+    service: "lmu-parser",
     ...context,
     msg: message,
   };
   const output = JSON.stringify(entry);
-  if (level === 'error') {
+  if (level === "error") {
     console.error(output);
-  } else if (level === 'warn') {
+  } else if (level === "warn") {
     console.warn(output);
   } else {
     console.log(output);
@@ -42,10 +41,10 @@ function emit(level: LogLevel, context: Record<string, unknown>, message: string
 }
 
 export const logger = {
-  debug: (context: Record<string, unknown>, message: string) => emit('debug', context, message),
-  info: (context: Record<string, unknown>, message: string) => emit('info', context, message),
-  warn: (context: Record<string, unknown>, message: string) => emit('warn', context, message),
-  error: (context: Record<string, unknown>, message: string) => emit('error', context, message),
+  debug: (context: Record<string, unknown>, message: string) => emit("debug", context, message),
+  info: (context: Record<string, unknown>, message: string) => emit("info", context, message),
+  warn: (context: Record<string, unknown>, message: string) => emit("warn", context, message),
+  error: (context: Record<string, unknown>, message: string) => emit("error", context, message),
 };
 
 // ── Типизированные хелперы для import pipeline ──────────────────────────────
@@ -83,11 +82,11 @@ export interface ImportSkippedContext {
 }
 
 export function logImportStarted(ctx: ImportStartedContext): void {
-  logger.info(ctx, 'Import started');
+  logger.info(ctx, "Import started");
 }
 
 export function logImportCompleted(ctx: ImportCompletedContext): void {
-  logger.info(ctx, 'Import completed');
+  logger.info(ctx, "Import completed");
 }
 
 export function logParseError(ctx: ParseErrorContext, message: string): void {
@@ -95,12 +94,9 @@ export function logParseError(ctx: ParseErrorContext, message: string): void {
 }
 
 export function logImportFailed(importJobId: string, error: Error): void {
-  logger.error(
-    { importJobId, errorCode: (error as any).code ?? 'UNKNOWN', message: error.message },
-    'Import failed'
-  );
+  logger.error({ importJobId, errorCode: (error as any).code ?? "UNKNOWN", message: error.message }, "Import failed");
 }
 
 export function logImportSkipped(ctx: ImportSkippedContext): void {
-  logger.warn(ctx, 'Import skipped');
+  logger.warn(ctx, "Import skipped");
 }

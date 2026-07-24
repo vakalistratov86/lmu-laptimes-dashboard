@@ -75,7 +75,7 @@ export async function getSessionLaps(sessionId: number): Promise<TelemetryLap[]>
   const laps: TelemetryLap[] = [];
   for (let i = 0; i < validRows.length; i++) {
     const startTs = validRows[i].ts as number;
-    const endTs = i + 1 < validRows.length ? (validRows[i + 1].ts as number) : recordingEndTs ?? startTs;
+    const endTs = i + 1 < validRows.length ? (validRows[i + 1].ts as number) : (recordingEndTs ?? startTs);
     laps.push({
       lapNumber: Math.round(validRows[i].value1 as number),
       startTs,
@@ -104,10 +104,7 @@ export interface TelemetryLapSeries {
   points: TelemetryLapPoint[];
 }
 
-export async function getLapSeries(
-  sessionId: number,
-  lap: TelemetryLap
-): Promise<TelemetryLapSeries> {
+export async function getLapSeries(sessionId: number, lap: TelemetryLap): Promise<TelemetryLapSeries> {
   const names = [CH_GPS_LAT, CH_GPS_LON, CH_LAP_DIST, CH_THROTTLE, CH_BRAKE, CH_SPEED];
   const channelRows = await db
     .select({ id: telemetryChannels.id, name: telemetryChannels.name, frequencyHz: telemetryChannels.frequencyHz })
@@ -137,7 +134,7 @@ export async function getLapSeries(
     names.map(async (name) => {
       const c = byName.get(name);
       return c == null ? [] : fetchChannelSamples(c.id, lap.startTs, lap.endTs);
-    })
+    }),
   );
 
   const latJoined = linearInterpolateJoin(base, lat);
@@ -204,8 +201,8 @@ async function fetchChannelSamples(channelId: number, startTs: number, endTs: nu
       and(
         eq(telemetrySamples.channelId, channelId),
         gte(telemetrySamples.ts, startTs),
-        lte(telemetrySamples.ts, endTs)
-      )
+        lte(telemetrySamples.ts, endTs),
+      ),
     )
     .orderBy(telemetrySamples.seq);
 }
@@ -218,9 +215,7 @@ async function fetchChannelSamples(channelId: number, startTs: number, endTs: nu
  * используется двухуказательный проход за O(n+m).
  */
 function linearInterpolateJoin(base: SampleRow[], other: SampleRow[]): (number | null)[] {
-  const valid = other.filter(
-    (r): r is { ts: number; value1: number } => r.ts != null && r.value1 != null
-  );
+  const valid = other.filter((r): r is { ts: number; value1: number } => r.ts != null && r.value1 != null);
 
   const result: (number | null)[] = [];
   let j = 0;

@@ -12,17 +12,17 @@
  *   SessionInfoCard с информацией только о трассе и сессии (без данных
  *   пилотов) — она тоже видна на всех вкладках.
  */
-import { useMemo, useState } from 'react';
-import { useRoute, useSearch } from 'wouter';
-import { useSession, useSessionLaps } from '@/lib/api';
-import { formatLap } from '@/lib/format';
+import { useMemo, useState } from "react";
+import { useRoute, useSearch } from "wouter";
+import { useSession, useSessionLaps } from "@/lib/api";
+import { formatLap } from "@/lib/format";
 import {
   buildResultRows,
   buildDriverLapGroups,
   buildLapProgressSeries,
   buildSectorSummary,
   buildTabs,
-} from '@/lib/sessionDetailSelectors';
+} from "@/lib/sessionDetailSelectors";
 import {
   SessionInfoCard,
   SessionResultsTable,
@@ -32,36 +32,34 @@ import {
   SessionEmptyState,
   DriverLapTable,
   SessionLapProgressChart,
-} from '@/components/session-detail';
-import type { SessionTabKey } from '@/components/session-detail';
-import { useLanguage } from '@/lib/i18n';
+} from "@/components/session-detail";
+import type { SessionTabKey } from "@/components/session-detail";
+import { useLanguage } from "@/lib/i18n";
 
 function formatDate(iso: string, intlLocale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString(intlLocale, {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
 export default function SessionDetail() {
   const { t, intlLocale } = useLanguage();
-  const [, params] = useRoute('/sessions/:id');
+  const [, params] = useRoute("/sessions/:id");
   const searchString = useSearch();
-  const backFilter = new URLSearchParams(searchString).get('from_filter');
-  const backHref = backFilter
-    ? `/sessions?filter=${encodeURIComponent(backFilter)}`
-    : '/sessions';
+  const backFilter = new URLSearchParams(searchString).get("from_filter");
+  const backHref = backFilter ? `/sessions?filter=${encodeURIComponent(backFilter)}` : "/sessions";
 
   const id = params ? Number(params.id) : undefined;
   const { data: session, isLoading } = useSession(id);
   const { data: laps } = useSessionLaps(id);
 
-  const [activeTab, setActiveTab] = useState<SessionTabKey>('results');
+  const [activeTab, setActiveTab] = useState<SessionTabKey>("results");
 
   // SD-15/SD-20: Выбранный пилот для карточки деталей — всегда ровно один.
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
@@ -70,24 +68,20 @@ export default function SessionDetail() {
   const hasLapData = (laps?.length ?? 0) > 0;
 
   const tabs = useMemo(
-    () => buildTabs(hasLapData, { results: t('sessionDetail.tabResults'), laps: t('sessionDetail.tabLaps'), lapProgress: t('sessionDetail.tabProgress') }),
+    () =>
+      buildTabs(hasLapData, {
+        results: t("sessionDetail.tabResults"),
+        laps: t("sessionDetail.tabLaps"),
+        lapProgress: t("sessionDetail.tabProgress"),
+      }),
     [hasLapData, t],
   );
 
-  const resultRows = useMemo(
-    () => (session ? buildResultRows(session) : []),
-    [session],
-  );
+  const resultRows = useMemo(() => (session ? buildResultRows(session) : []), [session]);
 
-  const lapGroups = useMemo(
-    () => buildDriverLapGroups(laps ?? []),
-    [laps],
-  );
+  const lapGroups = useMemo(() => buildDriverLapGroups(laps ?? []), [laps]);
 
-  const sectorRows = useMemo(
-    () => buildSectorSummary(laps ?? []),
-    [laps],
-  );
+  const sectorRows = useMemo(() => buildSectorSummary(laps ?? []), [laps]);
 
   // SD-20: По умолчанию выбрана позиция 1 (resultRows уже отсортированы по
   // позиции) — без этого при первой отрисовке карточка была бы пустой.
@@ -107,10 +101,7 @@ export default function SessionDetail() {
     [sectorRows, effectiveSelectedDriver],
   );
 
-  const progressSeries = useMemo(
-    () => buildLapProgressSeries(laps ?? []),
-    [laps],
-  );
+  const progressSeries = useMemo(() => buildLapProgressSeries(laps ?? []), [laps]);
 
   // Fastest lap для выделения в таблице
   const fastestLapTime = useMemo(() => {
@@ -120,7 +111,7 @@ export default function SessionDetail() {
     let min: number | null = null;
     for (const r of results) {
       const t = r.bestLapMs ?? null;
-      if (typeof t === 'number' && (min === null || t < min)) min = t;
+      if (typeof t === "number" && (min === null || t < min)) min = t;
     }
     return min ? formatLap(min) : null;
   }, [session]);
@@ -136,23 +127,18 @@ export default function SessionDetail() {
 
   const s = session as Record<string, any>;
   const courseLabel =
-    s.course &&
-    String(s.course).toLowerCase() !== String(s.trackName).toLowerCase()
-      ? String(s.course)
-      : null;
+    s.course && String(s.course).toLowerCase() !== String(s.trackName).toLowerCase() ? String(s.course) : null;
   const trackLengthKm =
-    typeof s.trackLengthM === 'number' && s.trackLengthM > 0
-      ? (s.trackLengthM / 1000).toFixed(3)
-      : null;
+    typeof s.trackLengthM === "number" && s.trackLengthM > 0 ? (s.trackLengthM / 1000).toFixed(3) : null;
 
   return (
     <div className="space-y-5">
       {/* SD-20: Статичная плитка с информацией о трассе и сессии */}
       <SessionInfoCard
-        trackName={String(s.trackName ?? '')}
+        trackName={String(s.trackName ?? "")}
         courseLabel={courseLabel}
-        sessionType={String(s.sessionType ?? '')}
-        dateFormatted={formatDate(String(s.dateTime ?? ''), intlLocale)}
+        sessionType={String(s.sessionType ?? "")}
+        dateFormatted={formatDate(String(s.dateTime ?? ""), intlLocale)}
         backHref={backHref}
         event={s.event}
         driverCount={s.driverCount}
@@ -174,13 +160,9 @@ export default function SessionDetail() {
       <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
         <SessionTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
 
-        <div
-          id={`tabpanel-${activeTab}`}
-          role="tabpanel"
-          aria-labelledby={activeTab}
-        >
+        <div id={`tabpanel-${activeTab}`} role="tabpanel" aria-labelledby={activeTab}>
           {/* SD-7: Таблица результатов */}
-          {activeTab === 'results' && (
+          {activeTab === "results" && (
             <SessionResultsTable
               rows={resultRows}
               fastestLapTime={fastestLapTime}
@@ -190,20 +172,15 @@ export default function SessionDetail() {
           )}
 
           {/* SD-17/SD-20: Круги выбранного пилота */}
-          {activeTab === 'laps' && (
-            selectedLapGroup ? (
+          {activeTab === "laps" &&
+            (selectedLapGroup ? (
               <DriverLapTable laps={selectedLapGroup.laps} />
             ) : (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                {t('sessionDetail.noLapDataForSession')}
-              </p>
-            )
-          )}
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("sessionDetail.noLapDataForSession")}</p>
+            ))}
 
           {/* SD-14: График прогресса */}
-          {activeTab === 'lapProgress' && (
-            <SessionLapProgressChart series={progressSeries} />
-          )}
+          {activeTab === "lapProgress" && <SessionLapProgressChart series={progressSeries} />}
         </div>
       </div>
     </div>

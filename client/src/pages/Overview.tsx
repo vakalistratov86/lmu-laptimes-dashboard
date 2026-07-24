@@ -10,14 +10,35 @@ import { SessionTypeBadge } from "@/components/SessionTypeBadge";
 import { ActivityTile } from "@/components/ActivityTile";
 import { Link } from "wouter";
 import {
-  Gauge, Route, Flag, Users, RefreshCw, Car, User, Bot, History, ChevronRight, Upload, MapPin,
+  Gauge,
+  Route,
+  Flag,
+  Users,
+  RefreshCw,
+  Car,
+  User,
+  Bot,
+  History,
+  ChevronRight,
+  Upload,
+  MapPin,
 } from "lucide-react";
 import { useMemo } from "react";
 import type { SessionEnriched } from "@/lib/api";
 
 function HeroStat({
-  icon: Icon, label, value, sub, testId,
-}: { icon: any; label: string; value: string; sub?: string; testId: string }) {
+  icon: Icon,
+  label,
+  value,
+  sub,
+  testId,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+  sub?: string;
+  testId: string;
+}) {
   return (
     <div className="flex flex-col justify-center gap-1 border-border p-5 [&:nth-child(-n+2)]:border-t-0 [&:nth-child(2n)]:border-l [&:nth-child(n+3)]:border-t">
       <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-muted-foreground">
@@ -159,9 +180,7 @@ export default function Overview() {
           </div>
           <div>
             <p className="font-semibold">{t("overview.emptyTitle")}</p>
-            <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">
-              {t("overview.emptyBody")}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">{t("overview.emptyBody")}</p>
           </div>
           <Link
             href="/import"
@@ -176,14 +195,25 @@ export default function Overview() {
 
   const bestLap = laps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a), laps[0]);
 
-  const bestByTrack = new Map<string, {
-    ms: number; carClass: string; driverId: number; driverName: string; isPlayer: number | null;
-  }>();
+  const bestByTrack = new Map<
+    string,
+    {
+      ms: number;
+      carClass: string;
+      driverId: number;
+      driverName: string;
+      isPlayer: number | null;
+    }
+  >();
   for (const l of laps) {
     const cur = bestByTrack.get(l.trackName);
     if (!cur || l.lapMs < cur.ms) {
       bestByTrack.set(l.trackName, {
-        ms: l.lapMs, carClass: l.carClass, driverId: l.driverId, driverName: l.driverName, isPlayer: l.isPlayer,
+        ms: l.lapMs,
+        carClass: l.carClass,
+        driverId: l.driverId,
+        driverName: l.driverName,
+        isPlayer: l.isPlayer,
       });
     }
   }
@@ -216,7 +246,11 @@ export default function Overview() {
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
               <Link href={`/drivers/${bestLap.driverId}`} className="hover:underline">
-                <DriverName name={bestLap.driverName} isPlayer={bestLap.isPlayer} className="font-medium text-foreground" />
+                <DriverName
+                  name={bestLap.driverName}
+                  isPlayer={bestLap.isPlayer}
+                  className="font-medium text-foreground"
+                />
               </Link>
               <span className="inline-flex items-center gap-1.5">
                 <Car size={14} />
@@ -233,8 +267,20 @@ export default function Overview() {
           </div>
         </div>
         <div className="grid grid-cols-2">
-          <HeroStat testId="distance" icon={Route} label={t("overview.kpiDistance")} value={formatDistance(totalDistanceM)} sub={t("overview.kpiDistanceSub")} />
-          <HeroStat testId="tracks" icon={Flag} label={t("overview.kpiTracks")} value={String(tracks?.length ?? 0)} sub={t("overview.kpiTracksSub")} />
+          <HeroStat
+            testId="distance"
+            icon={Route}
+            label={t("overview.kpiDistance")}
+            value={formatDistance(totalDistanceM)}
+            sub={t("overview.kpiDistanceSub")}
+          />
+          <HeroStat
+            testId="tracks"
+            icon={Flag}
+            label={t("overview.kpiTracks")}
+            value={String(tracks?.length ?? 0)}
+            sub={t("overview.kpiTracksSub")}
+          />
           <HeroStat
             testId="drivers"
             icon={Users}
@@ -242,7 +288,13 @@ export default function Overview() {
             value={String(drivers?.length ?? 0)}
             sub={t("overview.kpiDriversSubAll")}
           />
-          <HeroStat testId="laps-completed" icon={RefreshCw} label={t("overview.kpiLapsCompleted")} value={String(totalLapsCompleted)} sub={t("overview.kpiLapsCompletedSub")} />
+          <HeroStat
+            testId="laps-completed"
+            icon={RefreshCw}
+            label={t("overview.kpiLapsCompleted")}
+            value={String(totalLapsCompleted)}
+            sub={t("overview.kpiLapsCompletedSub")}
+          />
         </div>
       </Card>
 
@@ -251,9 +303,27 @@ export default function Overview() {
         <Card className="p-5">
           <h2 className="mb-4 text-sm font-semibold">{t("overview.activityTitle")}</h2>
           <div className="grid grid-cols-3 gap-2.5">
-            <ActivityTile category="practice" label={t("sessionType.practice")} count={activitySummary.practice.count} minutes={activitySummary.practice.minutes} locale={locale} />
-            <ActivityTile category="qualify" label={t("sessionType.qualify")} count={activitySummary.qualify.count} minutes={activitySummary.qualify.minutes} locale={locale} />
-            <ActivityTile category="race" label={t("sessionType.race")} count={activitySummary.race.count} minutes={activitySummary.race.minutes} locale={locale} />
+            <ActivityTile
+              category="practice"
+              label={t("sessionType.practice")}
+              count={activitySummary.practice.count}
+              minutes={activitySummary.practice.minutes}
+              locale={locale}
+            />
+            <ActivityTile
+              category="qualify"
+              label={t("sessionType.qualify")}
+              count={activitySummary.qualify.count}
+              minutes={activitySummary.qualify.minutes}
+              locale={locale}
+            />
+            <ActivityTile
+              category="race"
+              label={t("sessionType.race")}
+              count={activitySummary.race.count}
+              minutes={activitySummary.race.minutes}
+              locale={locale}
+            />
           </div>
         </Card>
 
@@ -270,12 +340,16 @@ export default function Overview() {
             <span className="inline-flex items-center gap-1.5">
               <User size={14} className="text-green-500" />
               {t("overview.playersReal")}
-              <span className="font-data font-bold tabular-nums text-green-500" data-testid="kpi-real-players">{realPlayerCount}</span>
+              <span className="font-data font-bold tabular-nums text-green-500" data-testid="kpi-real-players">
+                {realPlayerCount}
+              </span>
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Bot size={14} className="text-amber-400" />
               {t("overview.playersAi")}
-              <span className="font-data font-bold tabular-nums text-amber-400" data-testid="kpi-ai-players">{aiPlayerCount}</span>
+              <span className="font-data font-bold tabular-nums text-amber-400" data-testid="kpi-ai-players">
+                {aiPlayerCount}
+              </span>
             </span>
           </div>
         </Card>
@@ -312,11 +386,11 @@ export default function Overview() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5">
-                    <Badge variant="outline" className={getClassBadgeClass(row.carClass)}>{row.carClass}</Badge>
+                    <Badge variant="outline" className={getClassBadgeClass(row.carClass)}>
+                      {row.carClass}
+                    </Badge>
                   </td>
-                  <td className="px-4 py-2.5 text-right font-data font-bold tabular-nums">
-                    {formatLap(row.ms)}
-                  </td>
+                  <td className="px-4 py-2.5 text-right font-data font-bold tabular-nums">{formatLap(row.ms)}</td>
                 </tr>
               ))}
             </tbody>
@@ -331,7 +405,10 @@ export default function Overview() {
             <History size={15} className="text-primary" />
             {t("overview.recentSessionsTitle")}
           </h2>
-          <Link href="/sessions" className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+          <Link
+            href="/sessions"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+          >
             {t("overview.recentSessionsMore")}
             <ChevronRight size={13} />
           </Link>
@@ -378,9 +455,7 @@ function PageTitle() {
   return (
     <div>
       <h1 className="font-display text-xl font-bold tracking-tight">{t("overview.title")}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {t("overview.subtitle")}
-      </p>
+      <p className="mt-1 text-sm text-muted-foreground">{t("overview.subtitle")}</p>
     </div>
   );
 }

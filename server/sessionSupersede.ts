@@ -14,8 +14,14 @@
  */
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import {
-  sessions, sessionResults, drivers,
-  sessionLaps, lapTimes, sessionIncidents, sessionSectorBests, sessionTrackLimits,
+  sessions,
+  sessionResults,
+  drivers,
+  sessionLaps,
+  lapTimes,
+  sessionIncidents,
+  sessionSectorBests,
+  sessionTrackLimits,
 } from "@shared/schema";
 import type { Session } from "@shared/schema";
 import { normalizeDriverNameForStorage } from "./normalizer";
@@ -89,7 +95,10 @@ export async function findSupersedeCandidate(
     whereConditions.push(gte(sessions.dateTime, lowerBound), lte(sessions.dateTime, upperBound));
   }
 
-  const candidateSessions: Session[] = await tx.select().from(sessions).where(and(...whereConditions));
+  const candidateSessions: Session[] = await tx
+    .select()
+    .from(sessions)
+    .where(and(...whereConditions));
   if (candidateSessions.length === 0) return null;
 
   const candidateIds = candidateSessions.map((s) => s.id);

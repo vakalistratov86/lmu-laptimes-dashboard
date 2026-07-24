@@ -49,9 +49,7 @@ export default function Telemetry() {
   const { data: telemetrySessions, isLoading } = useTelemetrySessions();
 
   const sorted = useMemo(() => {
-    return [...(telemetrySessions ?? [])].sort((a, b) =>
-      (b.recordingTime ?? "").localeCompare(a.recordingTime ?? "")
-    );
+    return [...(telemetrySessions ?? [])].sort((a, b) => (b.recordingTime ?? "").localeCompare(a.recordingTime ?? ""));
   }, [telemetrySessions]);
 
   const hasSessions = sorted.length > 0;
@@ -74,9 +72,7 @@ export default function Telemetry() {
           </div>
           <div>
             <p className="font-semibold">{t("telemetryPage.emptyTitle")}</p>
-            <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">
-              {t("telemetryPage.emptyBody")}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">{t("telemetryPage.emptyBody")}</p>
           </div>
           <Link
             href="/import"
@@ -99,7 +95,9 @@ export default function Telemetry() {
             <div role="columnheader">{t("telemetryPage.colCar")}</div>
             <div role="columnheader">{t("telemetryPage.colDriver")}</div>
             <div role="columnheader">{t("telemetryPage.colType")}</div>
-            <div role="columnheader" className="text-right">{t("telemetryPage.colRecorded")}</div>
+            <div role="columnheader" className="text-right">
+              {t("telemetryPage.colRecorded")}
+            </div>
             <div role="columnheader" />
           </div>
 
@@ -116,9 +114,15 @@ export default function Telemetry() {
                 {s.trackName ?? "—"}
                 {s.trackLayout && s.trackLayout !== s.trackName ? ` · ${s.trackLayout}` : ""}
               </div>
-              <div className="truncate text-sm text-muted-foreground" role="cell">{s.carName ?? "—"}</div>
-              <div className="truncate text-sm text-muted-foreground" role="cell">{s.driverName ?? "—"}</div>
-              <div className="truncate text-sm text-muted-foreground" role="cell">{s.sessionType ?? "—"}</div>
+              <div className="truncate text-sm text-muted-foreground" role="cell">
+                {s.carName ?? "—"}
+              </div>
+              <div className="truncate text-sm text-muted-foreground" role="cell">
+                {s.driverName ?? "—"}
+              </div>
+              <div className="truncate text-sm text-muted-foreground" role="cell">
+                {s.sessionType ?? "—"}
+              </div>
               <div className="text-right text-sm text-muted-foreground" role="cell">
                 {formatRecordingTime(s.recordingTime, intlLocale)}
               </div>

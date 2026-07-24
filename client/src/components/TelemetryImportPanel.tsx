@@ -1,13 +1,5 @@
 import { useRef } from "react";
-import {
-  FolderOpen,
-  FileUp,
-  CheckCircle2,
-  RefreshCw,
-  AlertTriangle,
-  Loader2,
-  Trash2,
-} from "lucide-react";
+import { FolderOpen, FileUp, CheckCircle2, RefreshCw, AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import { FSA_SUPPORTED, useTelemetryImportEngine } from "@/lib/telemetryImportEngine";
 
@@ -31,10 +23,20 @@ export default function TelemetryImportPanel() {
   const filesInputRef = useRef<HTMLInputElement>(null);
 
   const {
-    dirHandle, dirName, dirPerm,
-    log, counters, mode, clearing,
-    pickFolderFSA, requestPermission, scanFSAFolder, importFiles,
-    clearTelemetry, addLog, clearLog,
+    dirHandle,
+    dirName,
+    dirPerm,
+    log,
+    counters,
+    mode,
+    clearing,
+    pickFolderFSA,
+    requestPermission,
+    scanFSAFolder,
+    importFiles,
+    clearTelemetry,
+    addLog,
+    clearLog,
   } = useTelemetryImportEngine();
 
   async function handleFileInput(fileList: FileList | null) {
@@ -120,7 +122,10 @@ export default function TelemetryImportPanel() {
               {dirPerm === "granted" ? (
                 <CheckCircle2 size={14} className="ml-auto shrink-0 text-emerald-500" />
               ) : (
-                <button onClick={requestPermission} className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline">
+                <button
+                  onClick={requestPermission}
+                  className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline"
+                >
                   <AlertTriangle size={13} /> {t("imp.allowAccess")}
                 </button>
               )}
@@ -177,17 +182,16 @@ export default function TelemetryImportPanel() {
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {mode !== "idle" && <Loader2 size={13} className="animate-spin" />}
-        <span>{t("imp.statusLabel")}: <span className="text-card-foreground">{modeLabel}</span></span>
+        <span>
+          {t("imp.statusLabel")}: <span className="text-card-foreground">{modeLabel}</span>
+        </span>
       </div>
 
       {log.length > 0 && (
         <div className="overflow-hidden rounded-lg border border-border">
           <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground">
             <span>{t("imp.logTitle", { n: log.length })}</span>
-            <button
-              onClick={clearLog}
-              className="text-xs text-muted-foreground hover:text-card-foreground"
-            >
+            <button onClick={clearLog} className="text-xs text-muted-foreground hover:text-card-foreground">
               {t("imp.logClear")}
             </button>
           </div>
@@ -209,7 +213,13 @@ export default function TelemetryImportPanel() {
 
 function StatCard({ label, value, tone }: { label: string; value: number; tone: "ok" | "accent" | "muted" | "err" }) {
   const color =
-    tone === "ok" ? "text-emerald-500" : tone === "accent" ? "text-primary" : tone === "err" ? "text-red-500" : "text-muted-foreground";
+    tone === "ok"
+      ? "text-emerald-500"
+      : tone === "accent"
+        ? "text-primary"
+        : tone === "err"
+          ? "text-red-500"
+          : "text-muted-foreground";
   return (
     <div className="rounded-lg border border-border bg-card p-3">
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>

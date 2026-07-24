@@ -5,9 +5,7 @@ import { formatLap, formatDelta, normalizeCourse } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trophy, Medal, Upload } from "lucide-react";
 import { CLASS_ORDER, getClassBadgeClass, getClassAccentClass } from "@/lib/classStyles";
 import { DriverName } from "@/components/DriverName";
@@ -76,8 +74,8 @@ function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
       }
 
       const sortedClasses = Array.from(byClass.keys()).sort((a, b) => {
-        const ai = CLASS_ORDER.indexOf(a as typeof CLASS_ORDER[number]);
-        const bi = CLASS_ORDER.indexOf(b as typeof CLASS_ORDER[number]);
+        const ai = CLASS_ORDER.indexOf(a as (typeof CLASS_ORDER)[number]);
+        const bi = CLASS_ORDER.indexOf(b as (typeof CLASS_ORDER)[number]);
         if (ai === -1 && bi === -1) return a.localeCompare(b);
         if (ai === -1) return 1;
         if (bi === -1) return -1;
@@ -135,8 +133,8 @@ export default function Leaderboards() {
     if (!laps) return [];
     const set = new Set<string>(laps.map((l: LapRow) => l.carClass).filter(Boolean));
     return Array.from(set).sort((a, b) => {
-      const ai = CLASS_ORDER.indexOf(a as typeof CLASS_ORDER[number]);
-      const bi = CLASS_ORDER.indexOf(b as typeof CLASS_ORDER[number]);
+      const ai = CLASS_ORDER.indexOf(a as (typeof CLASS_ORDER)[number]);
+      const bi = CLASS_ORDER.indexOf(b as (typeof CLASS_ORDER)[number]);
       if (ai === -1 && bi === -1) return a.localeCompare(b);
       if (ai === -1) return 1;
       if (bi === -1) return -1;
@@ -157,9 +155,7 @@ export default function Leaderboards() {
   const boards = useMemo((): TrackBoard[] => {
     if (!laps) return [];
 
-    let filtered: LapRow[] = trackId === "all"
-      ? laps
-      : laps.filter((l: LapRow) => l.trackId === Number(trackId));
+    let filtered: LapRow[] = trackId === "all" ? laps : laps.filter((l: LapRow) => l.trackId === Number(trackId));
 
     if (classFilter !== "all") {
       filtered = filtered.filter((l: LapRow) => l.carClass === classFilter);
@@ -183,9 +179,7 @@ export default function Leaderboards() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-xl font-bold tracking-tight">{t("leaderboards.title")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("leaderboards.subtitle")}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("leaderboards.subtitle")}</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <DriverFilterBar
@@ -195,7 +189,9 @@ export default function Leaderboards() {
             onClear={clearDrivers}
           />
           <div className="flex flex-col gap-1">
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("leaderboards.filterTrack")}</span>
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              {t("leaderboards.filterTrack")}
+            </span>
             <Select value={trackId} onValueChange={setTrackId}>
               <SelectTrigger className="h-9 w-[200px]" data-testid="filter-track-lb">
                 <SelectValue />
@@ -203,13 +199,17 @@ export default function Leaderboards() {
               <SelectContent>
                 <SelectItem value="all">{t("leaderboards.filterTrackAll")}</SelectItem>
                 {(tracks ?? []).map((tr: { id: number; name: string }) => (
-                  <SelectItem key={tr.id} value={String(tr.id)}>{tr.name}</SelectItem>
+                  <SelectItem key={tr.id} value={String(tr.id)}>
+                    {tr.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("leaderboards.filterClass")}</span>
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              {t("leaderboards.filterClass")}
+            </span>
             <Select value={classFilter} onValueChange={setClassFilter}>
               <SelectTrigger className="h-9 w-[160px]" data-testid="filter-class-lb">
                 <SelectValue />
@@ -217,14 +217,18 @@ export default function Leaderboards() {
               <SelectContent>
                 <SelectItem value="all">{t("leaderboards.filterClassAll")}</SelectItem>
                 {availableClasses.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           {availableCourses.length > 0 && (
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("leaderboards.filterCourse")}</span>
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                {t("leaderboards.filterCourse")}
+              </span>
               <Select value={courseFilter} onValueChange={setCourseFilter}>
                 <SelectTrigger className="h-9 w-[180px]" data-testid="filter-course-lb">
                   <SelectValue />
@@ -232,7 +236,9 @@ export default function Leaderboards() {
                 <SelectContent>
                   <SelectItem value="all">{t("leaderboards.filterCourseAll")}</SelectItem>
                   {availableCourses.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -244,7 +250,9 @@ export default function Leaderboards() {
       {/* Скелетон загрузки */}
       {isLoading && (
         <div className="flex flex-col gap-4">
-          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-48 w-full" />
+          ))}
         </div>
       )}
 
@@ -257,7 +265,10 @@ export default function Leaderboards() {
               <Trophy size={16} className="text-primary" />
               <h2 className="font-semibold">{board.displayName}</h2>
               <span className="ml-auto text-xs text-muted-foreground">
-                {tn(board.classes.reduce((s, c) => s + c.rows.length, 0), "pilots")}
+                {tn(
+                  board.classes.reduce((s, c) => s + c.rows.length, 0),
+                  "pilots",
+                )}
               </span>
             </div>
 
@@ -268,15 +279,10 @@ export default function Leaderboards() {
                 <div
                   className={`flex items-center gap-2 border-l-4 bg-muted/30 px-4 py-1.5 ${getClassAccentClass(cls.carClass)}`}
                 >
-                  <Badge
-                    variant="outline"
-                    className={`text-[11px] ${getClassBadgeClass(cls.carClass)}`}
-                  >
+                  <Badge variant="outline" className={`text-[11px] ${getClassBadgeClass(cls.carClass)}`}>
                     {cls.carClass}
                   </Badge>
-                  <span className="ml-auto text-[11px] text-muted-foreground">
-                    {tn(cls.rows.length, "pilots")}
-                  </span>
+                  <span className="ml-auto text-[11px] text-muted-foreground">{tn(cls.rows.length, "pilots")}</span>
                 </div>
 
                 {/* Таблица результатов. Команда/Автомобиль/Дата скрыты на узких экранах —
@@ -333,11 +339,7 @@ export default function Leaderboards() {
                             </td>
                             {/* Время круга */}
                             <td className="px-4 py-2.5 text-right">
-                              <span
-                                className={`font-data tabular-nums ${
-                                  i === 0 ? "font-bold text-green-500" : ""
-                                }`}
-                              >
+                              <span className={`font-data tabular-nums ${i === 0 ? "font-bold text-green-500" : ""}`}>
                                 {formatLap(l.lapMs)}
                               </span>
                             </td>
@@ -369,17 +371,16 @@ export default function Leaderboards() {
         ))}
       </div>
 
-      {!isLoading && boards.length === 0 && (
-        (laps?.length ?? 0) === 0 ? (
+      {!isLoading &&
+        boards.length === 0 &&
+        ((laps?.length ?? 0) === 0 ? (
           <div className="flex flex-col items-center gap-4 rounded-lg border border-border bg-card p-14 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
               <Upload size={22} />
             </div>
             <div>
               <p className="font-semibold">{t("leaderboards.emptyTitle")}</p>
-              <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">
-                {t("leaderboards.emptyBody")}
-              </p>
+              <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">{t("leaderboards.emptyBody")}</p>
             </div>
             <Link
               href="/import"
@@ -390,8 +391,7 @@ export default function Leaderboards() {
           </div>
         ) : (
           <p className="py-12 text-center text-sm text-muted-foreground">{t("leaderboards.noData")}</p>
-        )
-      )}
+        ))}
     </div>
   );
 }

@@ -45,7 +45,7 @@ interface DailyRace {
   durationMinutes: number;
   raceType: "Sprint" | "Endurance";
   activeFrom: string; // ISO date
-  activeTo: string;   // ISO date
+  activeTo: string; // ISO date
 }
 
 // ─── Static Daily Races data (LMU official weekly rotation) ─────────────────
@@ -85,11 +85,11 @@ const DAILY_RACES_STATIC: DailyRace[] = [
 // Та же адаптивная схема (bg .../15 + dark:text-...-400), что и в classStyles.ts —
 // одинаково хорошо читается в тёмной и светлой теме.
 const CLASS_COLORS: Record<string, string> = {
-  Hypercar:    "bg-red-500/15    text-red-600    dark:text-red-400    border-red-500/30",
-  "WEC LMP2":  "bg-blue-500/15   text-blue-600   dark:text-blue-400   border-blue-500/30",
+  Hypercar: "bg-red-500/15    text-red-600    dark:text-red-400    border-red-500/30",
+  "WEC LMP2": "bg-blue-500/15   text-blue-600   dark:text-blue-400   border-blue-500/30",
   "ELMS LMP2": "bg-cyan-500/15   text-cyan-600   dark:text-cyan-400   border-cyan-500/30",
-  LMP3:        "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
-  LMGT3:       "bg-green-500/15  text-green-600  dark:text-green-400  border-green-500/30",
+  LMP3: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
+  LMGT3: "bg-green-500/15  text-green-600  dark:text-green-400  border-green-500/30",
 };
 
 function capitalize(s: string): string {
@@ -98,9 +98,9 @@ function capitalize(s: string): string {
 
 // Алиасы: имя трассы в календаре LMU → ключ в TrackMap (там, где не совпадает дословно)
 const TRACK_MAP_ALIASES: Record<string, string> = {
-  "Spa": "Spa-Francorchamps",
-  "Fuji": "Fuji Speedway",
-  "Portimao": "Portimão",
+  Spa: "Spa-Francorchamps",
+  Fuji: "Fuji Speedway",
+  Portimao: "Portimão",
   "Circuit de la Sarthe (Le Mans)": "Le Mans",
 };
 
@@ -186,13 +186,7 @@ function isPast(ev: SpecialEvent): boolean {
 function TrackIcon({ track, trackTba }: { track: string; trackTba?: boolean }) {
   const mapName = !trackTba ? resolveTrackMapName(track) : null;
   if (mapName) {
-    return (
-      <TrackMap
-        name={mapName}
-        showStartFinish={false}
-        className="h-8 w-8 shrink-0 text-primary/80"
-      />
-    );
+    return <TrackMap name={mapName} showStartFinish={false} className="h-8 w-8 shrink-0 text-primary/80" />;
   }
   return (
     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/40">
@@ -216,7 +210,7 @@ function CountdownChip({ dateIso }: { dateIso: string }) {
     <span
       className={cn(
         "shrink-0 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium",
-        COUNTDOWN_TONE_CLASS[tone]
+        COUNTDOWN_TONE_CLASS[tone],
       )}
     >
       {label}
@@ -237,8 +231,8 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
         ev.isFeatured
           ? "border-yellow-500/50 bg-yellow-500/10 shadow-md"
           : past
-          ? "border-border bg-muted/20 opacity-60"
-          : "border-border bg-card hover:border-primary/50"
+            ? "border-border bg-muted/20 opacity-60"
+            : "border-border bg-card hover:border-primary/50",
       )}
     >
       {ev.isFeatured && (
@@ -251,7 +245,9 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
         <div className="flex items-center gap-2.5">
           <TrackIcon track={ev.track} trackTba={ev.trackTba} />
           <div>
-            <div className={cn("text-sm font-semibold", ev.trackTba ? "text-muted-foreground italic" : "text-foreground")}>
+            <div
+              className={cn("text-sm font-semibold", ev.trackTba ? "text-muted-foreground italic" : "text-foreground")}
+            >
               {ev.trackTba ? t("events.trackTba") : ev.track}
             </div>
             <div className="text-xs text-muted-foreground">{formatEventDateCompact(ev.dateIso, intlLocale)}</div>
@@ -262,13 +258,11 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
 
       <div className="mt-3 flex flex-wrap gap-1">
         <span className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-          <Clock size={10} /> {ev.duration}{t("events.hoursSuffix")}
+          <Clock size={10} /> {ev.duration}
+          {t("events.hoursSuffix")}
         </span>
         {ev.classes.map((cls) => (
-          <span
-            key={cls}
-            className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", classColor(cls))}
-          >
+          <span key={cls} className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", classColor(cls))}>
             {cls}
           </span>
         ))}
@@ -293,7 +287,7 @@ function DailyRaceCard({ race }: { race: DailyRace }) {
             "shrink-0 rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
             race.raceType === "Sprint"
               ? "border-orange-500/30 bg-orange-500/15 text-orange-600 dark:text-orange-400"
-              : "border-blue-500/30 bg-blue-500/15 text-blue-600 dark:text-blue-400"
+              : "border-blue-500/30 bg-blue-500/15 text-blue-600 dark:text-blue-400",
           )}
         >
           {race.raceType}
@@ -305,10 +299,7 @@ function DailyRaceCard({ race }: { race: DailyRace }) {
           <Clock size={10} /> {race.durationMinutes} {t("events.minSuffix")}
         </span>
         {race.classes.map((cls) => (
-          <span
-            key={cls}
-            className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", classColor(cls))}
-          >
+          <span key={cls} className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", classColor(cls))}>
             {cls}
           </span>
         ))}
@@ -336,18 +327,13 @@ export default function Events() {
   });
 
   const refresh = useMutation({
-    mutationFn: () =>
-      fetch("/api/special-events/refresh", { method: "POST" }).then((r) => r.json()),
+    mutationFn: () => fetch("/api/special-events/refresh", { method: "POST" }).then((r) => r.json()),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["special-events"] }),
   });
 
   const events = data?.events ?? [];
   const filtered =
-    filter === "upcoming"
-      ? events.filter(isUpcoming)
-      : filter === "past"
-      ? events.filter(isPast)
-      : events;
+    filter === "upcoming" ? events.filter(isUpcoming) : filter === "past" ? events.filter(isPast) : events;
 
   const grouped = groupByMonth(filtered);
 
@@ -357,9 +343,7 @@ export default function Events() {
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight">{t("events.title")}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t("events.subtitle")}
-          </p>
+          <p className="text-sm text-muted-foreground">{t("events.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Минималистичный индикатор обновления — одинаково на обеих вкладках */}
@@ -411,7 +395,7 @@ export default function Events() {
             "flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
             mainTab === "special"
               ? "bg-primary text-primary-foreground shadow"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           <Trophy size={14} />
@@ -423,7 +407,7 @@ export default function Events() {
             "flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
             mainTab === "daily"
               ? "bg-primary text-primary-foreground shadow"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           <Zap size={14} />
@@ -444,16 +428,20 @@ export default function Events() {
                   "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
                   filter === f
                     ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:text-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground",
                 )}
               >
-                {f === "upcoming" ? t("events.filterUpcoming") : f === "past" ? t("events.filterPast") : t("events.filterAll")}
+                {f === "upcoming"
+                  ? t("events.filterUpcoming")
+                  : f === "past"
+                    ? t("events.filterPast")
+                    : t("events.filterAll")}
                 <span className="ml-1.5 text-[10px] opacity-60">
                   {f === "upcoming"
                     ? events.filter(isUpcoming).length
                     : f === "past"
-                    ? events.filter(isPast).length
-                    : events.length}
+                      ? events.filter(isPast).length
+                      : events.length}
                 </span>
               </button>
             ))}
@@ -478,8 +466,10 @@ export default function Events() {
               ) : (
                 Array.from(grouped.entries()).map(([monthKey, evs]) => {
                   const monthLabel = capitalize(
-                    new Date(Number(monthKey.slice(0, 4)), Number(monthKey.slice(5, 7)) - 1, 1)
-                      .toLocaleDateString(intlLocale, { month: "long" }),
+                    new Date(Number(monthKey.slice(0, 4)), Number(monthKey.slice(5, 7)) - 1, 1).toLocaleDateString(
+                      intlLocale,
+                      { month: "long" },
+                    ),
                   );
                   const year = monthKey.slice(0, 4);
                   return (
