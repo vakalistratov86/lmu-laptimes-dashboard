@@ -10,6 +10,14 @@
 ## [Unreleased]
 
 ### Added
+- **ESLint + Prettier** — `eslint.config.js` (flat config, `typescript-eslint` + `eslint-plugin-react`/`react-hooks`) и `.prettierrc.json`; npm-скрипты `lint`/`lint:fix`/`format`/`format:check`; отдельные джобы ESLint/Prettier в CI (`.github/workflows/lint.yml`); весь репозиторий приведён к единому формату (#125)
+- Серверная валидация query/path-параметров REST API через Zod-схемы (`IdParamSchema`, `LapNumberParamSchema`, `PaginationQuerySchema`, `LapsQuerySchema`, `BestLapsQuerySchema` в `shared/validators.ts`) — невалидный `trackId`/`:id`/`limit` и т.п. теперь возвращает `400` с описанием ошибки вместо тихого превращения в `NaN` в SQL-фильтре (#124)
+
+### Changed
+- `GET /api/sessions/:id/laps` — обогащение `driverName`/`carNumber`/`isPlayer` перенесено с трёх отдельных запросов + склейки через JS `Map` на один JOIN-запрос (`storage.getSessionLapsEnriched()`), устраняя последнее оставшееся место дублирования enrich-логики кругов/пилотов (#126)
+- `server/importWorker.ts` — insert-массивы (`lapTimeRows`/`sessionLapRows`/`dlqRows`/`streamDlqRows`) типизированы через `InsertLapTime`/`InsertSessionLap`/`InsertImportError` из `shared/schema.ts` вместо `any[]`, чтобы рассинхрон со схемой Drizzle ловился на этапе компиляции, а не в рантайме на пути импорта заездов (#127)
+
+### Added
 - **Раздел «Телеметрия»** — импорт и просмотр записей телеметрии LMU (`.duckdb`-файлы игры)
   - Страница **Telemetry** — список импортированных записей (пилот, трасса, дата)
   - Страница **Telemetry Detail** — карта трассы по GPS-треку круга (`TelemetryTrackMap`) + график каналов телеметрии с выбором круга, зумом и легендой (`TelemetryChart`, `TelemetryLapPicker`)

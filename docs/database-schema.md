@@ -378,6 +378,7 @@ telemetry_sessions
 | `LapTimeEnriched` | `LapTime` | `trackName`, `driverName`, `team`, `isPlayer`, `sessionCourse` |
 | `SessionEnriched` | `Session` | `trackName`, `results: (SessionResult & { driverName })[]` |
 | `SessionFull` | `SessionEnriched` | `laps`, `incidents`, `sectorBests`, `trackLimits` |
+| `SessionLapEnriched` | `SessionLap` | `lapNumber`, `lapTimeSeconds`, `sector1`/`sector2`/`sector3` (сек., алиасы полей `*Ms`), `isPitLap: boolean`, `driverName`, `carNumber`, `isPlayer` — используется `GET /api/sessions/:id/laps` (`storage.getSessionLapsEnriched()`, один JOIN `session_laps` → `drivers` → `session_results` по `session_result_id`, #126) |
 
 ---
 

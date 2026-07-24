@@ -12,6 +12,7 @@
 - [Процесс разработки](#процесс-разработки)
 - [Соглашения по коммитам](#соглашения-по-коммитам)
 - [Тестирование](#тестирование)
+- [Линтинг и форматирование](#линтинг-и-форматирование)
 - [Отправка Pull Request](#отправка-pull-request)
 - [Сообщение об ошибках](#сообщение-об-ошибках)
 
@@ -57,6 +58,8 @@ npm run dev
 ├── shared/              # Общая схема данных (Drizzle + Zod)
 ├── script/              # Вспомогательные скрипты сборки
 ├── tests/               # Тесты (Vitest)
+├── eslint.config.js     # Конфигурация ESLint
+├── .prettierrc.json     # Конфигурация Prettier
 └── drizzle.config.ts    # Конфигурация Drizzle ORM
 ```
 
@@ -82,7 +85,8 @@ npm run dev
 2. Внесите изменения небольшими логическими коммитами
 3. Убедитесь, что все тесты проходят (`npm test`)
 4. Проверьте типы TypeScript (`npm run check`)
-5. Откройте Pull Request в `main`
+5. Проверьте линтер (`npm run lint`) и форматирование (`npm run format:check`) — оба проверяются в CI (`.github/workflows/lint.yml`)
+6. Откройте Pull Request в `main`
 
 ---
 
@@ -155,12 +159,34 @@ npm run test:coverage
 
 ---
 
+## Линтинг и форматирование
+
+```bash
+# Проверка ESLint
+npm run lint
+
+# Проверка ESLint с автоисправлением
+npm run lint:fix
+
+# Форматирование Prettier
+npm run format
+
+# Проверка форматирования без изменения файлов (как в CI)
+npm run format:check
+```
+
+- Конфигурация: `eslint.config.js` (flat config) и `.prettierrc.json` в корне репозитория
+- Правила для клиента (React + `react-hooks`) и сервера/shared (Node globals) заданы отдельно в `eslint.config.js`
+- Оба шага (`lint`, `format:check`) — обязательные проверки CI (`.github/workflows/lint.yml`) на каждый push/PR
+
+---
+
 ## Отправка Pull Request
 
 1. Убедитесь, что ветка актуальна относительно `main`
 2. Заполните описание PR: что изменено и почему
 3. Укажите связанные issues (`Closes #N`)
-4. Все проверки (типы, тесты) должны быть зелёными
+4. Все проверки (типы, тесты, линтер, форматирование) должны быть зелёными
 5. Коммиты должны следовать соглашению Conventional Commits
 
 ---
