@@ -35,9 +35,11 @@ client/src/
 ## Роли файлов
 
 ### `client/src/pages/SessionDetail.tsx`
+
 Контейнер страницы.
 
 **Ответственность:**
+
 - Получение `id` из route.
 - Загрузка `session` через `useSession(id)`.
 - Загрузка `laps` через `useSessionLaps(id)`.
@@ -46,6 +48,7 @@ client/src/
 - Рендер loading / empty / content состояний.
 
 **Минимальные зависимости:**
+
 - `SessionHeader`
 - `SessionHeroStats`
 - `SessionTabs`
@@ -59,6 +62,7 @@ client/src/
 ---
 
 ### `client/src/components/session-detail/SessionHeader.tsx`
+
 Верхний блок страницы с breadcrumb и основной идентификацией сессии.
 
 ```ts
@@ -76,6 +80,7 @@ export interface SessionHeaderProps {
 ```
 
 **Что рендерит:**
+
 - кнопка назад
 - badge типа сессии
 - название трассы
@@ -86,6 +91,7 @@ export interface SessionHeaderProps {
 ---
 
 ### `client/src/components/session-detail/SessionHeroStats.tsx`
+
 KPI-герой с набором карточек.
 
 ```ts
@@ -104,6 +110,7 @@ export interface SessionHeroStatsProps {
 ```
 
 **Рекомендуемый состав items:**
+
 - Победитель
 - Fastest lap
 - Total time / race duration
@@ -114,6 +121,7 @@ export interface SessionHeroStatsProps {
 ---
 
 ### `client/src/components/session-detail/SessionTabs.tsx`
+
 Переключатель секций экрана.
 
 ```ts
@@ -136,6 +144,7 @@ export interface SessionTabsProps {
 ---
 
 ### `client/src/components/session-detail/SessionResultsTable.tsx`
+
 Основная таблица результатов.
 
 ```ts
@@ -172,6 +181,7 @@ export interface SessionResultsTableProps {
 ---
 
 ### `client/src/components/session-detail/SessionResultsRow.tsx`
+
 Опциональный дочерний компонент для одной строки результатов.
 
 ```ts
@@ -186,6 +196,7 @@ export interface SessionResultsRowProps {
 ---
 
 ### `client/src/components/session-detail/SessionLapProgressChart.tsx`
+
 График прогрессии кругов.
 
 ```ts
@@ -220,6 +231,7 @@ export interface SessionLapProgressChartProps {
 ---
 
 ### `client/src/components/session-detail/SessionSectorsSummary.tsx`
+
 Сводка по лучшим секторам и theoretical best.
 
 ```ts
@@ -253,6 +265,7 @@ export interface SessionSectorsSummaryProps {
 ---
 
 ### `client/src/components/session-detail/DriverLapsAccordion.tsx`
+
 Контейнер подробных кругов по пилотам.
 
 ```ts
@@ -286,6 +299,7 @@ export interface DriverLapsAccordionProps {
 ---
 
 ### `client/src/components/session-detail/DriverLapTable.tsx`
+
 Таблица кругов одного пилота.
 
 ```ts
@@ -300,6 +314,7 @@ export interface DriverLapTableProps {
 ---
 
 ### `client/src/components/session-detail/SessionEmptyState.tsx`
+
 Переиспользуемый empty/error блок.
 
 ```ts
@@ -313,6 +328,7 @@ export interface SessionEmptyStateProps {
 ```
 
 Использование:
+
 - сессия не найдена
 - нет lap data
 - нет данных для графика
@@ -320,6 +336,7 @@ export interface SessionEmptyStateProps {
 ---
 
 ### `client/src/components/session-detail/SessionLoadingSkeleton.tsx`
+
 Скелетон для всей страницы.
 
 ```ts
@@ -333,9 +350,11 @@ export interface SessionLoadingSkeletonProps {
 ---
 
 ### `client/src/components/session-detail/types.ts`
+
 Локальный barrel/types-файл для props и view-моделей компонентов.
 
 Имеет смысл экспортировать отсюда:
+
 - `SessionTabKey`
 - `SessionHeroStatItem`
 - `SessionResultRowView`
@@ -348,6 +367,7 @@ export interface SessionLoadingSkeletonProps {
 ## Файлы логики
 
 ### `client/src/lib/sessionDetail.types.ts`
+
 Типы доменной view-model.
 
 ```ts
@@ -374,6 +394,7 @@ export interface SessionDetailViewModel {
 ---
 
 ### `client/src/lib/sessionDetail.ts`
+
 Главный builder view-model.
 
 ```ts
@@ -389,6 +410,7 @@ export function buildSessionDetailViewModel(
 ```
 
 **Что делает:**
+
 - нормализует тип сессии
 - считает fastest lap
 - определяет победителя / polesitter
@@ -401,6 +423,7 @@ export function buildSessionDetailViewModel(
 ---
 
 ### `client/src/lib/sessionDetailSelectors.ts`
+
 Если не хочется один большой helper-файл, разложить вычисления по селекторам.
 
 ```ts

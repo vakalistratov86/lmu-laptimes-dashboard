@@ -63,7 +63,7 @@
 
 ## Структура проекта
 
-```
+```text
 .
 ├── client/              # Frontend (React)
 │   └── src/
@@ -233,5 +233,5 @@ DATABASE_URL=postgres://lmu:lmu_password@localhost:5432/lmu_laptimes
 ---
 
 > ⚠️ **Примечание:** LMU не предоставляет публичный API для Daily Races, поэтому данные о текущей ротации добавлены статически. Рекомендую проверить актуальную ротацию на [lemansultimate.com](https://www.lemansultimate.com) и при необходимости обновить массив `DAILY_RACES_STATIC` в коде.
-
+>
 > Демо‑данные носят иллюстративный характер и не связаны с официальной статистикой игры Le Mans Ultimate.
