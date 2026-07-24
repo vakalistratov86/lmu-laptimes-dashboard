@@ -24,9 +24,7 @@ export async function setupVite(server: Server, app: Express) {
         process.exit(1);
       },
     },
-    server: {
-      middlewareMode: true,
-    },
+    server: serverOptions,
     appType: "custom",
   });
 

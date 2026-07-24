@@ -32,7 +32,7 @@ describe("Zod-схемы (shared/schema)", () => {
     });
 
     it("отклоняет отсутствие обязательного поля country", () => {
-      const { country, ...rest } = validTrack;
+      const { country: _country, ...rest } = validTrack;
       expect(() => insertTrackSchema.parse(rest)).toThrow();
     });
 
@@ -46,12 +46,12 @@ describe("Zod-схемы (shared/schema)", () => {
     });
 
     it("отклоняет отсутствие name", () => {
-      const { name, ...rest } = validTrack;
+      const { name: _name, ...rest } = validTrack;
       expect(() => insertTrackSchema.parse(rest)).toThrow();
     });
 
     it("отклоняет отсутствие layout", () => {
-      const { layout, ...rest } = validTrack;
+      const { layout: _layout, ...rest } = validTrack;
       expect(() => insertTrackSchema.parse(rest)).toThrow();
     });
 
@@ -73,7 +73,7 @@ describe("Zod-схемы (shared/schema)", () => {
     });
 
     it("отклоняет отсутствие team", () => {
-      const { team, ...rest } = validDriver;
+      const { team: _team, ...rest } = validDriver;
       expect(() => insertDriverSchema.parse(rest)).toThrow();
     });
 
@@ -82,7 +82,7 @@ describe("Zod-схемы (shared/schema)", () => {
     });
 
     it("отклоняет отсутствие country", () => {
-      const { country, ...rest } = validDriver;
+      const { country: _country, ...rest } = validDriver;
       expect(() => insertDriverSchema.parse(rest)).toThrow();
     });
 
@@ -116,12 +116,12 @@ describe("Zod-схемы (shared/schema)", () => {
     });
 
     it("отклоняет отсутствие trackId", () => {
-      const { trackId, ...rest } = validLap;
+      const { trackId: _trackId, ...rest } = validLap;
       expect(() => insertLapTimeSchema.parse(rest)).toThrow();
     });
 
     it("отклоняет отсутствие driverId", () => {
-      const { driverId, ...rest } = validLap;
+      const { driverId: _driverId, ...rest } = validLap;
       expect(() => insertLapTimeSchema.parse(rest)).toThrow();
     });
 
@@ -165,7 +165,7 @@ describe("Zod-схемы (shared/schema)", () => {
     });
 
     it("отклоняет отсутствие event", () => {
-      const { event, ...rest } = validSession;
+      const { event: _event, ...rest } = validSession;
       expect(() => insertSessionSchema.parse(rest)).toThrow();
     });
 
@@ -174,12 +174,12 @@ describe("Zod-схемы (shared/schema)", () => {
     });
 
     it("отклоняет отсутствие trackId", () => {
-      const { trackId, ...rest } = validSession;
+      const { trackId: _trackId, ...rest } = validSession;
       expect(() => insertSessionSchema.parse(rest)).toThrow();
     });
 
     it("отклоняет отсутствие fileName", () => {
-      const { fileName, ...rest } = validSession;
+      const { fileName: _fileName, ...rest } = validSession;
       expect(() => insertSessionSchema.parse(rest)).toThrow();
     });
   });
@@ -221,7 +221,7 @@ describe("Zod-схемы (shared/schema)", () => {
     });
 
     it("отклоняет отсутствие sessionId", () => {
-      const { sessionId, ...rest } = validResult;
+      const { sessionId: _sessionId, ...rest } = validResult;
       expect(() => insertSessionResultSchema.parse(rest)).toThrow();
     });
 

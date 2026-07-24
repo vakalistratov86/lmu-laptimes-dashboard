@@ -22,6 +22,7 @@ type MainTab = "logs" | "telemetry";
 
 // ─── Расширяем типизацию input для webkitdirectory ───────────────────────────
 declare module "react" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- T должен повторять сигнатуру расширяемого интерфейса для корректного declaration merging
   interface InputHTMLAttributes<T> {
     webkitdirectory?: string;
     directory?: string;

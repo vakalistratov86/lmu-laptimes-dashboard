@@ -410,7 +410,7 @@ function detectSessionType(raceResults: XmlNode): { type: string; node: unknown 
 export function parseRaceResults(xml: string): ParsedSession | null {
   // #7 — Детекция версии формата перед парсингом
   const detectedVersion = detectLogVersion(xml);
-  const logFormatVersion = assertSupportedVersion(detectedVersion, xml);
+  const logFormatVersion = assertSupportedVersion(detectedVersion);
 
   const root = xmlParser.parse(xml);
   const raceResults = (findFirst(root, "RaceResults") as XmlNode | undefined) ?? (root as XmlNode);

@@ -128,9 +128,6 @@ const TRACKS: Record<string, TrackData> = {
   },
 };
 
-// Backward-compatible: просто достаём path из новой структуры
-const PATHS: Record<string, string> = Object.fromEntries(Object.entries(TRACKS).map(([k, v]) => [k, v.d]));
-
 /**
  * Некоторые реальные трассы имеют несколько физических конфигураций
  * (напр. Bahrain International Circuit и Bahrain Outer Circuit), но в БД

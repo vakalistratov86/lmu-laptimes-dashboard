@@ -188,7 +188,7 @@ describe("runImport — реконнект: замена/пропуск сесс
     // В REPLACE-сценарии tx.insert() вызывается — переопределяем "бросающий" insert
     // из общего хелпера на минимально работоспособный (сессия + пилоты + круги).
     let insertedSession: any = null;
-    tx.insert = vi.fn((table: any) => ({
+    tx.insert = vi.fn((_table: any) => ({
       values: vi.fn((payload: any) => ({
         returning: vi.fn(() => {
           const row = { id: 999, lapCount: 0, ...(Array.isArray(payload) ? payload[0] : payload) };
