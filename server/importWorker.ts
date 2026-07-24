@@ -32,7 +32,7 @@ import {
 import { eq, inArray, sql } from "drizzle-orm";
 import { parseRaceResults, type ParsedSession } from "./logParser";
 import { validateLapTime } from "@shared/validators";
-import { normalizeLapTime, normalizeDriverNameForStorage, normalizeTrackName, toMilliseconds } from "./normalizer";
+import { normalizeLapTime, normalizeDriverNameForStorage, toMilliseconds } from "./normalizer";
 import type { Track, Driver, InsertLapTime, InsertSessionLap, InsertImportError } from "@shared/schema";
 import { findSupersedeCandidate, deleteSupersededSessionData, decideSupersedeAction } from "./sessionSupersede";
 import { logImportStarted, logImportCompleted, logImportFailed, logImportSkipped, logParseError } from "./logger";

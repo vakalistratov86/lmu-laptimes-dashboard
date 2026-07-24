@@ -1,17 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  CalendarDays,
-  Clock,
-  Flag,
-  RefreshCw,
-  ExternalLink,
-  Star,
-  AlertCircle,
-  AlertTriangle,
-  Trophy,
-  Zap,
-} from "lucide-react";
+import { Clock, Flag, RefreshCw, ExternalLink, Star, AlertCircle, AlertTriangle, Trophy, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TrackMap, hasTrackMap } from "@/components/TrackMap";
 import { useLanguage } from "@/lib/i18n";

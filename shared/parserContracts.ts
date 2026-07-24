@@ -32,7 +32,7 @@ export function detectLogVersion(rawContent: string): LogVersion | null {
  * Проверяет, поддерживается ли версия лога.
  * Бросает ошибку с кодом UNSUPPORTED_LOG_VERSION если нет.
  */
-export function assertSupportedVersion(version: LogVersion | null, rawContent: string): LogVersion {
+export function assertSupportedVersion(version: LogVersion | null): LogVersion {
   if (version === null) {
     const err = new Error(
       "Не удалось определить версию формата лога. " +

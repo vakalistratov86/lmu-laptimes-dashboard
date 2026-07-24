@@ -19,10 +19,8 @@ import {
 
 export interface BuildSessionDetailViewModelParams {
   /** Сырой объект сессии (из API / store). */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   session: Record<string, any>;
   /** Массив сырых объектов кругов для данной сессии. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   laps: Record<string, any>[];
   /** URL для кнопки «Назад». */
   backHref: string;

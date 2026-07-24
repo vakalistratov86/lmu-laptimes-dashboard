@@ -6,7 +6,6 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
 import { computeFileHash, generateId, CHUNK_SIZE } from "../server/importWorker";
 
 // ── Unit tests: computeFileHash ──────────────────────────────────
