@@ -19,10 +19,7 @@ export function DriverName({ name, isPlayer, className, iconClassName }: DriverN
   const Icon = isReal ? User : Bot;
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
-      <Icon
-        size={13}
-        className={cn("shrink-0", isReal ? "text-green-500" : "text-amber-400", iconClassName)}
-      />
+      <Icon size={13} className={cn("shrink-0", isReal ? "text-green-500" : "text-amber-400", iconClassName)} />
       {name}
     </span>
   );

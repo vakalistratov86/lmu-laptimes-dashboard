@@ -45,34 +45,40 @@ export async function runTelemetryImport(job: TelemetryImportPayload): Promise<T
 
     const result = await withTelemetryFile(tmpFile, ({ conn, meta }) =>
       db.transaction(async (tx) => {
-        const sessionRows = await tx.insert(telemetrySessions).values({
-          importJobId: job.id,
-          fileName: job.fileName,
-          driverName: meta.metadata.DriverName ?? null,
-          steamId: meta.metadata.SteamID ?? null,
-          recordingTime: meta.metadata.RecordingTime ?? null,
-          sessionTime: meta.metadata.SessionTime ?? null,
-          sessionType: meta.metadata.SessionType ?? null,
-          trackName: meta.metadata.TrackName ?? null,
-          trackLayout: meta.metadata.TrackLayout ?? null,
-          weatherConditions: meta.metadata.WeatherConditions ?? null,
-          carName: meta.metadata.CarName ?? null,
-          carClass: meta.metadata.CarClass ?? null,
-          carSetup: meta.metadata.CarSetup ?? null,
-          createdAt: Date.now(),
-        }).returning();
+        const sessionRows = await tx
+          .insert(telemetrySessions)
+          .values({
+            importJobId: job.id,
+            fileName: job.fileName,
+            driverName: meta.metadata.DriverName ?? null,
+            steamId: meta.metadata.SteamID ?? null,
+            recordingTime: meta.metadata.RecordingTime ?? null,
+            sessionTime: meta.metadata.SessionTime ?? null,
+            sessionType: meta.metadata.SessionType ?? null,
+            trackName: meta.metadata.TrackName ?? null,
+            trackLayout: meta.metadata.TrackLayout ?? null,
+            weatherConditions: meta.metadata.WeatherConditions ?? null,
+            carName: meta.metadata.CarName ?? null,
+            carClass: meta.metadata.CarClass ?? null,
+            carSetup: meta.metadata.CarSetup ?? null,
+            createdAt: Date.now(),
+          })
+          .returning();
         const session = sessionRows[0];
 
-        const channelRows = await tx.insert(telemetryChannels).values(
-          meta.channelDefs.map((d) => ({
-            telemetrySessionId: session.id,
-            name: d.name,
-            kind: d.kind,
-            frequencyHz: d.frequencyHz,
-            unit: d.unit,
-            sampleCount: d.sampleCount,
-          }))
-        ).returning();
+        const channelRows = await tx
+          .insert(telemetryChannels)
+          .values(
+            meta.channelDefs.map((d) => ({
+              telemetrySessionId: session.id,
+              name: d.name,
+              kind: d.kind,
+              frequencyHz: d.frequencyHz,
+              unit: d.unit,
+              sampleCount: d.sampleCount,
+            })),
+          )
+          .returning();
 
         let sampleCount = 0;
         for (let i = 0; i < channelRows.length; i++) {
@@ -88,7 +94,7 @@ export async function runTelemetryImport(job: TelemetryImportPayload): Promise<T
                 value2: r.value2,
                 value3: r.value3,
                 value4: r.value4,
-              }))
+              })),
             );
             sampleCount += batch.length;
           }
@@ -99,13 +105,10 @@ export async function runTelemetryImport(job: TelemetryImportPayload): Promise<T
           channelCount: channelRows.length,
           sampleCount,
         };
-      })
+      }),
     );
 
-    logger.info(
-      { importJobId: job.id, fileName: job.fileName, ...result },
-      "Telemetry import completed"
-    );
+    logger.info({ importJobId: job.id, fileName: job.fileName, ...result }, "Telemetry import completed");
 
     return result;
   } finally {

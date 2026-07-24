@@ -122,9 +122,12 @@ function useLogImportEngineInternal(): LogImportEngineState {
     });
   }, []);
 
-  const addLog = useCallback((level: LogLevel, text: string) => {
-    setLog((prev) => [...prev, { ts: Date.now(), level, text }]);
-  }, [setLog]);
+  const addLog = useCallback(
+    (level: LogLevel, text: string) => {
+      setLog((prev) => [...prev, { ts: Date.now(), level, text }]);
+    },
+    [setLog],
+  );
 
   const clearLog = useCallback(() => {
     setLogState([]);
@@ -142,9 +145,11 @@ function useLogImportEngineInternal(): LogImportEngineState {
         if (!saved) return;
         setDirHandle(saved);
         setDirName(saved.name);
-        const perm = await (saved as FileSystemDirectoryHandle & {
-          queryPermission: (d: { mode: string }) => Promise<PermissionState>;
-        }).queryPermission({ mode: "read" });
+        const perm = await (
+          saved as FileSystemDirectoryHandle & {
+            queryPermission: (d: { mode: string }) => Promise<PermissionState>;
+          }
+        ).queryPermission({ mode: "read" });
         setDirPerm(perm);
       } catch {
         // нет сохранённого handle
@@ -156,15 +161,19 @@ function useLogImportEngineInternal(): LogImportEngineState {
   async function pickFolderFSA() {
     if (!FSA_SUPPORTED) return;
     try {
-      const handle = await (window as unknown as Window & {
-        showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
-      }).showDirectoryPicker();
+      const handle = await (
+        window as unknown as Window & {
+          showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
+        }
+      ).showDirectoryPicker();
       setDirHandle(handle);
       setDirName(handle.name);
       await dbPut(STORE_HANDLE, "dir", handle);
-      const perm = await (handle as FileSystemDirectoryHandle & {
-        queryPermission: (d: { mode: string }) => Promise<PermissionState>;
-      }).queryPermission({ mode: "read" });
+      const perm = await (
+        handle as FileSystemDirectoryHandle & {
+          queryPermission: (d: { mode: string }) => Promise<PermissionState>;
+        }
+      ).queryPermission({ mode: "read" });
       setDirPerm(perm);
       addLog("info", t("imp.logFolderPicked", { name: handle.name }));
     } catch (e: unknown) {
@@ -178,9 +187,11 @@ function useLogImportEngineInternal(): LogImportEngineState {
   async function requestPermission(): Promise<boolean> {
     if (!dirHandle) return false;
     try {
-      const perm = await (dirHandle as FileSystemDirectoryHandle & {
-        requestPermission: (d: { mode: string }) => Promise<PermissionState>;
-      }).requestPermission({ mode: "read" });
+      const perm = await (
+        dirHandle as FileSystemDirectoryHandle & {
+          requestPermission: (d: { mode: string }) => Promise<PermissionState>;
+        }
+      ).requestPermission({ mode: "read" });
       setDirPerm(perm);
       return perm === "granted";
     } catch {
@@ -233,11 +244,14 @@ function useLogImportEngineInternal(): LogImportEngineState {
           const r = data.results[0];
           if (r?.skipped) {
             if (r.reason === "SUPERSEDED") {
-              addLog("skip", t("imp.logImportSkipSuperseded", {
-                name: file.name,
-                existingLaps: r.existingLapCount ?? 0,
-                newLaps: r.newLapCount ?? 0,
-              }));
+              addLog(
+                "skip",
+                t("imp.logImportSkipSuperseded", {
+                  name: file.name,
+                  existingLaps: r.existingLapCount ?? 0,
+                  newLaps: r.newLapCount ?? 0,
+                }),
+              );
             } else {
               const skipMsg = trimErrorMessage(r?.message ?? t("imp.logImportSkipDefault"));
               addLog("skip", t("imp.logImportSkip", { name: file.name, msg: skipMsg }));
@@ -245,23 +259,29 @@ function useLogImportEngineInternal(): LogImportEngineState {
             setCounters((c) => ({ ...c, queued: c.queued - 1, skipped: c.skipped + 1 }));
           } else if (r?.ok) {
             if (r.replacedSessionId != null) {
-              addLog("warn", t("imp.logImportReplaced", {
-                name: file.name,
-                event: r.event ?? r.venue ?? "",
-                sessionType: r.sessionType ?? "",
-                drivers: r.drivers ?? 0,
-                n: r.laps ?? 0,
-                oldId: r.replacedSessionId,
-                oldLaps: r.replacedLapCount ?? 0,
-              }));
+              addLog(
+                "warn",
+                t("imp.logImportReplaced", {
+                  name: file.name,
+                  event: r.event ?? r.venue ?? "",
+                  sessionType: r.sessionType ?? "",
+                  drivers: r.drivers ?? 0,
+                  n: r.laps ?? 0,
+                  oldId: r.replacedSessionId,
+                  oldLaps: r.replacedLapCount ?? 0,
+                }),
+              );
             } else {
-              addLog("ok", t("imp.logImportOk", {
-                name: file.name,
-                event: r.event ?? r.venue ?? "",
-                sessionType: r.sessionType ?? "",
-                drivers: r.drivers ?? 0,
-                n: r.laps ?? 0,
-              }));
+              addLog(
+                "ok",
+                t("imp.logImportOk", {
+                  name: file.name,
+                  event: r.event ?? r.venue ?? "",
+                  sessionType: r.sessionType ?? "",
+                  drivers: r.drivers ?? 0,
+                  n: r.laps ?? 0,
+                }),
+              );
             }
             setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + 1 }));
           } else {
@@ -286,7 +306,7 @@ function useLogImportEngineInternal(): LogImportEngineState {
       setMode("idle");
       addLog("info", t("imp.logImportDone"));
     },
-    [addLog, setCounters, t]
+    [addLog, setCounters, t],
   );
 
   // ─── Очистка БД ───────────────────────────────────────────────────────────
@@ -334,10 +354,12 @@ function useLogImportEngineInternal(): LogImportEngineState {
         perm = "granted";
       }
       const files: File[] = [];
-      for await (const [, entry] of (dirHandle as FileSystemDirectoryHandle & {
-        [Symbol.asyncIterator]?: never;
-        entries: () => AsyncIterable<[string, FileSystemHandle]>;
-      }).entries()) {
+      for await (const [, entry] of (
+        dirHandle as FileSystemDirectoryHandle & {
+          [Symbol.asyncIterator]?: never;
+          entries: () => AsyncIterable<[string, FileSystemHandle]>;
+        }
+      ).entries()) {
         if (entry.kind === "file" && entry.name.toLowerCase().endsWith(".xml")) {
           const fh = entry as FileSystemFileHandle;
           files.push(await fh.getFile());
@@ -351,7 +373,7 @@ function useLogImportEngineInternal(): LogImportEngineState {
       addLog("error", t("imp.logScanError", { msg }));
       setMode("idle");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirHandle, dirPerm, importFiles, t]);
 
   // ─── Авто-импорт: таймер ─────────────────────────────────────────────────

@@ -74,26 +74,26 @@ export const sessions = pgTable("sessions", {
 
 // Задания импорта — idempotency + async status (#5, #6)
 export const importJobs = pgTable("import_jobs", {
-  id: text("id").primaryKey(),                       // nanoid
-  fileHash: text("file_hash").notNull().unique(),    // SHA-256 файла — UNIQUE для idempotency
+  id: text("id").primaryKey(), // nanoid
+  fileHash: text("file_hash").notNull().unique(), // SHA-256 файла — UNIQUE для idempotency
   fileName: text("file_name").notNull(),
   status: text("status").notNull().default("queued"), // queued | processing | completed | failed
-  sessionId: integer("session_id"),                  // заполняется после успешного импорта
+  sessionId: integer("session_id"), // заполняется после успешного импорта
   totalLaps: integer("total_laps"),
-  validLaps: integer("valid_laps"),                  // #8: кол-во прошедших валидацию кругов
-  errorLaps: integer("error_laps"),                  // #8: кол-во записей в DLQ
-  error: text("error"),                              // сообщение об ошибке при failed
-  logFormatVersion: text("log_format_version"),      // #7: версия формата лога (1.0 | 1.1 | 2.0)
+  validLaps: integer("valid_laps"), // #8: кол-во прошедших валидацию кругов
+  errorLaps: integer("error_laps"), // #8: кол-во записей в DLQ
+  error: text("error"), // сообщение об ошибке при failed
+  logFormatVersion: text("log_format_version"), // #7: версия формата лога (1.0 | 1.1 | 2.0)
   createdAt: bigint("created_at", { mode: "number" }).notNull(), // Unix ms
-  finishedAt: bigint("finished_at", { mode: "number" }),         // Unix ms
+  finishedAt: bigint("finished_at", { mode: "number" }), // Unix ms
 });
 
 // Dead Letter Queue — битые/невалидные записи импорта (#8)
 export const importErrors = pgTable("import_errors", {
   id: serial("id").primaryKey(),
   importJobId: text("import_job_id").notNull(),
-  rawPayload: text("raw_payload").notNull(),          // исходная строка/запись (JSON)
-  errorCode: text("error_code").notNull(),            // VALIDATION_ERROR | PARSE_ERROR | SEMANTIC_ERROR
+  rawPayload: text("raw_payload").notNull(), // исходная строка/запись (JSON)
+  errorCode: text("error_code").notNull(), // VALIDATION_ERROR | PARSE_ERROR | SEMANTIC_ERROR
   errorMessage: text("error_message").notNull(),
   occurredAt: bigint("occurred_at", { mode: "number" }).notNull(), // Unix ms
 });
@@ -191,10 +191,10 @@ export const sessionTrackLimits = pgTable("session_track_limits", {
 
 // Задания импорта телеметрии (.duckdb) — idempotency по SHA-256 сырых байт файла
 export const telemetryImportJobs = pgTable("telemetry_import_jobs", {
-  id: text("id").primaryKey(),                                // nanoid
+  id: text("id").primaryKey(), // nanoid
   fileHash: text("file_hash").notNull().unique(),
   fileName: text("file_name").notNull(),
-  status: text("status").notNull().default("processing"),     // processing | completed | failed
+  status: text("status").notNull().default("processing"), // processing | completed | failed
   telemetrySessionId: integer("telemetry_session_id"),
   channelCount: integer("channel_count"),
   sampleCount: integer("sample_count"),
@@ -218,7 +218,7 @@ export const telemetrySessions = pgTable("telemetry_sessions", {
   weatherConditions: text("weather_conditions"),
   carName: text("car_name"),
   carClass: text("car_class"),
-  carSetup: text("car_setup"),                                 // сырой JSON сетапа авто
+  carSetup: text("car_setup"), // сырой JSON сетапа авто
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
 });
 
@@ -227,27 +227,31 @@ export const telemetryChannels = pgTable("telemetry_channels", {
   id: serial("id").primaryKey(),
   telemetrySessionId: integer("telemetry_session_id").notNull(),
   name: text("name").notNull(),
-  kind: text("kind").notNull(),                                 // channel | event
-  frequencyHz: integer("frequency_hz"),                         // только для channel
+  kind: text("kind").notNull(), // channel | event
+  frequencyHz: integer("frequency_hz"), // только для channel
   unit: text("unit"),
   sampleCount: integer("sample_count").notNull(),
 });
 
 // Сами сэмплы телеметрии (EAV: одна таблица вместо ~100 таблиц-на-канал)
-export const telemetrySamples = pgTable("telemetry_samples", {
-  id: serial("id").primaryKey(),
-  channelId: integer("channel_id").notNull(),
-  seq: integer("seq").notNull(),                                // порядковый номер строки в исходном файле
-  // Для events — реальное время (сек) из файла; для channels — NULL,
-  // потребитель считает время как seq / frequencyHz канала.
-  ts: real("ts"),
-  value1: real("value1"),
-  value2: real("value2"),
-  value3: real("value3"),
-  value4: real("value4"),
-}, (table) => ({
-  channelIdIdx: index("telemetry_samples_channel_id_idx").on(table.channelId),
-}));
+export const telemetrySamples = pgTable(
+  "telemetry_samples",
+  {
+    id: serial("id").primaryKey(),
+    channelId: integer("channel_id").notNull(),
+    seq: integer("seq").notNull(), // порядковый номер строки в исходном файле
+    // Для events — реальное время (сек) из файла; для channels — NULL,
+    // потребитель считает время как seq / frequencyHz канала.
+    ts: real("ts"),
+    value1: real("value1"),
+    value2: real("value2"),
+    value3: real("value3"),
+    value4: real("value4"),
+  },
+  (table) => ({
+    channelIdIdx: index("telemetry_samples_channel_id_idx").on(table.channelId),
+  }),
+);
 
 export const insertTrackSchema = createInsertSchema(tracks).omit({ id: true });
 export const insertDriverSchema = createInsertSchema(drivers).omit({ id: true });

@@ -12,8 +12,8 @@ import type {
   LapProgressSeries,
   LapProgressPoint,
   SessionTabItem,
-} from '@/components/session-detail/types';
-import type { NormalizedSessionType } from './sessionDetail.types';
+} from "@/components/session-detail/types";
+import type { NormalizedSessionType } from "./sessionDetail.types";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Вспомогательные утилиты
@@ -21,20 +21,20 @@ import type { NormalizedSessionType } from './sessionDetail.types';
 
 /** Форматирует миллисекунды (integer) в строку «M:SS.mmm». */
 export function formatLapMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  if (!Number.isFinite(ms) || ms <= 0) return "—";
   const totalSeconds = ms / 1000;
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
-  const ss = Math.floor(s).toString().padStart(2, '0');
+  const ss = Math.floor(s).toString().padStart(2, "0");
   const msStr = Math.round((s % 1) * 1000)
     .toString()
-    .padStart(3, '0');
+    .padStart(3, "0");
   return `${m}:${ss}.${msStr}`;
 }
 
 /** Форматирует секунды (float) в строку «M:SS.mmm». */
 export function formatLapTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
   return formatLapMs(seconds * 1000);
 }
 
@@ -43,11 +43,7 @@ export function formatLapTime(seconds: number): string {
  * Поле «*Ms» хранит значение в миллисекундах, остальные — в секундах.
  * Возвращает значение в СЕКУНДАХ для дальнейшего использования с formatLapTime.
  */
-function parseSectorSeconds(
-  msProp: unknown,
-  secProp: unknown,
-  shortProp: unknown,
-): number {
+function parseSectorSeconds(msProp: unknown, secProp: unknown, shortProp: unknown): number {
   const ms = Number(msProp);
   if (Number.isFinite(ms) && ms > 0) return ms / 1000;
   const sec = Number(secProp ?? shortProp);
@@ -57,7 +53,7 @@ function parseSectorSeconds(
 
 /** Форматирует отставание (gap) в секундах в строку «+X.XXX». */
 export function formatGap(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
   return `+${seconds.toFixed(3)}`;
 }
 
@@ -67,7 +63,7 @@ export function formatGap(seconds: number): string {
  */
 function formatSpeed(raw: unknown): string {
   const v = Number(raw);
-  if (!Number.isFinite(v) || v <= 0) return '—';
+  if (!Number.isFinite(v) || v <= 0) return "—";
   return `${Math.round(v)}`;
 }
 
@@ -78,7 +74,7 @@ function formatSpeed(raw: unknown): string {
  */
 function formatFuelPercent(raw: unknown): string {
   const v = Number(raw);
-  if (!Number.isFinite(v) || v < 0) return '—';
+  if (!Number.isFinite(v) || v < 0) return "—";
   const pct = v > 1 ? v : v * 100;
   return `${Math.round(pct)}`;
 }
@@ -90,7 +86,7 @@ function formatFuelPercent(raw: unknown): string {
  */
 function formatWear(raw: unknown): string {
   const v = Number(raw);
-  if (!Number.isFinite(v)) return '—';
+  if (!Number.isFinite(v)) return "—";
   // Значение может быть 0–1 (доля) или 0–100 (проценты)
   const pct = v > 1 ? v : v * 100;
   return `${Math.round(pct)}`;
@@ -109,26 +105,46 @@ function parseTyreWear(lap: Record<string, any>): TyreWear | null {
   const fl =
     lap.tyreFLCondition ??
     lap.tyreFLcondition ??
-    lap.tyreWearFL ?? lap.tireWearFL ?? lap.wearFL ?? lap.wear_fl ??
-    lap.tyreWear?.fl ?? lap.tireWear?.fl ?? null;
+    lap.tyreWearFL ??
+    lap.tireWearFL ??
+    lap.wearFL ??
+    lap.wear_fl ??
+    lap.tyreWear?.fl ??
+    lap.tireWear?.fl ??
+    null;
 
   const fr =
     lap.tyreFRCondition ??
     lap.tyreFRcondition ??
-    lap.tyreWearFR ?? lap.tireWearFR ?? lap.wearFR ?? lap.wear_fr ??
-    lap.tyreWear?.fr ?? lap.tireWear?.fr ?? null;
+    lap.tyreWearFR ??
+    lap.tireWearFR ??
+    lap.wearFR ??
+    lap.wear_fr ??
+    lap.tyreWear?.fr ??
+    lap.tireWear?.fr ??
+    null;
 
   const rl =
     lap.tyreRLCondition ??
     lap.tyreRLcondition ??
-    lap.tyreWearRL ?? lap.tireWearRL ?? lap.wearRL ?? lap.wear_rl ??
-    lap.tyreWear?.rl ?? lap.tireWear?.rl ?? null;
+    lap.tyreWearRL ??
+    lap.tireWearRL ??
+    lap.wearRL ??
+    lap.wear_rl ??
+    lap.tyreWear?.rl ??
+    lap.tireWear?.rl ??
+    null;
 
   const rr =
     lap.tyreRRCondition ??
     lap.tyreRRcondition ??
-    lap.tyreWearRR ?? lap.tireWearRR ?? lap.wearRR ?? lap.wear_rr ??
-    lap.tyreWear?.rr ?? lap.tireWear?.rr ?? null;
+    lap.tyreWearRR ??
+    lap.tireWearRR ??
+    lap.wearRR ??
+    lap.wear_rr ??
+    lap.tyreWear?.rr ??
+    lap.tireWear?.rr ??
+    null;
 
   if (fl == null && fr == null && rl == null && rr == null) return null;
 
@@ -147,13 +163,7 @@ function parseTyreWear(lap: Record<string, any>): TyreWear | null {
  */
 function extractMaxSpeedRaw(lap: Record<string, any>): unknown {
   return (
-    lap.topSpeedKph ??
-    lap.topSpeed ??
-    lap.maxSpeed ??
-    lap.maxSpeedKmh ??
-    lap.top_speed_kph ??
-    lap.top_speed ??
-    null
+    lap.topSpeedKph ?? lap.topSpeed ?? lap.maxSpeed ?? lap.maxSpeedKmh ?? lap.top_speed_kph ?? lap.top_speed ?? null
   );
 }
 
@@ -161,14 +171,7 @@ function extractMaxSpeedRaw(lap: Record<string, any>): unknown {
  * SD-19: Извлекает «сырое» значение остатка топлива из lap-записи.
  */
 function extractFuelRaw(lap: Record<string, any>): unknown {
-  return (
-    lap.fuelLevel ??
-    lap.fuelRemaining ??
-    lap.fuel ??
-    lap.fuel_level ??
-    lap.fuel_remaining ??
-    null
-  );
+  return lap.fuelLevel ?? lap.fuelRemaining ?? lap.fuel ?? lap.fuel_level ?? lap.fuel_remaining ?? null;
 }
 
 /**
@@ -186,15 +189,21 @@ function parseTyreType(lap: Record<string, any>): string {
     lap.tyreFL ??
     lap.rearCompound ??
     lap.tyreFR ??
-    lap.tyreType ?? lap.tireType ?? lap.tyreCompound ?? lap.tireCompound ??
-    lap.compound ?? lap.tyre ?? lap.tire ?? null;
+    lap.tyreType ??
+    lap.tireType ??
+    lap.tyreCompound ??
+    lap.tireCompound ??
+    lap.compound ??
+    lap.tyre ??
+    lap.tire ??
+    null;
 
-  if (raw == null || raw === '') return '—';
+  if (raw == null || raw === "") return "—";
   const str = String(raw);
   // Часть логов хранит компаунд в формате «0,Medium» (индекс,название) —
   // берём часть после запятой, если она есть.
-  const cleaned = str.includes(',') ? str.split(',').pop()!.trim() : str.trim();
-  return cleaned || '—';
+  const cleaned = str.includes(",") ? str.split(",").pop()!.trim() : str.trim();
+  return cleaned || "—";
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -202,23 +211,23 @@ function parseTyreType(lap: Record<string, any>): string {
 // ────────────────────────────────────────────────────────────────────────────
 
 const SESSION_TYPE_MAP: Record<string, NormalizedSessionType> = {
-  race: 'race',
-  race1: 'race',
-  race2: 'race',
-  qualify: 'qualify',
-  qualifying: 'qualify',
-  superpole: 'superpole',
-  'superpole race': 'race',
-  warmup: 'warmup',
-  practice: 'practice',
-  fp1: 'practice',
-  fp2: 'practice',
-  fp3: 'practice',
+  race: "race",
+  race1: "race",
+  race2: "race",
+  qualify: "qualify",
+  qualifying: "qualify",
+  superpole: "superpole",
+  "superpole race": "race",
+  warmup: "warmup",
+  practice: "practice",
+  fp1: "practice",
+  fp2: "practice",
+  fp3: "practice",
 };
 
 export function normalizeSessionType(raw: string): NormalizedSessionType {
   const key = raw.trim().toLowerCase();
-  return SESSION_TYPE_MAP[key] ?? 'practice';
+  return SESSION_TYPE_MAP[key] ?? "practice";
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -238,7 +247,7 @@ type AnyLap = Record<string, any>;
 function driverKey(lap: AnyLap): string {
   const id = lap.driverId ?? lap.driver_id;
   if (id != null && Number.isFinite(Number(id))) return `id:${id}`;
-  return `name:${String(lap.driverName ?? lap.driver ?? 'Unknown')}`;
+  return `name:${String(lap.driverName ?? lap.driver ?? "Unknown")}`;
 }
 
 /** Является ли круг пит-лапом (учитываем оба варианта имени поля из разных источников). */
@@ -248,13 +257,13 @@ function isPitLap(lap: AnyLap): boolean {
 
 export function buildHeroStats(session: unknown): SessionHeroStatItem[] {
   const s = session as AnySession;
-  const normalized = normalizeSessionType(String(s?.sessionType ?? ''));
+  const normalized = normalizeSessionType(String(s?.sessionType ?? ""));
   const stats: SessionHeroStatItem[] = [];
 
   const winner: string | undefined = s?.winner ?? s?.results?.[0]?.driverName;
   if (winner) {
     stats.push({
-      label: normalized === 'race' ? 'Победитель' : 'Polesitter',
+      label: normalized === "race" ? "Победитель" : "Polesitter",
       value: winner,
       subLabel: s?.results?.[0]?.teamName ?? null,
     });
@@ -264,15 +273,15 @@ export function buildHeroStats(session: unknown): SessionHeroStatItem[] {
   const fastestDriver: string | undefined = s?.fastestLap?.driverName;
   if (fastestLap) {
     stats.push({
-      label: 'Fastest Lap',
+      label: "Fastest Lap",
       value: fastestLap,
       subLabel: fastestDriver ?? null,
     });
   }
 
   const totalLaps: number | undefined = s?.totalLaps ?? s?.laps;
-  if (typeof totalLaps === 'number') {
-    stats.push({ label: 'Кругов', value: String(totalLaps) });
+  if (typeof totalLaps === "number") {
+    stats.push({ label: "Кругов", value: String(totalLaps) });
   }
 
   return stats;
@@ -288,24 +297,23 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
 
   let minBestLapMs: number | null = null;
   for (const r of rawResults) {
-    const ms = typeof r.bestLapMs === 'number' ? r.bestLapMs : null;
+    const ms = typeof r.bestLapMs === "number" ? r.bestLapMs : null;
     if (ms !== null && ms > 0 && (minBestLapMs === null || ms < minBestLapMs)) {
       minBestLapMs = ms;
     }
   }
 
   return rawResults.map((r, idx) => {
-    const bestLapMs = typeof r.bestLapMs === 'number' && r.bestLapMs > 0
-      ? r.bestLapMs
-      : null;
+    const bestLapMs = typeof r.bestLapMs === "number" && r.bestLapMs > 0 ? r.bestLapMs : null;
 
-    const bestLapTime = bestLapMs !== null
-      ? formatLapMs(bestLapMs)
-      : r.bestLapTime
-        ? String(r.bestLapTime)
-        : typeof r.bestLapTimeSeconds === 'number'
-          ? formatLapTime(r.bestLapTimeSeconds)
-          : '—';
+    const bestLapTime =
+      bestLapMs !== null
+        ? formatLapMs(bestLapMs)
+        : r.bestLapTime
+          ? String(r.bestLapTime)
+          : typeof r.bestLapTimeSeconds === "number"
+            ? formatLapTime(r.bestLapTimeSeconds)
+            : "—";
 
     let gapFormatted: string | null = null;
     if (r.gap != null) {
@@ -321,8 +329,7 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       intervalFormatted = intervalVal > 0 ? formatGap(intervalVal) : null;
     } else if (idx > 0 && bestLapMs !== null) {
       const prevMs =
-        typeof rawResults[idx - 1].bestLapMs === 'number' &&
-        rawResults[idx - 1].bestLapMs > 0
+        typeof rawResults[idx - 1].bestLapMs === "number" && rawResults[idx - 1].bestLapMs > 0
           ? (rawResults[idx - 1].bestLapMs as number)
           : null;
       if (prevMs !== null && bestLapMs > prevMs) {
@@ -331,32 +338,27 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
     }
 
     const pitStops: number | null =
-      typeof r.pitStops === 'number' ? r.pitStops :
-      typeof r.pitstops === 'number' ? r.pitstops :
-      null;
+      typeof r.pitStops === "number" ? r.pitStops : typeof r.pitstops === "number" ? r.pitstops : null;
 
     const totalLaps: number | null =
-      typeof r.totalLaps === 'number' ? r.totalLaps :
-      typeof r.laps === 'number' ? r.laps :
-      null;
+      typeof r.totalLaps === "number" ? r.totalLaps : typeof r.laps === "number" ? r.laps : null;
 
     const teamName: string | null =
-      (r.teamName && r.teamName !== '—') ? r.teamName :
-      (r.team && r.team !== '—') ? r.team :
-      null;
+      r.teamName && r.teamName !== "—" ? r.teamName : r.team && r.team !== "—" ? r.team : null;
 
     const finishStatus: string | null =
-      (r.finishStatus && r.finishStatus.trim()) ? r.finishStatus.trim() :
-      (r.status && r.status.trim()) ? r.status.trim() :
-      null;
+      r.finishStatus && r.finishStatus.trim()
+        ? r.finishStatus.trim()
+        : r.status && r.status.trim()
+          ? r.status.trim()
+          : null;
 
-    const carClass: string | null =
-      (r.carClass && String(r.carClass).trim()) ? String(r.carClass).trim() : null;
+    const carClass: string | null = r.carClass && String(r.carClass).trim() ? String(r.carClass).trim() : null;
 
     return {
       position: r.position ?? idx + 1,
-      driverName: String(r.driverName ?? r.driver ?? '—'),
-      carNumber: r.carNumber ?? r.number ?? '',
+      driverName: String(r.driverName ?? r.driver ?? "—"),
+      carNumber: r.carNumber ?? r.number ?? "",
       teamName,
       carModel: r.carModel ?? r.car ?? null,
       bestLapTime,
@@ -381,8 +383,8 @@ export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
   for (const raw of laps) {
     const lap = raw as AnyLap;
     const key = driverKey(lap);
-    const driverName = String(lap.driverName ?? lap.driver ?? 'Unknown');
-    const carNumber = lap.carNumber ?? lap.number ?? '';
+    const driverName = String(lap.driverName ?? lap.driver ?? "Unknown");
+    const carNumber = lap.carNumber ?? lap.number ?? "";
     const lapNum = Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0);
     const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? 0);
 
@@ -425,8 +427,8 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     const lap = raw as AnyLap;
     if (isPitLap(lap)) continue; // пит-лапы не должны выигрывать "лучший сектор"
     const key = driverKey(lap);
-    const driverName = String(lap.driverName ?? lap.driver ?? 'Unknown');
-    const carNumber = lap.carNumber ?? lap.number ?? '';
+    const driverName = String(lap.driverName ?? lap.driver ?? "Unknown");
+    const carNumber = lap.carNumber ?? lap.number ?? "";
 
     const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
     const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
@@ -464,11 +466,11 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     return {
       driverName,
       carNumber,
-      bestSectors: [
-        formatLapTime(bestS[0]),
-        formatLapTime(bestS[1]),
-        formatLapTime(bestS[2]),
-      ] as [string, string, string],
+      bestSectors: [formatLapTime(bestS[0]), formatLapTime(bestS[1]), formatLapTime(bestS[2])] as [
+        string,
+        string,
+        string,
+      ],
       theoreticalBest: formatLapTime(theoreticalSeconds),
       sectorAbsoluteBest,
       hasAbsoluteBest: sectorAbsoluteBest.some(Boolean),
@@ -494,8 +496,8 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   for (const raw of laps) {
     const lap = raw as AnyLap;
     const key = driverKey(lap);
-    const driverName = String(lap.driverName ?? lap.driver ?? 'Unknown');
-    const carNumber = lap.carNumber ?? lap.number ?? '';
+    const driverName = String(lap.driverName ?? lap.driver ?? "Unknown");
+    const carNumber = lap.carNumber ?? lap.number ?? "";
     const isPlayer: number | null = lap.isPlayer ?? null;
     if (!map.has(key)) map.set(key, { driverName, carNumber, isPlayer, rawLaps: [] });
     map.get(key)!.rawLaps.push(lap);
@@ -539,11 +541,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
     }
 
     const lapRows: DriverLapRowView[] = rawLaps
-      .sort(
-        (a, b) =>
-          Number(a.lapNumber ?? a.lapNum ?? a.lap ?? 0) -
-          Number(b.lapNumber ?? b.lapNum ?? b.lap ?? 0),
-      )
+      .sort((a, b) => Number(a.lapNumber ?? a.lapNum ?? a.lap ?? 0) - Number(b.lapNumber ?? b.lapNum ?? b.lap ?? 0))
       .map((lap) => {
         const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
         const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
@@ -556,15 +554,13 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 
         return {
           lapNumber: Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0),
-          lapTime: Number.isFinite(timeSeconds) ? formatLapTime(timeSeconds) : '—',
-          isPersonalBest:
-            Number.isFinite(timeSeconds) && timeSeconds === personalBestSeconds,
-          isOverallBest:
-            Number.isFinite(timeSeconds) && timeSeconds === overallBestSeconds,
+          lapTime: Number.isFinite(timeSeconds) ? formatLapTime(timeSeconds) : "—",
+          isPersonalBest: Number.isFinite(timeSeconds) && timeSeconds === personalBestSeconds,
+          isOverallBest: Number.isFinite(timeSeconds) && timeSeconds === overallBestSeconds,
           sectors: [
-            Number.isFinite(s1) ? formatLapTime(s1) : '—',
-            Number.isFinite(s2) ? formatLapTime(s2) : '—',
-            Number.isFinite(s3) ? formatLapTime(s3) : '—',
+            Number.isFinite(s1) ? formatLapTime(s1) : "—",
+            Number.isFinite(s2) ? formatLapTime(s2) : "—",
+            Number.isFinite(s3) ? formatLapTime(s3) : "—",
           ] as [string, string, string],
           // SD-21: Личный лучший / абсолютный лучший сектор сессии, по каждому сектору
           sectorsPersonalBest: [
@@ -597,15 +593,10 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
     // но если все круги были пит-лапами, используем все круги как fallback.
     const nonPitTimedLaps = timedLaps.filter((lap: AnyLap) => !isPitLap(lap));
     const lapsForAvg = nonPitTimedLaps.length > 0 ? nonPitTimedLaps : timedLaps;
-    const lapSeconds: number[] = lapsForAvg.map((lap: AnyLap) =>
-      Number(lap.lapTimeSeconds ?? lap.time ?? NaN),
-    );
+    const lapSeconds: number[] = lapsForAvg.map((lap: AnyLap) => Number(lap.lapTimeSeconds ?? lap.time ?? NaN));
     const avgSeconds =
-      lapSeconds.length > 0
-        ? lapSeconds.reduce((sum: number, t: number) => sum + t, 0) / lapSeconds.length
-        : NaN;
-    const worstSeconds =
-      lapSeconds.length > 0 ? Math.max(...lapSeconds) : NaN;
+      lapSeconds.length > 0 ? lapSeconds.reduce((sum: number, t: number) => sum + t, 0) / lapSeconds.length : NaN;
+    const worstSeconds = lapSeconds.length > 0 ? Math.max(...lapSeconds) : NaN;
 
     let maxSpeedRawAgg = -Infinity;
     const tyreTypesUsed = new Set<string>();
@@ -613,32 +604,23 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
       const speed = Number(extractMaxSpeedRaw(lap));
       if (Number.isFinite(speed) && speed > maxSpeedRawAgg) maxSpeedRawAgg = speed;
       const tyre = parseTyreType(lap);
-      if (tyre !== '—') tyreTypesUsed.add(tyre);
+      if (tyre !== "—") tyreTypesUsed.add(tyre);
     }
 
     const fuelStartRaw = sortedRawLaps.length > 0 ? extractFuelRaw(sortedRawLaps[0]) : null;
-    const fuelEndRaw =
-      sortedRawLaps.length > 0
-        ? extractFuelRaw(sortedRawLaps[sortedRawLaps.length - 1])
-        : null;
+    const fuelEndRaw = sortedRawLaps.length > 0 ? extractFuelRaw(sortedRawLaps[sortedRawLaps.length - 1]) : null;
 
-    const pitLapsCount = sortedRawLaps.filter((lap: AnyLap) =>
-      Boolean(lap.isPitLap ?? lap.pitLap ?? false),
-    ).length;
+    const pitLapsCount = sortedRawLaps.filter((lap: AnyLap) => Boolean(lap.isPitLap ?? lap.pitLap ?? false)).length;
 
     groups.push({
       driverName,
       carNumber,
       isPlayer,
-      bestLapTime: Number.isFinite(personalBestSeconds)
-        ? formatLapTime(personalBestSeconds)
-        : '—',
+      bestLapTime: Number.isFinite(personalBestSeconds) ? formatLapTime(personalBestSeconds) : "—",
       laps: lapRows,
       avgLapTime: formatLapTime(avgSeconds),
       worstLapTime: formatLapTime(worstSeconds),
-      maxSpeedObserved: formatSpeed(
-        Number.isFinite(maxSpeedRawAgg) ? maxSpeedRawAgg : null,
-      ),
+      maxSpeedObserved: formatSpeed(Number.isFinite(maxSpeedRawAgg) ? maxSpeedRawAgg : null),
       tyreTypesUsed: Array.from(tyreTypesUsed),
       fuelStart: formatFuelPercent(fuelStartRaw),
       fuelEnd: formatFuelPercent(fuelEndRaw),
@@ -659,9 +641,9 @@ export function buildTabs(
   labels: { results: string; laps: string; lapProgress: string },
 ): SessionTabItem[] {
   const allTabs: SessionTabItem[] = [
-    { key: 'results', label: labels.results },
-    { key: 'laps', label: labels.laps, requiresLapData: true },
-    { key: 'lapProgress', label: labels.lapProgress, requiresLapData: true },
+    { key: "results", label: labels.results },
+    { key: "laps", label: labels.laps, requiresLapData: true },
+    { key: "lapProgress", label: labels.lapProgress, requiresLapData: true },
   ];
   return allTabs.filter((t) => !t.requiresLapData || hasLapData);
 }

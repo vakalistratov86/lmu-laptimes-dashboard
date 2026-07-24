@@ -1,14 +1,23 @@
 import {
-  tracks, drivers, lapTimes, sessions, sessionResults, sessionIncidents, sessionTrackLimits,
-} from '@shared/schema';
+  tracks,
+  drivers,
+  lapTimes,
+  sessions,
+  sessionResults,
+  sessionIncidents,
+  sessionTrackLimits,
+} from "@shared/schema";
 import type {
-  Track, InsertTrack,
+  Track,
+  InsertTrack,
   Driver,
   DriverEnriched,
   LapTimeEnriched,
-  Session, SessionEnriched, SessionResult,
+  Session,
+  SessionEnriched,
+  SessionResult,
   DriverIncidentsResponse,
-} from '@shared/schema';
+} from "@shared/schema";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { eq, and, or, desc, inArray, sql as sqlExpr } from "drizzle-orm";
@@ -81,9 +90,8 @@ export class DatabaseStorage implements IStorage {
    */
   async getDrivers(pagination?: Pagination): Promise<DriverEnriched[]> {
     const base = db.select().from(drivers).orderBy(drivers.id);
-    const allDrivers = pagination?.limit != null
-      ? await base.limit(pagination.limit).offset(pagination.offset ?? 0)
-      : await base;
+    const allDrivers =
+      pagination?.limit != null ? await base.limit(pagination.limit).offset(pagination.offset ?? 0) : await base;
 
     if (allDrivers.length === 0) return [];
 
@@ -122,16 +130,16 @@ export class DatabaseStorage implements IStorage {
    */
   async getDriverIncidents(driverId: number): Promise<DriverIncidentsResponse> {
     const [incRowsAll, tlRowsAll] = await Promise.all([
-      db.select().from(sessionIncidents).where(
-        or(eq(sessionIncidents.driverId, driverId), eq(sessionIncidents.targetDriverId, driverId)),
-      ),
+      db
+        .select()
+        .from(sessionIncidents)
+        .where(or(eq(sessionIncidents.driverId, driverId), eq(sessionIncidents.targetDriverId, driverId))),
       db.select().from(sessionTrackLimits).where(eq(sessionTrackLimits.driverId, driverId)),
     ]);
 
-    const sessionIds = Array.from(new Set([
-      ...incRowsAll.map((r) => r.sessionId),
-      ...tlRowsAll.map((r) => r.sessionId),
-    ]));
+    const sessionIds = Array.from(
+      new Set([...incRowsAll.map((r) => r.sessionId), ...tlRowsAll.map((r) => r.sessionId)]),
+    );
 
     const sessionRows = sessionIds.length
       ? await db.select().from(sessions).where(inArray(sessions.id, sessionIds))
@@ -151,18 +159,22 @@ export class DatabaseStorage implements IStorage {
     // Только "другая сторона" инцидентов — а не вся таблица drivers на
     // каждый вызов профиля пилота (тот же класс full-table-scan, что и
     // findOrCreateDriver() в importWorker.ts до фикса #119-121).
-    const otherDriverIds = Array.from(new Set(
-      incRows.flatMap((r) => {
-        const otherId = r.driverId === driverId ? r.targetDriverId : r.driverId;
-        return otherId != null ? [otherId] : [];
-      }),
-    ));
+    const otherDriverIds = Array.from(
+      new Set(
+        incRows.flatMap((r) => {
+          const otherId = r.driverId === driverId ? r.targetDriverId : r.driverId;
+          return otherId != null ? [otherId] : [];
+        }),
+      ),
+    );
 
     const trackIds = Array.from(new Set(sessionRows.map((s) => s.trackId)));
 
     const [trackRows, driverRows] = await Promise.all([
       trackIds.length ? db.select().from(tracks).where(inArray(tracks.id, trackIds)) : Promise.resolve([]),
-      otherDriverIds.length ? db.select().from(drivers).where(inArray(drivers.id, otherDriverIds)) : Promise.resolve([]),
+      otherDriverIds.length
+        ? db.select().from(drivers).where(inArray(drivers.id, otherDriverIds))
+        : Promise.resolve([]),
     ]);
 
     const trackMap = new Map(trackRows.map((t) => [t.id, t]));
@@ -247,14 +259,17 @@ export class DatabaseStorage implements IStorage {
 
     const rows = await query;
 
-    return rows.map(({ lap, sessionCourse, trackName, driverName, driverTeam, isPlayer }) => ({
-      ...lap,
-      trackName: trackName ?? "—",
-      driverName: driverName ?? "—",
-      team: driverTeam ?? "—",
-      isPlayer: isPlayer ?? null,
-      sessionCourse: sessionCourse ?? null,
-    } satisfies LapTimeEnriched));
+    return rows.map(
+      ({ lap, sessionCourse, trackName, driverName, driverTeam, isPlayer }) =>
+        ({
+          ...lap,
+          trackName: trackName ?? "—",
+          driverName: driverName ?? "—",
+          team: driverTeam ?? "—",
+          isPlayer: isPlayer ?? null,
+          sessionCourse: sessionCourse ?? null,
+        }) satisfies LapTimeEnriched,
+    );
   }
 
   /**
@@ -305,17 +320,22 @@ export class DatabaseStorage implements IStorage {
         .leftJoin(sessionResults, sessionResultsJoin);
 
     const rows = conditions.length
-      ? await baseQuery().where(and(...conditions)).orderBy(...orderBy)
+      ? await baseQuery()
+          .where(and(...conditions))
+          .orderBy(...orderBy)
       : await baseQuery().orderBy(...orderBy);
 
-    return rows.map(({ lap, sessionCourse, trackName, driverName, driverTeam, isPlayer }) => ({
-      ...lap,
-      trackName: trackName ?? "—",
-      driverName: driverName ?? "—",
-      team: driverTeam ?? "—",
-      isPlayer: isPlayer ?? null,
-      sessionCourse: sessionCourse ?? null,
-    } satisfies LapTimeEnriched));
+    return rows.map(
+      ({ lap, sessionCourse, trackName, driverName, driverTeam, isPlayer }) =>
+        ({
+          ...lap,
+          trackName: trackName ?? "—",
+          driverName: driverName ?? "—",
+          team: driverTeam ?? "—",
+          isPlayer: isPlayer ?? null,
+          sessionCourse: sessionCourse ?? null,
+        }) satisfies LapTimeEnriched,
+    );
   }
 
   /**
@@ -363,10 +383,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(drivers, eq(sessionResults.driverId, drivers.id))
       .where(inArray(sessionResults.sessionId, sessionIds));
 
-    const resultsBySession = new Map<
-      number,
-      Array<SessionResult & { driverName: string; teamName: string | null }>
-    >();
+    const resultsBySession = new Map<number, Array<SessionResult & { driverName: string; teamName: string | null }>>();
     for (const { result, driverName } of resultRows) {
       const list = resultsBySession.get(result.sessionId) ?? [];
       list.push({
@@ -413,7 +430,7 @@ const CATALOG_TRACKS: InsertTrack[] = [
   { name: "Silverstone", country: "Великобритания", lengthKm: 5.891, turns: 18, layout: "GP" },
   { name: "Barcelona", country: "Испания", lengthKm: 4.657, turns: 14, layout: "GP" },
   { name: "Paul Ricard", country: "Франция", lengthKm: 5.842, turns: 15, layout: "GP" },
-  { name: "Lusail", country: "Катар", lengthKm: 5.380, turns: 16, layout: "GP" },
+  { name: "Lusail", country: "Катар", lengthKm: 5.38, turns: 16, layout: "GP" },
 ];
 
 // Тот же допуск, что и TRACK_LENGTH_MATCH_TOLERANCE_KM в importWorker.ts —
@@ -439,9 +456,7 @@ export async function ensureCatalogTracks() {
 
   const missing = CATALOG_TRACKS.filter((catalogTrack) => {
     const sameName = existing.filter((t) => t.name.toLowerCase() === catalogTrack.name.toLowerCase());
-    return !sameName.some(
-      (t) => Math.abs(t.lengthKm - catalogTrack.lengthKm) < CATALOG_LENGTH_MATCH_TOLERANCE_KM,
-    );
+    return !sameName.some((t) => Math.abs(t.lengthKm - catalogTrack.lengthKm) < CATALOG_LENGTH_MATCH_TOLERANCE_KM);
   });
   if (missing.length === 0) return;
 

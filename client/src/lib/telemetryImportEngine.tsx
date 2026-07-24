@@ -134,9 +134,12 @@ function useTelemetryImportEngineInternal(): TelemetryImportEngineState {
     });
   }, []);
 
-  const addLog = useCallback((level: TelemetryLogLevel, text: string) => {
-    setLog((prev) => [...prev, { ts: Date.now(), level, text }]);
-  }, [setLog]);
+  const addLog = useCallback(
+    (level: TelemetryLogLevel, text: string) => {
+      setLog((prev) => [...prev, { ts: Date.now(), level, text }]);
+    },
+    [setLog],
+  );
 
   const clearLog = useCallback(() => {
     setLogState([]);
@@ -169,14 +172,20 @@ function useTelemetryImportEngineInternal(): TelemetryImportEngineState {
         try {
           const data = await uploadTelemetryFile(file);
           if (data.ok) {
-            addLog("ok", t("telemetry.logImportOk", {
-              name: file.name,
-              channels: data.channelCount ?? 0,
-              samples: data.sampleCount ?? 0,
-            }));
+            addLog(
+              "ok",
+              t("telemetry.logImportOk", {
+                name: file.name,
+                channels: data.channelCount ?? 0,
+                samples: data.sampleCount ?? 0,
+              }),
+            );
             setCounters((c) => ({ ...c, queued: c.queued - 1, imported: c.imported + 1 }));
           } else {
-            addLog("skip", t("telemetry.logImportSkip", { name: file.name, msg: trimErrorMessage(data.message ?? "") }));
+            addLog(
+              "skip",
+              t("telemetry.logImportSkip", { name: file.name, msg: trimErrorMessage(data.message ?? "") }),
+            );
             setCounters((c) => ({ ...c, queued: c.queued - 1, skipped: c.skipped + 1 }));
           }
           seen.add(fileKey(file));
@@ -191,7 +200,7 @@ function useTelemetryImportEngineInternal(): TelemetryImportEngineState {
       setMode("idle");
       addLog("info", t("telemetry.logImportDone"));
     },
-    [addLog, setCounters, t]
+    [addLog, setCounters, t],
   );
 
   const clearTelemetry = useCallback(async () => {
@@ -224,14 +233,18 @@ function useTelemetryImportEngineInternal(): TelemetryImportEngineState {
   async function pickFolderFSA() {
     if (!FSA_SUPPORTED) return;
     try {
-      const handle = await (window as unknown as Window & {
-        showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
-      }).showDirectoryPicker();
+      const handle = await (
+        window as unknown as Window & {
+          showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
+        }
+      ).showDirectoryPicker();
       setDirHandle(handle);
       setDirName(handle.name);
-      const perm = await (handle as FileSystemDirectoryHandle & {
-        queryPermission: (d: { mode: string }) => Promise<PermissionState>;
-      }).queryPermission({ mode: "read" });
+      const perm = await (
+        handle as FileSystemDirectoryHandle & {
+          queryPermission: (d: { mode: string }) => Promise<PermissionState>;
+        }
+      ).queryPermission({ mode: "read" });
       setDirPerm(perm);
       addLog("info", t("telemetry.logFolderPicked", { name: handle.name }));
     } catch (e: unknown) {
@@ -244,9 +257,11 @@ function useTelemetryImportEngineInternal(): TelemetryImportEngineState {
   async function requestPermission(): Promise<boolean> {
     if (!dirHandle) return false;
     try {
-      const perm = await (dirHandle as FileSystemDirectoryHandle & {
-        requestPermission: (d: { mode: string }) => Promise<PermissionState>;
-      }).requestPermission({ mode: "read" });
+      const perm = await (
+        dirHandle as FileSystemDirectoryHandle & {
+          requestPermission: (d: { mode: string }) => Promise<PermissionState>;
+        }
+      ).requestPermission({ mode: "read" });
       setDirPerm(perm);
       return perm === "granted";
     } catch {
@@ -269,9 +284,11 @@ function useTelemetryImportEngineInternal(): TelemetryImportEngineState {
         }
       }
       const files: File[] = [];
-      for await (const [, entry] of (dirHandle as FileSystemDirectoryHandle & {
-        entries: () => AsyncIterable<[string, FileSystemHandle]>;
-      }).entries()) {
+      for await (const [, entry] of (
+        dirHandle as FileSystemDirectoryHandle & {
+          entries: () => AsyncIterable<[string, FileSystemHandle]>;
+        }
+      ).entries()) {
         if (entry.kind === "file" && entry.name.toLowerCase().endsWith(".duckdb")) {
           files.push(await (entry as FileSystemFileHandle).getFile());
         }
@@ -283,7 +300,7 @@ function useTelemetryImportEngineInternal(): TelemetryImportEngineState {
       addLog("error", t("telemetry.logScanError", { msg: e instanceof Error ? e.message : String(e) }));
       setMode("idle");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirHandle, dirPerm, importFiles, t]);
 
   return {

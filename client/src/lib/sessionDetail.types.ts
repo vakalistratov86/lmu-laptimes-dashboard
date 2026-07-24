@@ -9,15 +9,10 @@ import type {
   LapProgressSeries,
   DriverSectorSummary,
   DriverLapsGroupView,
-} from '@/components/session-detail/types';
+} from "@/components/session-detail/types";
 
 /** Нормализованный тип сессии, используемый в заголовке и UX-логике. */
-export type NormalizedSessionType =
-  | 'race'
-  | 'qualify'
-  | 'superpole'
-  | 'warmup'
-  | 'practice';
+export type NormalizedSessionType = "race" | "qualify" | "superpole" | "warmup" | "practice";
 
 /** Полная view-model, которую ожидает страница SessionDetail. */
 export interface SessionDetailViewModel {

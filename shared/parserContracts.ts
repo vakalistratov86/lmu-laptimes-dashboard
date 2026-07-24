@@ -4,8 +4,8 @@
  */
 
 // Поддерживаемые версии формата лога
-export const SUPPORTED_LOG_VERSIONS = ['1.0', '1.1', '2.0'] as const;
-export type LogVersion = typeof SUPPORTED_LOG_VERSIONS[number];
+export const SUPPORTED_LOG_VERSIONS = ["1.0", "1.1", "2.0"] as const;
+export type LogVersion = (typeof SUPPORTED_LOG_VERSIONS)[number];
 
 /**
  * Определяет версию формата лога по содержимому файла.
@@ -16,16 +16,16 @@ export type LogVersion = typeof SUPPORTED_LOG_VERSIONS[number];
  * v1.0 — базовый rFactor/LMU формат без Stream
  */
 export function detectLogVersion(rawContent: string): LogVersion | null {
-  if (!rawContent.includes('<RaceResults>') && !rawContent.includes('rFactorXML')) {
+  if (!rawContent.includes("<RaceResults>") && !rawContent.includes("rFactorXML")) {
     return null;
   }
 
-  const hasStream = rawContent.includes('<Stream>');
+  const hasStream = rawContent.includes("<Stream>");
   const hasUnixDateTime = /<DateTime>\d+<\/DateTime>/.test(rawContent);
 
-  if (hasStream && hasUnixDateTime) return '2.0';
-  if (hasStream) return '1.1';
-  return '1.0';
+  if (hasStream && hasUnixDateTime) return "2.0";
+  if (hasStream) return "1.1";
+  return "1.0";
 }
 
 /**
@@ -35,19 +35,18 @@ export function detectLogVersion(rawContent: string): LogVersion | null {
 export function assertSupportedVersion(version: LogVersion | null, rawContent: string): LogVersion {
   if (version === null) {
     const err = new Error(
-      'Не удалось определить версию формата лога. ' +
-      'Убедитесь, что файл является результатом сессии LMU/rFactor (ожидается тег <RaceResults>).'
+      "Не удалось определить версию формата лога. " +
+        "Убедитесь, что файл является результатом сессии LMU/rFactor (ожидается тег <RaceResults>).",
     );
-    (err as any).code = 'UNSUPPORTED_LOG_VERSION';
+    (err as any).code = "UNSUPPORTED_LOG_VERSION";
     throw err;
   }
 
   if (!(SUPPORTED_LOG_VERSIONS as readonly string[]).includes(version)) {
     const err = new Error(
-      `Неподдерживаемая версия формата лога: '${version}'. ` +
-      `Поддерживаются: ${SUPPORTED_LOG_VERSIONS.join(', ')}.`
+      `Неподдерживаемая версия формата лога: '${version}'. ` + `Поддерживаются: ${SUPPORTED_LOG_VERSIONS.join(", ")}.`,
     );
-    (err as any).code = 'UNSUPPORTED_LOG_VERSION';
+    (err as any).code = "UNSUPPORTED_LOG_VERSION";
     throw err;
   }
 

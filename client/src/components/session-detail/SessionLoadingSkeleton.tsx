@@ -1,7 +1,7 @@
 /**
  * SD-9: Скелетон загрузки страницы SessionDetail.
  */
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function SessionLoadingSkeleton() {
   return (
@@ -33,10 +33,7 @@ export function SessionLoadingSkeleton() {
       <div className="overflow-hidden rounded-lg border border-border">
         <Skeleton className="h-10 w-full rounded-none" />
         {[...Array(6)].map((_, i) => (
-          <Skeleton
-            key={i}
-            className="h-12 w-full rounded-none border-t border-border/40"
-          />
+          <Skeleton key={i} className="h-12 w-full rounded-none border-t border-border/40" />
         ))}
       </div>
     </div>

@@ -82,9 +82,7 @@ async function parseTelemetryMetadata(conn: DuckDBConnection): Promise<Telemetry
     metadata[String(row.key)] = row.value == null ? "" : String(row.value);
   }
 
-  const channelsListReader = await conn.runAndReadAll(
-    `SELECT channelName, frequency, unit FROM channelsList`
-  );
+  const channelsListReader = await conn.runAndReadAll(`SELECT channelName, frequency, unit FROM channelsList`);
   const channelDefsRaw = channelsListReader.getRowObjectsJS().map((r) => ({
     name: String(r.channelName),
     frequencyHz: toNumberOrNull(r.frequency),
@@ -131,7 +129,7 @@ async function parseTelemetryMetadata(conn: DuckDBConnection): Promise<Telemetry
 export async function* streamChannelRows(
   conn: DuckDBConnection,
   def: TelemetryChannelDef,
-  recordingBaseTs: number | null
+  recordingBaseTs: number | null,
 ): AsyncGenerator<TelemetrySampleRow[]> {
   const result = await conn.stream(`SELECT * FROM ${quoteIdent(def.name)}`);
   const cols = result.columnNames();
@@ -149,11 +147,7 @@ export async function* streamChannelRows(
     for (const row of rowsBatch) {
       buffer.push({
         seq,
-        ts: hasTs
-          ? toNumberOrNull(row.ts)
-          : syntheticTs
-            ? syntheticTs.baseTs + seq / syntheticTs.frequencyHz
-            : null,
+        ts: hasTs ? toNumberOrNull(row.ts) : syntheticTs ? syntheticTs.baseTs + seq / syntheticTs.frequencyHz : null,
         value1: hasMulti ? toNumberOrNull(row.value1) : toNumberOrNull(row.value),
         value2: hasMulti ? toNumberOrNull(row.value2) : null,
         value3: hasMulti ? toNumberOrNull(row.value3) : null,
@@ -178,7 +172,7 @@ export async function* streamChannelRows(
  */
 export async function withTelemetryFile<T>(
   filePath: string,
-  fn: (ctx: { conn: DuckDBConnection; meta: TelemetryFileMeta }) => Promise<T>
+  fn: (ctx: { conn: DuckDBConnection; meta: TelemetryFileMeta }) => Promise<T>,
 ): Promise<T> {
   const instance = await DuckDBInstance.create(filePath, { access_mode: "READ_ONLY" });
   try {

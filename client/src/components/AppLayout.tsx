@@ -1,5 +1,18 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Trophy, Flag, ListChecks, Upload, Moon, Sun, Menu, X, CalendarDays, Activity, User } from "lucide-react";
+import {
+  LayoutDashboard,
+  Trophy,
+  Flag,
+  ListChecks,
+  Upload,
+  Moon,
+  Sun,
+  Menu,
+  X,
+  CalendarDays,
+  Activity,
+  User,
+} from "lucide-react";
 import { Logo } from "./Logo";
 import { useState, useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -36,8 +49,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const [location] = useLocation();
   const { t } = useLanguage();
   const NAV = useNav();
-  const isActive = (href: string) =>
-    href === "/" ? location === "/" : location.startsWith(href);
+  const isActive = (href: string) => (href === "/" ? location === "/" : location.startsWith(href));
 
   return (
     <>
@@ -47,9 +59,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <div className="font-display text-base font-bold tracking-tight text-sidebar-foreground">
             LMU<span className="text-primary"> Dashboard</span>
           </div>
-          <div className="text-[11px] uppercase tracking-widest text-muted-foreground">
-            {t("nav.tagline")}
-          </div>
+          <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{t("nav.tagline")}</div>
         </div>
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-3">
@@ -64,9 +74,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               onClick={onNavigate}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors hover-elevate",
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-sidebar-foreground/80 hover:text-sidebar-foreground"
+                active ? "bg-primary/10 text-primary" : "text-sidebar-foreground/80 hover:text-sidebar-foreground",
               )}
             >
               <Icon style={{ width: 18, height: 18 }} className="shrink-0" />
@@ -98,9 +106,7 @@ function LanguageSwitcher() {
           aria-pressed={locale === opt}
           className={cn(
             "h-8 min-w-[34px] rounded-[5px] uppercase transition-colors",
-            locale === opt
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover-elevate",
+            locale === opt ? "bg-primary/10 text-primary" : "text-muted-foreground hover-elevate",
           )}
         >
           {opt}
@@ -132,15 +138,11 @@ function ImportButton() {
           aria-label={t("nav.import")}
           className={cn(
             "relative flex h-9 w-9 items-center justify-center rounded-md border transition-colors hover-elevate",
-            active
-              ? "border-primary/30 bg-primary/10 text-primary"
-              : "border-border text-muted-foreground",
+            active ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground",
           )}
         >
           <Upload size={16} />
-          {isBusy && (
-            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-primary" />
-          )}
+          {isBusy && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-primary" />}
         </Link>
       </TooltipTrigger>
       <TooltipContent side="bottom">{t("nav.import")}</TooltipContent>
@@ -154,7 +156,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [location] = useLocation();
 
-  useEffect(() => { setMobileOpen(false); }, [location]);
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location]);
 
   return (
     <div className="grid h-[100dvh] grid-cols-1 grid-rows-[auto_1fr] overflow-hidden bg-background md:grid-cols-[15rem_1fr]">

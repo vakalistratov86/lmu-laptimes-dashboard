@@ -1,11 +1,7 @@
 import { Dumbbell, Timer, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import {
-  normalizeSessionCategory,
-  getSessionTypeBadgeClass,
-  type SessionCategory,
-} from "@/lib/classStyles";
+import { normalizeSessionCategory, getSessionTypeBadgeClass, type SessionCategory } from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
 
 const SESSION_CATEGORY_ICON: Record<SessionCategory, typeof Dumbbell> = {

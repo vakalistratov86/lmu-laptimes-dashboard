@@ -9,8 +9,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DriverName } from "@/components/DriverName";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
 import {
-  Timer, Trophy, Medal, ListChecks, Repeat, TrendingUp,
-  MapPin, AlertTriangle, Flag, ChevronRight,
+  Timer,
+  Trophy,
+  Medal,
+  ListChecks,
+  Repeat,
+  TrendingUp,
+  MapPin,
+  AlertTriangle,
+  Flag,
+  ChevronRight,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import type { LapTimeEnriched, SessionEnriched } from "@shared/schema";
@@ -84,10 +92,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
   const { data: sessions, isLoading: sessionsLoading } = useSessions();
   const { data: incidentsData, isLoading: incidentsLoading } = useDriverIncidents(driverId);
 
-  const driver = useMemo(
-    () => drivers?.find((d) => d.id === driverId),
-    [drivers, driverId],
-  );
+  const driver = useMemo(() => drivers?.find((d) => d.id === driverId), [drivers, driverId]);
 
   const driverLaps = useMemo(() => driverLapsRaw ?? [], [driverLapsRaw]);
 
@@ -159,18 +164,18 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
           isRecord: l.lapMs <= trackBestMs,
         };
       })
-      .sort((a, b) =>
-        a.trackName.localeCompare(b.trackName) ||
-        (a.courseLabel ?? "").localeCompare(b.courseLabel ?? "") ||
-        a.carClass.localeCompare(b.carClass));
+      .sort(
+        (a, b) =>
+          a.trackName.localeCompare(b.trackName) ||
+          (a.courseLabel ?? "").localeCompare(b.courseLabel ?? "") ||
+          a.carClass.localeCompare(b.carClass),
+      );
   }, [bestLaps, driverLaps]);
 
   const stats = useMemo(() => {
     if (driverLaps.length === 0 && driverSessions.length === 0) return null;
 
-    const bestLap = driverLaps.length
-      ? driverLaps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a))
-      : null;
+    const bestLap = driverLaps.length ? driverLaps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a)) : null;
 
     // fix: группировка по trackId, а не по trackName — в каталоге трасс
     // намеренно есть разные физические конфигурации с одинаковым названием
@@ -226,7 +231,9 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
       <div className="space-y-5">
         <Skeleton className="h-28" />
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-24" />)}
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
         </div>
         <Skeleton className="h-64" />
       </div>
@@ -237,7 +244,9 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
     return (
       <div className="py-12 text-center text-muted-foreground">
         {t("driverDetail.notFound")}{" "}
-        <Link href="/leaderboards" className="text-primary">{t("driverDetail.notFoundBack")}</Link>
+        <Link href="/leaderboards" className="text-primary">
+          {t("driverDetail.notFoundBack")}
+        </Link>
       </div>
     );
   }
@@ -259,9 +268,11 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
             </h1>
             <Badge
               variant="outline"
-              className={driver.isPlayer === 1
-                ? "border-green-500/30 bg-green-500/10 text-green-500"
-                : "border-amber-400/30 bg-amber-400/10 text-amber-500"}
+              className={
+                driver.isPlayer === 1
+                  ? "border-green-500/30 bg-green-500/10 text-green-500"
+                  : "border-amber-400/30 bg-amber-400/10 text-amber-500"
+              }
             >
               {driver.isPlayer === 1 ? t("driverDetail.badgePlayer") : t("driverDetail.badgeAi")}
             </Badge>
@@ -273,10 +284,14 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             {driver.team && driver.team !== "—" && (
-              <span className="flex items-center gap-1"><Flag size={14} /> {driver.team}</span>
+              <span className="flex items-center gap-1">
+                <Flag size={14} /> {driver.team}
+              </span>
             )}
             {driver.country && driver.country !== "—" && (
-              <span className="flex items-center gap-1">{countryFlag(driver.country)} {driver.country}</span>
+              <span className="flex items-center gap-1">
+                {countryFlag(driver.country)} {driver.country}
+              </span>
             )}
           </div>
         </div>
@@ -288,16 +303,26 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
         <>
           {/* Stat tiles */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-            <Stat icon={Timer} label={t("driverDetail.bestLap")}
+            <Stat
+              icon={Timer}
+              label={t("driverDetail.bestLap")}
               value={stats.bestLap ? formatLap(stats.bestLap.lapMs) : t("common.dash")}
-              sub={stats.bestLap?.trackName} />
+              sub={stats.bestLap?.trackName}
+            />
             <Stat icon={ListChecks} label={t("driverDetail.sessions")} value={String(stats.totalSessions)} />
-            <Stat icon={Repeat} label={t("driverDetail.laps")} value={String(stats.totalLaps)}
-              sub={stats.favoriteTrack ? t("driverDetail.favoriteTrack", { track: stats.favoriteTrack }) : undefined} />
+            <Stat
+              icon={Repeat}
+              label={t("driverDetail.laps")}
+              value={String(stats.totalLaps)}
+              sub={stats.favoriteTrack ? t("driverDetail.favoriteTrack", { track: stats.favoriteTrack }) : undefined}
+            />
             <Stat icon={Trophy} label={t("driverDetail.wins")} value={String(stats.wins)} />
             <Stat icon={Medal} label={t("driverDetail.podiums")} value={String(stats.podiums)} />
-            <Stat icon={TrendingUp} label={t("driverDetail.avgPosition")}
-              value={stats.avgPosition != null ? stats.avgPosition.toFixed(1) : t("common.dash")} />
+            <Stat
+              icon={TrendingUp}
+              label={t("driverDetail.avgPosition")}
+              value={stats.avgPosition != null ? stats.avgPosition.toFixed(1) : t("common.dash")}
+            />
           </div>
 
           {/* Track records */}
@@ -314,22 +339,29 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                       <th className="px-4 py-2.5 text-left font-medium">{t("driverDetail.colClass")}</th>
                       <th className="px-4 py-2.5 text-right font-medium">{t("driverDetail.colLap")}</th>
                       <th className="px-4 py-2.5 text-right font-medium">{t("driverDetail.colGapToRecord")}</th>
-                      <th className="hidden px-4 py-2.5 text-right font-medium sm:table-cell">{t("driverDetail.colDate")}</th>
+                      <th className="hidden px-4 py-2.5 text-right font-medium sm:table-cell">
+                        {t("driverDetail.colDate")}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {trackRecords.map((r) => (
-                      <tr key={`${r.trackId}-${r.courseLabel ?? ""}-${r.carClass}`} className="border-t border-border hover:bg-muted/40">
+                      <tr
+                        key={`${r.trackId}-${r.courseLabel ?? ""}-${r.carClass}`}
+                        className="border-t border-border hover:bg-muted/40"
+                      >
                         <td className="px-4 py-2.5 flex items-center gap-1.5">
                           <MapPin size={13} className="text-muted-foreground" /> {r.trackName}
-                          {r.courseLabel && (
-                            <span className="text-xs text-muted-foreground">· {r.courseLabel}</span>
-                          )}
+                          {r.courseLabel && <span className="text-xs text-muted-foreground">· {r.courseLabel}</span>}
                         </td>
                         <td className="px-4 py-2.5">
-                          <Badge variant="outline" className={getClassBadgeClass(r.carClass)}>{r.carClass}</Badge>
+                          <Badge variant="outline" className={getClassBadgeClass(r.carClass)}>
+                            {r.carClass}
+                          </Badge>
                         </td>
-                        <td className={`px-4 py-2.5 text-right font-data tabular-nums ${r.isRecord ? "font-bold text-primary" : ""}`}>
+                        <td
+                          className={`px-4 py-2.5 text-right font-data tabular-nums ${r.isRecord ? "font-bold text-primary" : ""}`}
+                        >
                           {formatLap(r.bestLapMs)}
                         </td>
                         <td className="px-4 py-2.5 text-right font-data text-xs tabular-nums text-muted-foreground">
@@ -378,7 +410,9 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                     </div>
                     <div className="min-w-0 flex-1 truncate font-medium">{s.trackName}</div>
                     <div className="w-[70px] shrink-0">
-                      <Badge variant="outline" className={`text-xs ${getClassBadgeClass(s.carClass)}`}>{s.carClass}</Badge>
+                      <Badge variant="outline" className={`text-xs ${getClassBadgeClass(s.carClass)}`}>
+                        {s.carClass}
+                      </Badge>
                     </div>
                     <div className="w-[70px] shrink-0 text-right">
                       <span className="inline-flex items-center gap-1 font-data text-sm font-bold tabular-nums">
@@ -422,14 +456,18 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                     <tbody>
                       {incidents.map((inc, i) => (
                         <tr key={i} className="border-t border-border/60">
-                          <td className="px-4 py-2 text-xs text-muted-foreground">{formatDateTime(inc.dateTime, intlLocale)}</td>
+                          <td className="px-4 py-2 text-xs text-muted-foreground">
+                            {formatDateTime(inc.dateTime, intlLocale)}
+                          </td>
                           <td className="px-4 py-2">{inc.trackName}</td>
                           <td className="px-4 py-2">
                             <Badge
                               variant="outline"
-                              className={inc.role === "caused"
-                                ? "border-red-500/30 bg-red-500/10 text-[10px] text-red-500"
-                                : "border-blue-500/30 bg-blue-500/10 text-[10px] text-blue-500"}
+                              className={
+                                inc.role === "caused"
+                                  ? "border-red-500/30 bg-red-500/10 text-[10px] text-red-500"
+                                  : "border-blue-500/30 bg-blue-500/10 text-[10px] text-blue-500"
+                              }
                             >
                               {inc.role === "caused" ? t("driverDetail.roleCaused") : t("driverDetail.roleReceived")}
                             </Badge>
@@ -438,7 +476,10 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                           <td className="px-4 py-2 text-right font-data tabular-nums">
                             {inc.severity.toFixed(1)}
                             {inc.isImmovable === 1 && (
-                              <Badge variant="outline" className="ml-2 border-red-500/30 bg-red-500/10 text-[10px] text-red-500">
+                              <Badge
+                                variant="outline"
+                                className="ml-2 border-red-500/30 bg-red-500/10 text-[10px] text-red-500"
+                              >
                                 {t("driverDetail.immovable")}
                               </Badge>
                             )}
@@ -459,17 +500,22 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                         <th className="px-4 py-2 text-left font-medium">{t("driverDetail.colTrack")}</th>
                         <th className="px-4 py-2 text-right font-medium">{t("driverDetail.colLapNum")}</th>
                         <th className="px-4 py-2 text-right font-medium">{t("driverDetail.colPoints")}</th>
-                        <th className="hidden px-4 py-2 text-left font-medium sm:table-cell">{t("driverDetail.colDecision")}</th>
+                        <th className="hidden px-4 py-2 text-left font-medium sm:table-cell">
+                          {t("driverDetail.colDecision")}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {trackLimits.map((tl, i) => (
                         <tr key={i} className="border-t border-border/60">
-                          <td className="px-4 py-2 text-xs text-muted-foreground">{formatDateTime(tl.dateTime, intlLocale)}</td>
+                          <td className="px-4 py-2 text-xs text-muted-foreground">
+                            {formatDateTime(tl.dateTime, intlLocale)}
+                          </td>
                           <td className="px-4 py-2">{tl.trackName}</td>
                           <td className="px-4 py-2 text-right font-data tabular-nums">{tl.lapNum}</td>
                           <td className="px-4 py-2 text-right font-data tabular-nums text-muted-foreground">
-                            {tl.currentPoints ?? "—"}{tl.warningPoints != null ? ` / ${tl.warningPoints}` : ""}
+                            {tl.currentPoints ?? "—"}
+                            {tl.warningPoints != null ? ` / ${tl.warningPoints}` : ""}
                           </td>
                           <td className="hidden px-4 py-2 text-muted-foreground sm:table-cell">{tl.decision ?? "—"}</td>
                         </tr>

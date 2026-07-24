@@ -17,9 +17,17 @@
 import crypto from "node:crypto";
 import { db } from "./storage";
 import {
-  importJobs, importErrors, sessions, lapTimes, sessionResults,
-  sessionLaps, sessionIncidents, sessionSectorBests, sessionTrackLimits,
-  tracks, drivers,
+  importJobs,
+  importErrors,
+  sessions,
+  lapTimes,
+  sessionResults,
+  sessionLaps,
+  sessionIncidents,
+  sessionSectorBests,
+  sessionTrackLimits,
+  tracks,
+  drivers,
 } from "@shared/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import { parseRaceResults, type ParsedSession } from "./logParser";
@@ -27,13 +35,7 @@ import { validateLapTime } from "@shared/validators";
 import { normalizeLapTime, normalizeDriverNameForStorage, normalizeTrackName, toMilliseconds } from "./normalizer";
 import type { Track, Driver } from "@shared/schema";
 import { findSupersedeCandidate, deleteSupersededSessionData, decideSupersedeAction } from "./sessionSupersede";
-import {
-  logImportStarted,
-  logImportCompleted,
-  logImportFailed,
-  logImportSkipped,
-  logParseError,
-} from "./logger";
+import { logImportStarted, logImportCompleted, logImportFailed, logImportSkipped, logParseError } from "./logger";
 
 export const CHUNK_SIZE = 500;
 
@@ -83,10 +85,7 @@ export async function enqueueImport(fileName: string, content: string): Promise<
   const fileHash = computeFileHash(content);
 
   // Idempotency check (#6): проверяем UNIQUE file_hash
-  const existingRows = await db
-    .select()
-    .from(importJobs)
-    .where(eq(importJobs.fileHash, fileHash));
+  const existingRows = await db.select().from(importJobs).where(eq(importJobs.fileHash, fileHash));
   const existing = existingRows[0];
 
   if (existing) {
@@ -129,19 +128,21 @@ function scheduleWorker() {
 
 async function processNext() {
   const job = queue.shift();
-  if (!job) { running = false; return; }
+  if (!job) {
+    running = false;
+    return;
+  }
 
   running = true;
-  await db.update(importJobs)
-    .set({ status: "processing" })
-    .where(eq(importJobs.id, job.id));
+  await db.update(importJobs).set({ status: "processing" }).where(eq(importJobs.id, job.id));
 
   const startedAt = Date.now();
 
   try {
     const { sessionId, totalLaps, validLaps, errorLaps } = await runImport(job);
     const durationMs = Date.now() - startedAt;
-    await db.update(importJobs)
+    await db
+      .update(importJobs)
       .set({ status: "completed", sessionId, totalLaps, validLaps, errorLaps, finishedAt: Date.now() })
       .where(eq(importJobs.id, job.id));
     logImportCompleted({
@@ -156,9 +157,10 @@ async function processNext() {
     const err = e as Error & { code?: string };
 
     // Файл пропущен из-за отсутствия кругов — это не ошибка
-    if (err.code === 'ZERO_LAPS') {
+    if (err.code === "ZERO_LAPS") {
       try {
-        await db.update(importJobs)
+        await db
+          .update(importJobs)
           .set({ status: "skipped", error: err.message, finishedAt: Date.now() })
           .where(eq(importJobs.id, job.id));
       } catch (dbErr) {
@@ -167,7 +169,8 @@ async function processNext() {
       // logImportSkipped уже вызван внутри runImport до броска ошибки
     } else {
       try {
-        await db.update(importJobs)
+        await db
+          .update(importJobs)
           .set({ status: "failed", error: err.message, finishedAt: Date.now() })
           .where(eq(importJobs.id, job.id));
       } catch (dbErr) {
@@ -213,7 +216,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     parsed = parseRaceResults(job.content);
   } catch (e) {
     const err = e as Error;
-    if ((err as any).code === 'UNSUPPORTED_LOG_VERSION') {
+    if ((err as any).code === "UNSUPPORTED_LOG_VERSION") {
       throw new Error(`Неподдерживаемый формат лога: ${err.message}`);
     }
     throw new Error(`Ошибка разбора: ${err.message}`);
@@ -228,10 +231,10 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     logImportSkipped({
       importJobId: job.id,
       fileName: job.fileName,
-      reason: 'ZERO_LAPS',
+      reason: "ZERO_LAPS",
     });
     const err = new Error(`Файл пропущен: в логе не найдено ни одного участника (0 пилотов, 0 кругов)`);
-    (err as any).code = 'ZERO_LAPS';
+    (err as any).code = "ZERO_LAPS";
     throw err;
   }
 
@@ -241,10 +244,10 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     logImportSkipped({
       importJobId: job.id,
       fileName: job.fileName,
-      reason: 'ZERO_LAPS',
+      reason: "ZERO_LAPS",
     });
     const err = new Error(`Файл пропущен: 0 кругов`);
-    (err as any).code = 'ZERO_LAPS';
+    (err as any).code = "ZERO_LAPS";
     throw err;
   }
 
@@ -276,12 +279,12 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     if (candidate) {
       const action = decideSupersedeAction(totalParsedLaps, candidate.session.lapCount);
       if (action === "SKIP") {
-        logImportSkipped({ importJobId: job.id, fileName: job.fileName, reason: 'SUPERSEDED' });
+        logImportSkipped({ importJobId: job.id, fileName: job.fileName, reason: "SUPERSEDED" });
         const err = new Error(
           `Файл пропущен: в БД уже есть более полная версия этой сессии ` +
-          `(session #${candidate.session.id}: ${candidate.session.lapCount} кругов >= ${totalParsedLaps} кругов в этом файле)`
+            `(session #${candidate.session.id}: ${candidate.session.lapCount} кругов >= ${totalParsedLaps} кругов в этом файле)`,
         );
-        (err as any).code = 'SUPERSEDED';
+        (err as any).code = "SUPERSEDED";
         (err as any).existingSessionId = candidate.session.id;
         (err as any).existingLapCount = candidate.session.lapCount;
         (err as any).newLapCount = totalParsedLaps;
@@ -292,37 +295,40 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       await deleteSupersededSessionData(tx, candidate.session.id);
     }
 
-    const sessionRows = await tx.insert(sessions).values({
-      trackId: track.id,
-      event: parsed!.event,
-      sessionType: parsed!.sessionType,
-      venue: parsed!.venue,
-      course: parsed!.course ?? null,
-      trackLengthM: parsed!.trackLengthM ?? null,
-      gameVersion: parsed!.gameVersion ?? null,
-      dateTime: parsed!.dateTimeIso,
-      dateTimeUnix: parsed!.dateTimeUnix ?? null,
-      fileName: job.fileName,
-      setting: parsed!.setting ?? null,
-      driverCount: parsed!.drivers.length,
-      lapCount: 0,
-      raceLaps: parsed!.raceLaps ?? null,
-      raceTimeMin: parsed!.raceTimeMin ?? null,
-      mechFailRate: parsed!.mechFailRate ?? null,
-      damageMult: parsed!.damageMult ?? null,
-      fuelMult: parsed!.fuelMult ?? null,
-      tireMult: parsed!.tireMult ?? null,
-      vehiclesAllowed: parsed!.vehiclesAllowed ?? null,
-      parcFerme: parsed!.parcFerme ?? null,
-      fixedSetups: parsed!.fixedSetups ?? null,
-      freeSettings: parsed!.freeSettings ?? null,
-      fixedUpgrades: parsed!.fixedUpgrades ?? null,
-      tireWarmers: parsed!.tireWarmers ?? null,
-      dedicated: parsed!.dedicated ?? null,
-      sessionDurationMin: parsed!.sessionDurationMin ?? null,
-      sessionMaxLaps: parsed!.sessionMaxLaps ?? null,
-      mostLapsCompleted: parsed!.mostLapsCompleted ?? null,
-    }).returning();
+    const sessionRows = await tx
+      .insert(sessions)
+      .values({
+        trackId: track.id,
+        event: parsed!.event,
+        sessionType: parsed!.sessionType,
+        venue: parsed!.venue,
+        course: parsed!.course ?? null,
+        trackLengthM: parsed!.trackLengthM ?? null,
+        gameVersion: parsed!.gameVersion ?? null,
+        dateTime: parsed!.dateTimeIso,
+        dateTimeUnix: parsed!.dateTimeUnix ?? null,
+        fileName: job.fileName,
+        setting: parsed!.setting ?? null,
+        driverCount: parsed!.drivers.length,
+        lapCount: 0,
+        raceLaps: parsed!.raceLaps ?? null,
+        raceTimeMin: parsed!.raceTimeMin ?? null,
+        mechFailRate: parsed!.mechFailRate ?? null,
+        damageMult: parsed!.damageMult ?? null,
+        fuelMult: parsed!.fuelMult ?? null,
+        tireMult: parsed!.tireMult ?? null,
+        vehiclesAllowed: parsed!.vehiclesAllowed ?? null,
+        parcFerme: parsed!.parcFerme ?? null,
+        fixedSetups: parsed!.fixedSetups ?? null,
+        freeSettings: parsed!.freeSettings ?? null,
+        fixedUpgrades: parsed!.fixedUpgrades ?? null,
+        tireWarmers: parsed!.tireWarmers ?? null,
+        dedicated: parsed!.dedicated ?? null,
+        sessionDurationMin: parsed!.sessionDurationMin ?? null,
+        sessionMaxLaps: parsed!.sessionMaxLaps ?? null,
+        mostLapsCompleted: parsed!.mostLapsCompleted ?? null,
+      })
+      .returning();
     const session = sessionRows[0];
 
     // Пакетно предзагружаем/создаём всех пилотов сессии ОДНИМ запросом вместо
@@ -349,28 +355,31 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       driverIdByName.set(normalizedName.toLowerCase(), driver.id);
       const cls = normalizeClass(d.carClass);
 
-      const srRows = await tx.insert(sessionResults).values({
-        sessionId: session.id,
-        driverId: driver.id,
-        isPlayer: d.isPlayer ? 1 : 0,
-        position: d.position,
-        classPosition: d.classPosition,
-        lapRankIncludingDiscos: d.lapRankIncludingDiscos ?? null,
-        carClass: cls,
-        car: d.carType,
-        carType: d.carType,
-        team: d.teamName,
-        carNumber: d.carNumber ?? null,
-        vehFile: d.vehFile ?? null,
-        vehName: d.vehName ?? null,
-        category: d.category ?? null,
-        laps: d.laps,
-        pitstops: d.pitstops,
-        bestLapMs: d.bestLapMs ?? null,
-        finishStatus: d.finishStatus ?? null,
-        controlAndAids: d.controlAndAids ?? null,
-        connected: d.connected ?? null,
-      }).returning();
+      const srRows = await tx
+        .insert(sessionResults)
+        .values({
+          sessionId: session.id,
+          driverId: driver.id,
+          isPlayer: d.isPlayer ? 1 : 0,
+          position: d.position,
+          classPosition: d.classPosition,
+          lapRankIncludingDiscos: d.lapRankIncludingDiscos ?? null,
+          carClass: cls,
+          car: d.carType,
+          carType: d.carType,
+          team: d.teamName,
+          carNumber: d.carNumber ?? null,
+          vehFile: d.vehFile ?? null,
+          vehName: d.vehName ?? null,
+          category: d.category ?? null,
+          laps: d.laps,
+          pitstops: d.pitstops,
+          bestLapMs: d.bestLapMs ?? null,
+          finishStatus: d.finishStatus ?? null,
+          controlAndAids: d.controlAndAids ?? null,
+          connected: d.connected ?? null,
+        })
+        .returning();
       const sr = srRows[0];
 
       for (const lap of d.lapList) {
@@ -378,11 +387,12 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
         const s1 = lap.s1Ms;
         const s2 = lap.s2Ms;
-        const s3 = lap.s3Ms != null
-          ? lap.s3Ms
-          : (s1 != null && s2 != null && lap.lapMs != null)
-            ? Math.max(0, lap.lapMs - s1 - s2)
-            : null;
+        const s3 =
+          lap.s3Ms != null
+            ? lap.s3Ms
+            : s1 != null && s2 != null && lap.lapMs != null
+              ? Math.max(0, lap.lapMs - s1 - s2)
+              : null;
 
         sessionLapRows.push({
           sessionResultId: sr.id,
@@ -431,7 +441,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
                 raw: JSON.stringify({ driverName: d.name, lapNum: lap.num, lapMs: lap.lapMs }),
                 code: validation.errorCode,
               },
-              `Failed to parse lap time: ${validation.errorMessage}`
+              `Failed to parse lap time: ${validation.errorMessage}`,
             );
             dlqRows.push({
               importJobId: job.id,
@@ -447,17 +457,20 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
           const ltS1 = toIntOrNull(normalized.sector1Ms);
           const ltS2 = toIntOrNull(normalized.sector2Ms);
-          const ltS3 = toIntOrNull(normalized.sector3Ms)
-            ?? (ltS1 != null && ltS2 != null
-                ? Math.max(0, normalized.lapTimeMs - ltS1 - ltS2)
-                : null);
+          const ltS3 =
+            toIntOrNull(normalized.sector3Ms) ??
+            (ltS1 != null && ltS2 != null ? Math.max(0, normalized.lapTimeMs - ltS1 - ltS2) : null);
 
           // Warn about laps with missing sector times so they are easy to spot in logs
           if (ltS1 == null || ltS2 == null || ltS3 == null) {
-            console.warn(
-              "[importWorker] Lap with missing sector times — will be stored with NULL sectors",
-              { driverName: d.name, lapNum: lap.num, lapMs: lap.lapMs, s1: ltS1, s2: ltS2, s3: ltS3 }
-            );
+            console.warn("[importWorker] Lap with missing sector times — will be stored with NULL sectors", {
+              driverName: d.name,
+              lapNum: lap.num,
+              lapMs: lap.lapMs,
+              s1: ltS1,
+              s2: ltS2,
+              s3: ltS3,
+            });
           }
 
           lapTimeRows.push({
@@ -501,7 +514,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       if (validPct < VALID_LAP_THRESHOLD_PCT) {
         throw new Error(
           `Слишком много невалидных кругов: ${dlqRows.length} из ${nonPitTotal} ` +
-          `(${validPct.toFixed(1)}% валидных, требуется >= ${VALID_LAP_THRESHOLD_PCT}%)`
+            `(${validPct.toFixed(1)}% валидных, требуется >= ${VALID_LAP_THRESHOLD_PCT}%)`,
         );
       }
     }
@@ -518,10 +531,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       payload: unknown,
     ) => {
       const message = `Stream-событие "${kind}" ссылается на неизвестного пилота "${driverName}" — не найден среди участников сессии`;
-      logParseError(
-        { importJobId: job.id, raw: JSON.stringify(payload), code: "SEMANTIC_ERROR" },
-        message,
-      );
+      logParseError({ importJobId: job.id, raw: JSON.stringify(payload), code: "SEMANTIC_ERROR" }, message);
       streamDlqRows.push({
         importJobId: job.id,
         rawPayload: JSON.stringify(payload),
@@ -597,9 +607,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     }
 
     // Атомарное обновление lapCount внутри транзакции (#11)
-    await tx.update(sessions)
-      .set({ lapCount: validLapsCount })
-      .where(eq(sessions.id, session.id));
+    await tx.update(sessions).set({ lapCount: validLapsCount }).where(eq(sessions.id, session.id));
 
     return {
       sessionId: session.id,
@@ -656,20 +664,23 @@ async function findOrCreateTrack(tx: any, parsed: ParsedSession): Promise<Track>
   // трассой (та же трасса, просто другой ярлык course в логах игры).
   if (parsedLengthKm != null) {
     const byLength = sameName.find(
-      (t: Track) => Math.abs(t.lengthKm - parsedLengthKm) < TRACK_LENGTH_MATCH_TOLERANCE_KM
+      (t: Track) => Math.abs(t.lengthKm - parsedLengthKm) < TRACK_LENGTH_MATCH_TOLERANCE_KM,
     );
     if (byLength) return byLength;
   }
 
   const canonical = canonicalTrackName(parsed.venue);
   const lengthKm = parsed.trackLengthM ? +(parsed.trackLengthM / 1000).toFixed(3) : 0;
-  const rows = await tx.insert(tracks).values({
-    name: canonical.name,
-    country: canonical.country,
-    lengthKm,
-    turns: canonical.turns,
-    layout: course ?? "Импорт",
-  }).returning();
+  const rows = await tx
+    .insert(tracks)
+    .values({
+      name: canonical.name,
+      country: canonical.country,
+      lengthKm,
+      turns: canonical.turns,
+      layout: course ?? "Импорт",
+    })
+    .returning();
   return rows[0];
 }
 
@@ -702,11 +713,14 @@ async function findOrCreateDrivers(
 
   for (const [key, e] of Array.from(byKey.entries())) {
     if (result.has(key)) continue;
-    const rows = await tx.insert(drivers).values({
-      name: e.name,
-      team: e.team || "—",
-      country: guessCountry(e.name),
-    }).returning();
+    const rows = await tx
+      .insert(drivers)
+      .values({
+        name: e.name,
+        team: e.team || "—",
+        country: guessCountry(e.name),
+      })
+      .returning();
     result.set(key, rows[0]);
   }
 
@@ -721,7 +735,8 @@ function normalizeClass(raw: string): string {
 
 function canonicalTrackName(venue: string): { name: string; country: string; turns: number } {
   const v = venue.toLowerCase();
-  if (v.includes("carlos pace") || v.includes("interlagos")) return { name: "Interlagos", country: "Бразилия", turns: 15 };
+  if (v.includes("carlos pace") || v.includes("interlagos"))
+    return { name: "Interlagos", country: "Бразилия", turns: 15 };
   if (v.includes("le mans") || v.includes("circuit de la sarthe") || v.includes("sarthe")) {
     return { name: "Le Mans", country: "Франция", turns: 38 };
   }
@@ -740,19 +755,129 @@ function canonicalTrackName(venue: string): { name: string; country: string; tur
 function guessCountry(name: string): string {
   if (/[а-яёА-ЯЁ]/.test(name)) return "RU";
   const lower = name.toLowerCase();
-  const jpNames = ["tanaka","suzuki","yamamoto","nakamura","kobayashi","sato","ito","kato","watanabe","yamada","hayashi","matsumoto","inoue","kimura","ogawa","fujita","hashimoto","ishikawa","nakanishi","okamoto"];
-  const jpSuffixes = ["moto","hiko","yuki","taro","suke","nori","hide","kazu"];
+  const jpNames = [
+    "tanaka",
+    "suzuki",
+    "yamamoto",
+    "nakamura",
+    "kobayashi",
+    "sato",
+    "ito",
+    "kato",
+    "watanabe",
+    "yamada",
+    "hayashi",
+    "matsumoto",
+    "inoue",
+    "kimura",
+    "ogawa",
+    "fujita",
+    "hashimoto",
+    "ishikawa",
+    "nakanishi",
+    "okamoto",
+  ];
+  const jpSuffixes = ["moto", "hiko", "yuki", "taro", "suke", "nori", "hide", "kazu"];
   if (jpNames.some((n) => lower.includes(n))) return "JP";
   if (jpSuffixes.some((s) => lower.endsWith(s))) return "JP";
-  const deSuffixes = ["mann","ner","ger","berger","schneider","bauer","müller","muller","wagner","hoffmann","schulz","schwarz","braun","koch","richter"];
+  const deSuffixes = [
+    "mann",
+    "ner",
+    "ger",
+    "berger",
+    "schneider",
+    "bauer",
+    "müller",
+    "muller",
+    "wagner",
+    "hoffmann",
+    "schulz",
+    "schwarz",
+    "braun",
+    "koch",
+    "richter",
+  ];
   if (deSuffixes.some((s) => lower.includes(s))) return "DE";
-  const frNames = ["blanc","dupont","martin","bernard","thomas","petit","robert","richard","durand","moreau","leroy","simon","laurent","michel","garcia","david","fontaine","rousseau","vincent","fournier"];
+  const frNames = [
+    "blanc",
+    "dupont",
+    "martin",
+    "bernard",
+    "thomas",
+    "petit",
+    "robert",
+    "richard",
+    "durand",
+    "moreau",
+    "leroy",
+    "simon",
+    "laurent",
+    "michel",
+    "garcia",
+    "david",
+    "fontaine",
+    "rousseau",
+    "vincent",
+    "fournier",
+  ];
   if (frNames.some((n) => lower.includes(n))) return "FR";
-  const itSuffixes = ["rossi","russo","ferrari","bianchi","ricci","romano","marino","colombo","conti","esposito","de luca","de santis","fontana","mancini","rinaldi","lombardi","barbieri","cattaneo"];
+  const itSuffixes = [
+    "rossi",
+    "russo",
+    "ferrari",
+    "bianchi",
+    "ricci",
+    "romano",
+    "marino",
+    "colombo",
+    "conti",
+    "esposito",
+    "de luca",
+    "de santis",
+    "fontana",
+    "mancini",
+    "rinaldi",
+    "lombardi",
+    "barbieri",
+    "cattaneo",
+  ];
   if (itSuffixes.some((s) => lower.includes(s))) return "IT";
-  const esSuffixes = ["rodriguez","garcia","martinez","fernandez","lopez","gonzalez","perez","sanchez","ramirez","torres","flores","diaz","reyes","morales","gutierrez","vargas","castillo"];
+  const esSuffixes = [
+    "rodriguez",
+    "garcia",
+    "martinez",
+    "fernandez",
+    "lopez",
+    "gonzalez",
+    "perez",
+    "sanchez",
+    "ramirez",
+    "torres",
+    "flores",
+    "diaz",
+    "reyes",
+    "morales",
+    "gutierrez",
+    "vargas",
+    "castillo",
+  ];
   if (esSuffixes.some((s) => lower.includes(s))) return "ES";
-  const gbNames = ["smith","jones","williams","brown","wilson","taylor","davies","evans","thomas","johnson","white","martin","carter","walker"];
+  const gbNames = [
+    "smith",
+    "jones",
+    "williams",
+    "brown",
+    "wilson",
+    "taylor",
+    "davies",
+    "evans",
+    "thomas",
+    "johnson",
+    "white",
+    "martin",
+    "carter",
+    "walker",
+  ];
   if (gbNames.some((n) => lower.includes(n))) return "GB";
   return "—";
 }

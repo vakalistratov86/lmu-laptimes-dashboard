@@ -84,7 +84,8 @@ const ru = {
     title: "Обзор",
     subtitle: "Сводка по мониторингу времён на трассах LMU",
     emptyTitle: "Пока нет данных",
-    emptyBody: "Импортируйте логи заездов, чтобы увидеть здесь статистику лучших кругов, активность по сессиям и рекорды по трассам.",
+    emptyBody:
+      "Импортируйте логи заездов, чтобы увидеть здесь статистику лучших кругов, активность по сессиям и рекорды по трассам.",
     emptyCta: "Импортировать логи",
     heroEyebrow: "Лучший круг сезона",
     kpiDistance: "Пройдено расстояния",
@@ -196,7 +197,8 @@ const ru = {
     filterUpcoming: "Предстоящие",
     filterAll: "Все",
     filterPast: "Прошедшие",
-    staleSourceWarning: "Не удалось получить свежее расписание с сайта LMU — показаны сохранённые данные, они могут быть устаревшими.",
+    staleSourceWarning:
+      "Не удалось получить свежее расписание с сайта LMU — показаны сохранённые данные, они могут быть устаревшими.",
     trackTba: "Трасса TBA",
     featured: "FEATURED",
     today: "сегодня",
@@ -216,7 +218,8 @@ const ru = {
     minSuffix: "мин",
     footerPrefix: "Расписание публикуется на",
     footerSuffix: ". Пт/Сб/Вс — точное время слотов уточняется ближе к дате.",
-    dailyFooterPrefix: "Daily Races — еженедельно обновляемые короткие гонки в мультиплеере LMU. Новая ротация каждый понедельник. Актуальное расписание на",
+    dailyFooterPrefix:
+      "Daily Races — еженедельно обновляемые короткие гонки в мультиплеере LMU. Новая ротация каждый понедельник. Актуальное расписание на",
     dailyFooterLinkText: "сайте LMU",
   },
   sessionDetail: {
@@ -314,11 +317,13 @@ const ru = {
     tabLogs: "Импорт логов",
     tabTelemetry: "Импорт телеметрии",
     cleanupTitle: "Очистка базы данных",
-    cleanupBody: "Будут удалены все импортированные данные: сессии, круги, трассы и связанные записи. Действие необратимо. После очистки файлы можно импортировать заново.",
+    cleanupBody:
+      "Будут удалены все импортированные данные: сессии, круги, трассы и связанные записи. Действие необратимо. После очистки файлы можно импортировать заново.",
     cleanupCta: "Очистить БД",
     whereTitle: "Где лежат логи результатов",
     wherePath: "…\\Le Mans Ultimate\\UserData\\Log\\Results\\*.xml",
-    whereBody: "Выберите папку — браузер подтянет все .xml файлы. Данные импортируются по одному без загрузки всего содержимого в память. Повторная загрузка пропускается.",
+    whereBody:
+      "Выберите папку — браузер подтянет все .xml файлы. Данные импортируются по одному без загрузки всего содержимого в память. Повторная загрузка пропускается.",
     pickFolder: "Выбрать папку с логами",
     pickFiles: "Выбрать файлы вручную",
     pickFilesFallback: "Выбрать отдельные файлы",
@@ -331,7 +336,8 @@ const ru = {
     statImported: "Импортировано",
     statSkipped: "Пропущено",
     statErrors: "Ошибки",
-    noFsaWarning: "Автоматическое фоновое сканирование недоступно — требуется браузер на основе Chromium с поддержкой File System Access API. Используйте ручной выбор файлов или папки ниже.",
+    noFsaWarning:
+      "Автоматическое фоновое сканирование недоступно — требуется браузер на основе Chromium с поддержкой File System Access API. Используйте ручной выбор файлов или папки ниже.",
     statusLabel: "Статус",
     modeScanning: "Сканирование…",
     modeImporting: "Импорт…",
@@ -346,15 +352,18 @@ const ru = {
     logNewFilesFound: "Обнаружено новых файлов: {{n}}",
     logImporting: "Импорт: {{name}}",
     logImportOk: "{{name}} — {{event}} ({{sessionType}}) · пилотов: {{drivers}} · кругов: {{n}}",
-    logImportReplaced: "{{name}} — {{event}} ({{sessionType}}) · пилотов: {{drivers}} · кругов: {{n}} — заменена более ранняя версия этой сессии (#{{oldId}}, было {{oldLaps}} круга(ов))",
+    logImportReplaced:
+      "{{name}} — {{event}} ({{sessionType}}) · пилотов: {{drivers}} · кругов: {{n}} — заменена более ранняя версия этой сессии (#{{oldId}}, было {{oldLaps}} круга(ов))",
     logImportSkip: "{{name}} — {{msg}}",
     logImportSkipDefault: "пропущен",
     logImportSkipLocalDuplicate: "уже был импортирован ранее",
-    logImportSkipSuperseded: "{{name}} — пропущен: в базе уже есть более полная версия этой сессии ({{existingLaps}} кругов ≥ {{newLaps}} в этом файле)",
+    logImportSkipSuperseded:
+      "{{name}} — пропущен: в базе уже есть более полная версия этой сессии ({{existingLaps}} кругов ≥ {{newLaps}} в этом файле)",
     logImportError: "{{name}} — {{msg}}",
     logImportErrorDefault: "неизвестная ошибка",
     logImportDone: "Импорт завершён",
-    confirmClearDb: "Удалить все импортированные данные из БД? Будут удалены все сессии, круги, трассы и связанные записи. Это действие необратимо.",
+    confirmClearDb:
+      "Удалить все импортированные данные из БД? Будут удалены все сессии, круги, трассы и связанные записи. Это действие необратимо.",
     adminTokenPrompt: "Введите admin-токен для подтверждения очистки БД",
     logClearingDb: "Очистка БД…",
     logDbCleared: "БД успешно очищена",
@@ -374,9 +383,11 @@ const ru = {
     title: "Импорт телеметрии игры",
     subtitle: "Подключите папку с файлами телеметрии LMU (.duckdb). Данные заносятся в базу по одному файлу.",
     cleanupTitle: "Очистка телеметрии",
-    cleanupBody: "Будут удалены все импортированные данные телеметрии: сессии записи, каналы и сэмплы. Действие необратимо. Данные заездов (круги, результаты) не затрагиваются.",
+    cleanupBody:
+      "Будут удалены все импортированные данные телеметрии: сессии записи, каналы и сэмплы. Действие необратимо. Данные заездов (круги, результаты) не затрагиваются.",
     cleanupCta: "Очистить телеметрию",
-    confirmClear: "Удалить всю импортированную телеметрию? Будут удалены все записи, каналы и сэмплы. Это действие необратимо.",
+    confirmClear:
+      "Удалить всю импортированную телеметрию? Будут удалены все записи, каналы и сэмплы. Это действие необратимо.",
     adminTokenPrompt: "Введите admin-токен для подтверждения очистки телеметрии",
     logClearing: "Очистка телеметрии…",
     logCleared: "✓ Телеметрия успешно очищена",
@@ -427,7 +438,9 @@ const ru = {
   },
 } as const;
 
-type DeepString<T> = { [K in keyof T]: T[K] extends string ? string : T[K] extends readonly string[] ? readonly string[] : DeepString<T[K]> };
+type DeepString<T> = {
+  [K in keyof T]: T[K] extends string ? string : T[K] extends readonly string[] ? readonly string[] : DeepString<T[K]>;
+};
 type Dict = DeepString<typeof ru>;
 
 const en: Dict = {
@@ -618,7 +631,8 @@ const en: Dict = {
     filterUpcoming: "Upcoming",
     filterAll: "All",
     filterPast: "Past",
-    staleSourceWarning: "Couldn't fetch the latest schedule from the LMU website — showing saved data, which may be out of date.",
+    staleSourceWarning:
+      "Couldn't fetch the latest schedule from the LMU website — showing saved data, which may be out of date.",
     trackTba: "Track TBA",
     featured: "FEATURED",
     today: "today",
@@ -638,7 +652,8 @@ const en: Dict = {
     minSuffix: "min",
     footerPrefix: "Schedule published on",
     footerSuffix: ". Fri/Sat/Sun — exact slot times are confirmed closer to the date.",
-    dailyFooterPrefix: "Daily Races are short, weekly-updated multiplayer races in LMU. A new rotation goes live every Monday. Current schedule on",
+    dailyFooterPrefix:
+      "Daily Races are short, weekly-updated multiplayer races in LMU. A new rotation goes live every Monday. Current schedule on",
     dailyFooterLinkText: "the LMU website",
   },
   sessionDetail: {
@@ -736,11 +751,13 @@ const en: Dict = {
     tabLogs: "Log import",
     tabTelemetry: "Telemetry import",
     cleanupTitle: "Clear database",
-    cleanupBody: "All imported data will be deleted: sessions, laps, tracks and related records. This action is irreversible. Files can be re-imported after clearing.",
+    cleanupBody:
+      "All imported data will be deleted: sessions, laps, tracks and related records. This action is irreversible. Files can be re-imported after clearing.",
     cleanupCta: "Clear database",
     whereTitle: "Where result logs are stored",
     wherePath: "…\\Le Mans Ultimate\\UserData\\Log\\Results\\*.xml",
-    whereBody: "Pick a folder — the browser will pick up all .xml files. Data is imported one record at a time without loading everything into memory. Re-uploads are skipped.",
+    whereBody:
+      "Pick a folder — the browser will pick up all .xml files. Data is imported one record at a time without loading everything into memory. Re-uploads are skipped.",
     pickFolder: "Select log folder",
     pickFiles: "Select files manually",
     pickFilesFallback: "Select individual files",
@@ -753,7 +770,8 @@ const en: Dict = {
     statImported: "Imported",
     statSkipped: "Skipped",
     statErrors: "Errors",
-    noFsaWarning: "Automatic background scanning is unavailable — a Chromium-based browser with File System Access API support is required. Use the manual file or folder picker below.",
+    noFsaWarning:
+      "Automatic background scanning is unavailable — a Chromium-based browser with File System Access API support is required. Use the manual file or folder picker below.",
     statusLabel: "Status",
     modeScanning: "Scanning…",
     modeImporting: "Importing…",
@@ -767,15 +785,18 @@ const en: Dict = {
     logNewFilesFound: "New files detected: {{n}}",
     logImporting: "Importing: {{name}}",
     logImportOk: "{{name}} — {{event}} ({{sessionType}}) · drivers: {{drivers}} · laps: {{n}}",
-    logImportReplaced: "{{name}} — {{event}} ({{sessionType}}) · drivers: {{drivers}} · laps: {{n}} — replaced an earlier version of this session (#{{oldId}}, was {{oldLaps}} laps)",
+    logImportReplaced:
+      "{{name}} — {{event}} ({{sessionType}}) · drivers: {{drivers}} · laps: {{n}} — replaced an earlier version of this session (#{{oldId}}, was {{oldLaps}} laps)",
     logImportSkip: "{{name}} — {{msg}}",
     logImportSkipDefault: "skipped",
     logImportSkipLocalDuplicate: "already imported previously",
-    logImportSkipSuperseded: "{{name}} — skipped: a more complete version of this session already exists ({{existingLaps}} laps ≥ {{newLaps}} in this file)",
+    logImportSkipSuperseded:
+      "{{name}} — skipped: a more complete version of this session already exists ({{existingLaps}} laps ≥ {{newLaps}} in this file)",
     logImportError: "{{name}} — {{msg}}",
     logImportErrorDefault: "unknown error",
     logImportDone: "Import finished",
-    confirmClearDb: "Delete all imported data from the database? All sessions, laps, tracks and related records will be deleted. This action is irreversible.",
+    confirmClearDb:
+      "Delete all imported data from the database? All sessions, laps, tracks and related records will be deleted. This action is irreversible.",
     adminTokenPrompt: "Enter the admin token to confirm clearing the database",
     logClearingDb: "Clearing database…",
     logDbCleared: "Database cleared successfully",
@@ -784,7 +805,7 @@ const en: Dict = {
     toastErrorTitle: "Error",
     logDbClearError: "Database clear error: {{msg}}",
     logScanningFolder: "Scanning folder: {{name}}",
-    logNoPermission: "No permission to read the folder. Click \"Allow access\".",
+    logNoPermission: 'No permission to read the folder. Click "Allow access".',
     logXmlFound: "Found .xml files: {{n}}",
     logScanError: "Scan error: {{msg}}",
     logFilesPicked: "Files selected: {{n}}",
@@ -795,9 +816,11 @@ const en: Dict = {
     title: "Import game telemetry",
     subtitle: "Connect the LMU telemetry folder (.duckdb). Data is stored one file at a time.",
     cleanupTitle: "Clear telemetry",
-    cleanupBody: "All imported telemetry data will be deleted: recording sessions, channels and samples. This action is irreversible. Race data (laps, results) is not affected.",
+    cleanupBody:
+      "All imported telemetry data will be deleted: recording sessions, channels and samples. This action is irreversible. Race data (laps, results) is not affected.",
     cleanupCta: "Clear telemetry",
-    confirmClear: "Delete all imported telemetry? All sessions, channels and samples will be deleted. This action is irreversible.",
+    confirmClear:
+      "Delete all imported telemetry? All sessions, channels and samples will be deleted. This action is irreversible.",
     adminTokenPrompt: "Enter the admin token to confirm clearing telemetry",
     logClearing: "Clearing telemetry…",
     logCleared: "✓ Telemetry cleared successfully",
@@ -815,7 +838,7 @@ const en: Dict = {
     logFolderPicked: "Folder selected: {{name}}",
     logFolderPickError: "Folder selection error: {{msg}}",
     logScanningFolder: "Scanning folder: {{name}}",
-    logNoPermission: "No permission to read the folder. Click \"Allow access\".",
+    logNoPermission: 'No permission to read the folder. Click "Allow access".',
     logFilesFound: "Found .duckdb files: {{n}}",
     logScanError: "Scan error: {{msg}}",
     logFilesPicked: "Files selected: {{n}}",
@@ -876,17 +899,17 @@ export function pluralRu(n: number, forms: readonly [string, string, string]): s
 // В БД название страны трассы хранится строкой на русском (напр. "Франция") —
 // серверная модель не языкозависима, поэтому переводим только для отображения.
 const COUNTRY_NAMES_EN: Record<string, string> = {
-  "Бахрейн": "Bahrain",
-  "Бельгия": "Belgium",
-  "Бразилия": "Brazil",
-  "Великобритания": "United Kingdom",
-  "Испания": "Spain",
-  "Италия": "Italy",
-  "Катар": "Qatar",
-  "Португалия": "Portugal",
-  "США": "USA",
-  "Франция": "France",
-  "Япония": "Japan",
+  Бахрейн: "Bahrain",
+  Бельгия: "Belgium",
+  Бразилия: "Brazil",
+  Великобритания: "United Kingdom",
+  Испания: "Spain",
+  Италия: "Italy",
+  Катар: "Qatar",
+  Португалия: "Portugal",
+  США: "USA",
+  Франция: "France",
+  Япония: "Japan",
 };
 
 /** Переводит название страны трассы (данные из БД, всегда на русском) для отображения на en. */

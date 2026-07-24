@@ -2,19 +2,8 @@ import { useState } from "react";
 import { useDrivers } from "@/lib/api";
 import { Check, ChevronsUpDown, Bot, CheckCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { DriverName } from "@/components/DriverName";
 import { useLanguage } from "@/lib/i18n";
@@ -39,7 +28,11 @@ interface DriverFilterBarProps {
  * уходе со страницы — ожидаемое поведение, а не побочный эффект.
  */
 export function DriverFilterBar({
-  selectedDriverIds, onToggleDriver, onSetManyDrivers, onClear, mode = "multi",
+  selectedDriverIds,
+  onToggleDriver,
+  onSetManyDrivers,
+  onClear,
+  mode = "multi",
 }: DriverFilterBarProps) {
   const { t, tn } = useLanguage();
   const { data: drivers } = useDrivers();
@@ -57,17 +50,12 @@ export function DriverFilterBar({
 
   // «Выбрать все» действует на список, видимый сейчас с учётом переключателя ИИ
   // (независимо от текста поиска — иначе легко случайно выбрать не тех, кого ждёшь).
-  const allVisibleSelected =
-    visibleDrivers.length > 0 && visibleDrivers.every((d) => selectedDriverIds.has(d.id));
+  const allVisibleSelected = visibleDrivers.length > 0 && visibleDrivers.every((d) => selectedDriverIds.has(d.id));
 
   // Разбивка списка: сначала уже выбранные (закреплены сверху), затем игроки, затем ИИ
   const selectedVisible = visibleDrivers.filter((d) => selectedDriverIds.has(d.id));
-  const unselectedPlayers = visibleDrivers.filter(
-    (d) => !selectedDriverIds.has(d.id) && d.isPlayer === 1,
-  );
-  const unselectedAI = visibleDrivers.filter(
-    (d) => !selectedDriverIds.has(d.id) && d.isPlayer !== 1,
-  );
+  const unselectedPlayers = visibleDrivers.filter((d) => !selectedDriverIds.has(d.id) && d.isPlayer === 1);
+  const unselectedAI = visibleDrivers.filter((d) => !selectedDriverIds.has(d.id) && d.isPlayer !== 1);
 
   // В single-режиме попап закрывается сразу после выбора — как у обычного
   // combobox, а не мультиселекта с чипами.
@@ -91,10 +79,12 @@ export function DriverFilterBar({
               className="h-9 w-[200px] justify-between px-3 text-sm font-normal"
             >
               {selectedDrivers.length === 0
-                ? (isSingle ? t("driverFilter.placeholderNoneSingle") : t("driverFilter.placeholderNone"))
+                ? isSingle
+                  ? t("driverFilter.placeholderNoneSingle")
+                  : t("driverFilter.placeholderNone")
                 : selectedDrivers.length === 1
-                ? selectedDrivers[0].name
-                : `${tn(selectedDrivers.length, "pilots")} ${t("driverFilter.selectedSuffix")}`}
+                  ? selectedDrivers[0].name
+                  : `${tn(selectedDrivers.length, "pilots")} ${t("driverFilter.selectedSuffix")}`}
               <ChevronsUpDown size={13} className="ml-2 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>

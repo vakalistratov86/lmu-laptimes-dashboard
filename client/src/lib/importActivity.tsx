@@ -33,11 +33,7 @@ export function ImportActivityProvider({ children }: { children: ReactNode }) {
     () => (logEngine.mode !== "idle" ? logEngine.mode : telemetryEngine.mode),
     [logEngine.mode, telemetryEngine.mode],
   );
-  return (
-    <ImportActivityContext.Provider value={{ mode }}>
-      {children}
-    </ImportActivityContext.Provider>
-  );
+  return <ImportActivityContext.Provider value={{ mode }}>{children}</ImportActivityContext.Provider>;
 }
 
 export function useImportActivity(): ImportActivityContextValue {

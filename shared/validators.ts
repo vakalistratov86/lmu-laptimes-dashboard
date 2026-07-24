@@ -6,7 +6,7 @@
 import { z } from "zod";
 
 const MAX_LAP_MS = 24 * 60 * 60 * 1000; // 24 часа
-const MIN_LAP_MS = 10_000;              // 10 секунд — физически минимальное время круга
+const MIN_LAP_MS = 10_000; // 10 секунд — физически минимальное время круга
 const MAX_SECTOR_MS = 12 * 60 * 60 * 1000;
 
 // ──────────────────────────────────────────────
@@ -16,11 +16,7 @@ const MAX_SECTOR_MS = 12 * 60 * 60 * 1000;
 export const LapTimeSchema = z.object({
   driverName: z.string().min(1).max(200),
   trackName: z.string().min(1).max(200),
-  lapTimeMs: z
-    .number()
-    .int()
-    .positive()
-    .max(MAX_LAP_MS, "Время круга превышает 24 часа"),
+  lapTimeMs: z.number().int().positive().max(MAX_LAP_MS, "Время круга превышает 24 часа"),
   sessionDate: z.coerce.date(),
   carClass: z.string().max(100).optional(),
   sector1Ms: z.number().int().nonnegative().max(MAX_SECTOR_MS).optional(),
@@ -34,7 +30,10 @@ export const SessionEventSchema = z.object({
   venue: z.string().min(1).max(200),
   sessionType: z.string().min(1).max(100),
   event: z.string().max(200).optional(),
-  dateTimeIso: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)),
+  dateTimeIso: z
+    .string()
+    .datetime({ offset: true })
+    .or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)),
   gameVersion: z.string().max(100).optional(),
 });
 
@@ -74,7 +73,7 @@ export function validateLapTimeSemantic(lt: LapTimeInput): string | null {
  * Возвращает { ok: true, data } или { ok: false, errorCode, errorMessage }.
  */
 export function validateLapTime(
-  raw: unknown
+  raw: unknown,
 ): { ok: true; data: LapTimeInput } | { ok: false; errorCode: string; errorMessage: string } {
   const result = LapTimeSchema.safeParse(raw);
   if (!result.success) {
@@ -98,7 +97,7 @@ export function validateLapTime(
  * Принимает loose-объект из парсера, возвращает результат валидации.
  */
 export function validateRawLap(
-  raw: Record<string, unknown>
+  raw: Record<string, unknown>,
 ): { ok: true; data: LapTimeInput } | { ok: false; errorCode: string; errorMessage: string } {
   return validateLapTime(raw);
 }

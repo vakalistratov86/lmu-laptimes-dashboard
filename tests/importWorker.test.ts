@@ -84,7 +84,11 @@ function makeTxWithExistingTrack() {
     });
   }
   const existingTrack = {
-    id: 42, name: "Bahrain", country: "Бахрейн", lengthKm: 5.4, turns: 15,
+    id: 42,
+    name: "Bahrain",
+    country: "Бахрейн",
+    lengthKm: 5.4,
+    turns: 15,
     layout: "Bahrain International Circuit",
   };
   return {
@@ -103,7 +107,7 @@ describe("runImport — файлы без данных для импорта (ZE
     parseRaceResults.mockReturnValueOnce(null);
 
     await expect(
-      runImport({ id: "job-1", fileHash: "hash-1", fileName: "no-drivers.xml", content: "<x/>" })
+      runImport({ id: "job-1", fileHash: "hash-1", fileName: "no-drivers.xml", content: "<x/>" }),
     ).rejects.toMatchObject({ code: "ZERO_LAPS" });
     expect(db.transaction).not.toHaveBeenCalled();
   });
@@ -117,7 +121,7 @@ describe("runImport — файлы без данных для импорта (ZE
     } as any);
 
     await expect(
-      runImport({ id: "job-2", fileHash: "hash-2", fileName: "zero-laps.xml", content: "<x/>" })
+      runImport({ id: "job-2", fileHash: "hash-2", fileName: "zero-laps.xml", content: "<x/>" }),
     ).rejects.toMatchObject({ code: "ZERO_LAPS" });
     expect(db.transaction).not.toHaveBeenCalled();
   });
@@ -162,7 +166,7 @@ describe("runImport — реконнект: замена/пропуск сесс
     db.transaction.mockImplementationOnce(async (fn: any) => fn(tx));
 
     await expect(
-      runImport({ id: "job-10", fileHash: "hash-10", fileName: "reconnect-early.xml", content: "<x/>" })
+      runImport({ id: "job-10", fileHash: "hash-10", fileName: "reconnect-early.xml", content: "<x/>" }),
     ).rejects.toMatchObject({
       code: "SUPERSEDED",
       existingSessionId: 7,
@@ -196,7 +200,12 @@ describe("runImport — реконнект: замена/пропуск сесс
     tx.update = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve(undefined)) })) }));
     db.transaction.mockImplementationOnce(async (fn: any) => fn(tx));
 
-    const result = await runImport({ id: "job-11", fileHash: "hash-11", fileName: "reconnect-full.xml", content: "<x/>" });
+    const result = await runImport({
+      id: "job-11",
+      fileHash: "hash-11",
+      fileName: "reconnect-full.xml",
+      content: "<x/>",
+    });
 
     expect(deleteSupersededSessionData).toHaveBeenCalledWith(tx, 5);
     expect(result.replacedSessionId).toBe(5);

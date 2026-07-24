@@ -72,7 +72,7 @@ describe("import_jobs UNIQUE file_hash constraint", () => {
   it("allows inserting a job with a unique file_hash", () => {
     const stmt = sqlite.prepare(
       `INSERT INTO import_jobs (id, file_hash, file_name, status, created_at)
-       VALUES (?, ?, ?, 'queued', ?)`
+       VALUES (?, ?, ?, 'queued', ?)`,
     );
     expect(() => stmt.run("id1", "hash_abc", "file1.xml", Date.now())).not.toThrow();
   });
@@ -80,7 +80,7 @@ describe("import_jobs UNIQUE file_hash constraint", () => {
   it("rejects duplicate file_hash (idempotency, #6)", () => {
     const stmt = sqlite.prepare(
       `INSERT INTO import_jobs (id, file_hash, file_name, status, created_at)
-       VALUES (?, ?, ?, 'queued', ?)`
+       VALUES (?, ?, ?, 'queued', ?)`,
     );
     stmt.run("id1", "hash_abc", "file1.xml", Date.now());
     expect(() => stmt.run("id2", "hash_abc", "file2.xml", Date.now())).toThrow();
@@ -89,7 +89,7 @@ describe("import_jobs UNIQUE file_hash constraint", () => {
   it("allows different files with different hashes", () => {
     const stmt = sqlite.prepare(
       `INSERT INTO import_jobs (id, file_hash, file_name, status, created_at)
-       VALUES (?, ?, ?, 'queued', ?)`
+       VALUES (?, ?, ?, 'queued', ?)`,
     );
     stmt.run("id1", "hash_aaa", "file1.xml", Date.now());
     stmt.run("id2", "hash_bbb", "file2.xml", Date.now());
