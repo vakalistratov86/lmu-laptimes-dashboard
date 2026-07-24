@@ -47,7 +47,7 @@ npm run dev
 
 ## Структура проекта
 
-```
+```text
 .
 ├── client/              # Frontend (React 18, Vite, Tailwind, shadcn/ui)
 │   └── src/
@@ -96,7 +96,7 @@ npm run dev
 
 ### Формат
 
-```
+```text
 <тип>[(область)]: <краткое описание>
 
 [тело — необязательно]
@@ -119,7 +119,7 @@ npm run dev
 
 ### Примеры
 
-```
+```text
 feat(leaderboards): добавить группировку по trackName + course
 fix(ui): исправить формат даты в Special Events tab
 docs: обновить README — добавить секцию Supabase
@@ -129,7 +129,7 @@ test(routes): добавить тесты для getLaps JOIN-поведения
 
 При наличии связанного issue укажите его в подвале:
 
-```
+```text
 feat(#3): enrich getLaps() with sessionCourse via JOIN with sessions
 
 Closes #3

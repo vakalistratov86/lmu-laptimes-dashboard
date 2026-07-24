@@ -10,14 +10,17 @@
 ## [Unreleased]
 
 ### Added
+
 - **ESLint + Prettier** — `eslint.config.js` (flat config, `typescript-eslint` + `eslint-plugin-react`/`react-hooks`) и `.prettierrc.json`; npm-скрипты `lint`/`lint:fix`/`format`/`format:check`; отдельные джобы ESLint/Prettier в CI (`.github/workflows/lint.yml`); весь репозиторий приведён к единому формату (#125)
 - Серверная валидация query/path-параметров REST API через Zod-схемы (`IdParamSchema`, `LapNumberParamSchema`, `PaginationQuerySchema`, `LapsQuerySchema`, `BestLapsQuerySchema` в `shared/validators.ts`) — невалидный `trackId`/`:id`/`limit` и т.п. теперь возвращает `400` с описанием ошибки вместо тихого превращения в `NaN` в SQL-фильтре (#124)
 
 ### Changed
+
 - `GET /api/sessions/:id/laps` — обогащение `driverName`/`carNumber`/`isPlayer` перенесено с трёх отдельных запросов + склейки через JS `Map` на один JOIN-запрос (`storage.getSessionLapsEnriched()`), устраняя последнее оставшееся место дублирования enrich-логики кругов/пилотов (#126)
 - `server/importWorker.ts` — insert-массивы (`lapTimeRows`/`sessionLapRows`/`dlqRows`/`streamDlqRows`) типизированы через `InsertLapTime`/`InsertSessionLap`/`InsertImportError` из `shared/schema.ts` вместо `any[]`, чтобы рассинхрон со схемой Drizzle ловился на этапе компиляции, а не в рантайме на пути импорта заездов (#127)
 
 ### Added
+
 - **Раздел «Телеметрия»** — импорт и просмотр записей телеметрии LMU (`.duckdb`-файлы игры)
   - Страница **Telemetry** — список импортированных записей (пилот, трасса, дата)
   - Страница **Telemetry Detail** — карта трассы по GPS-треку круга (`TelemetryTrackMap`) + график каналов телеметрии с выбором круга, зумом и легендой (`TelemetryChart`, `TelemetryLapPicker`)
@@ -26,6 +29,7 @@
   - Новые таблицы БД: `telemetry_import_jobs`, `telemetry_sessions`, `telemetry_channels`, `telemetry_samples`
 
 ### Removed
+
 - **Автозаполнение демо-данными убрано** — при пустой БД приложение больше не создаёт фейковые трассы/пилотов/заезды (`seedIfEmpty()` удалена вместе с вызовом при старте сервера). При старте с пустой БД все разделы (Overview/Leaderboards/Tracks/Sessions) показывают пустое состояние с призывом импортировать логи через **Import**
   - Убрана колонка `lap_times.source` (`demo`/`import`) и эндпоинт `DELETE /api/demo` — источник данных теперь всегда «импорт», различать было нечего
   - Убрана статичная плашка «Демо-данные · сезон 2026» из сайдбара
@@ -33,6 +37,7 @@
   - `README.md`/`docs/database-schema.md` приведены в соответствие: больше не описывают демо-заполнение как поведение по умолчанию
 
 ### Added
+
 - **Мультиязычность (i18n): русская и английская версии приложения**
   - Переключатель языка RU/EN в правом верхнем углу шапки (`AppLayout.tsx`), рядом с переключателем темы
   - Собственная (без внешних библиотек) инфраструктура перевода `client/src/lib/i18n.tsx`: React-контекст `LanguageProvider`/`useLanguage()`, плоские dot-path ключи (`t("namespace.key")`) с подстановкой переменных `{{var}}`, склонение числительных для русского языка (`tn()` — 1/2-4/5+), typescript-проверка соответствия ключей между `ru` и `en` словарями на этапе компиляции
@@ -42,6 +47,7 @@
   - Названия стран трасс переводятся на лету (`translateCountry()`) без изменения серверных данных
 
 ### Fixed
+
 - **Импорт телеметрии ронял весь сервер на больших `.duckdb`-файлах** (`FATAL ERROR: JavaScript heap out of memory`, весь Node-процесс падал и перезапускался, остальные пользователи получали `502`). Причина — `telemetryParser.ts`/`telemetryImportWorker.ts` дважды материализовали весь набор сэмплов в JS-памяти перед записью в Postgres. Переписано на потоковое чтение через `conn.stream()`/`yieldRowObjectJs()` (`@duckdb/node-api`) с батч-вставкой по `CHUNK_SIZE` — пиковая память процесса больше не зависит от размера файла. Проверено на реальном файле, ронявшем прод (98 каналов, 2 637 082 сэмпла): импорт проходит и локально, и на боевом сервере (961 МБ RAM) без падения, память держится в пределах ~130 МБ
 - **`/api/telemetry/sessions/:id/laps` и `/laps/:lapNumber/series` отдавали `499`/`502` на больших сессиях** — `getRecordingEndTs()` в `telemetryQuery.ts` вычитывал в Node `ts` вообще всех сэмплов сессии, чтобы найти максимум вручную; для сессий с миллионами сэмплов это было медленно и памятиёмко. Заменено на `SELECT MAX(ts)` силами Postgres
 - **Дедупликация сессий при реконнекте** — при разрыве соединения выделенный сервер LMU пишет НОВЫЙ файл `RaceResults.xml` вместо дополнения старого; при повторной загрузке такого «продолжения» той же сессии (совпадают событие + тип сессии + трасса + пересечение состава пилотов, в пределах ±24ч) более полный дамп теперь заменяет менее полный вместо задвоения строки в `sessions` — новый модуль `server/sessionSupersede.ts`, интегрирован в транзакцию `runImport()`. В журнале импорта на `/import` появился новый уровень «предупреждение» (амбер, иконка треугольника) для случая замены — отличим от обычного зелёного «ok»
@@ -113,6 +119,7 @@
 - Стили бейджей LMP3, GT3, GT4 в Laps.tsx
 
 ### Changed
+
 - Migrated primary storage from SQLite (better-sqlite3) to PostgreSQL с использованием drizzle-orm + postgres-js.
 - Обновлён `server/storage.ts` под асинхронные операции PostgreSQL.
 - `server/routes.ts` переведён на async/await и работу с PostgreSQL.
@@ -124,6 +131,7 @@
 - `Sessions.tsx`: на мобильном (ниже `sm`) текстовая подпись в плитках сводки (Тренировок/Квалификаций/Гонок и время по каждой) скрыта — остаются только иконка и значение; подпись по-прежнему доступна скринридерам (`sr-only`) и полностью видна от `sm` и на десктопе.
 
 ### Fixed
+
 - Унификация стилей badge класса машины в `SessionDetail` и `TrackDetail` через `getClassBadgeClass` (#14)
 - `SessionDetail.tsx`: захардкоженный GTE-цвет заменён на динамический `getClassBadgeClass` (#14)
 - `TrackDetail.tsx`: удалены локальные `CLASS_BADGE` / `getClassBadge()`, дублировавшие `classStyles.ts` (#14)
@@ -151,14 +159,17 @@
   - `Leaderboards.tsx`: колонки «Команда» и «Автомобиль» не были ограничены по ширине — длинные названия команд переносились на 2-3 строки в каждой строке таблицы, раздувая высоту и вытесняя время круга/отставание за пределы экрана; колонки «Команда»/«Автомобиль»/«Дата» скрыты на узких экранах (как уже сделано в `SessionResultsTable`), остальные обрезаются по `max-width` с `truncate`
 
 ### Removed
+
 - Вкладки/страницы **Laps** и **Reports** удалены из навигации и роутинга (функциональность заездов доступна через Sessions / Session Detail); часть более старых записей этого CHANGELOG всё ещё упоминает эти страницы как исторический контекст.
 
 ### Refactored
+
 - `SessionDetail.tsx` разбит на компонентную архитектуру с view-model слоем (SD-11, #42)
 - Вкладка Events разделена на Daily Races и Special Events
 - Стили классов машин вынесены в `client/src/lib/classStyles.ts`
 
 ### Docs
+
 - README: добавлены бейджи, описание тестов, секция Supabase, полный список скриптов
 - README: добавлено примечание об ограничениях LMU Daily Races API
 - README: все примечания перемещены в конец документа
@@ -172,6 +183,7 @@
 ## [0.1.0] — 2026-07-14
 
 ### Added
+
 - Первоначальная настройка проекта под Windows
 - Базовые страницы: Overview, Laps, Leaderboards, Reports, Tracks, TrackDetail
 - Тёмная/светлая тема, адаптивная вёрстка
