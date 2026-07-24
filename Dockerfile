@@ -17,9 +17,15 @@ RUN apk add --no-cache libstdc++ libgcc
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-# schema.ts + drizzle.config.ts let `docker compose exec dashboard npx drizzle-kit
-# push` be run manually against the production DB after a schema change —
-# dist/ only has the bundled server code, not the raw schema drizzle-kit reads.
+# server/migrate.ts reads migrations/*.sql + migrations/meta/_journal.json at
+# startup (drizzle-orm migrator) — dist/ only has the bundled server code, not
+# these raw files, so they must be copied separately into the image.
+COPY --from=builder /app/migrations ./migrations
+# shared/ + drizzle.config.ts are kept only so `docker compose exec dashboard
+# npx drizzle-kit ...` can be run manually inside the container for ad-hoc
+# introspection/diagnostics — normal schema changes go through `npm run
+# db:generate` in dev (commits a new migrations/*.sql) and apply themselves
+# automatically on the next deploy via server/migrate.ts, no manual step needed.
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 EXPOSE 3000
