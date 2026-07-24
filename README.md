@@ -30,6 +30,7 @@
 
 - **Парсер XML-логов** (`server/logParser.ts`) с поддержкой поля `sessionCourse` (конфигурация трассы) во всех слоях — от хранилища до UI.
 - **Нормализатор данных** (`server/normalizer.ts`) — очистка и унификация распознанных полей перед записью в БД.
+- **Валидация REST API** (`shared/validators.ts`) — числовые `:id`/`:lapNumber` из пути и query-параметры списочных эндпоинтов (`trackId`, `driverId`, `limit`/`offset` и т.д.) проверяются Zod-схемами до похода в БД; невалидный ввод возвращает `400` вместо тихого превращения в `NaN` в SQL-фильтре.
 - **Import** (`server/importWorker.ts` + `client/src/pages/Import.tsx`) — синхронная обработка файлов по одному, идемпотентность по SHA-256 хэшу содержимого, DLQ для битых записей (`import_errors`), журнал импорта в localStorage/IndexedDB, автоимпорт папки. Движок импорта живёт в провайдерах уровня приложения (`client/src/lib/logImportEngine.tsx`, `client/src/lib/telemetryImportEngine.tsx`), смонтированных выше роутера — переход между страницами не прерывает фоновую загрузку.
 - **Дедупликация сессий при реконнекте** (`server/sessionSupersede.ts`) — при разрыве соединения LMU пишет новый файл лога вместо дополнения старого; при импорте сессия-продолжение определяется по совпадению события, типа сессии, трассы и пересечения состава пилотов (в пределах ±24ч), после чего менее полный дамп заменяется более полным внутри той же транзакции.
 - **Session Detail — компонентная архитектура:**
@@ -55,6 +56,8 @@
 | **База данных** | PostgreSQL (drizzle-orm + postgres-js), миграции drizzle-kit |
 | **Телеметрия** | `@duckdb/node-api` — чтение `.duckdb`-файлов записи LMU |
 | **Тестирование** | Vitest 2 + coverage-v8 |
+| **Валидация** | Zod — структурная валидация лога при импорте и query/path-параметров REST API (`shared/validators.ts`) |
+| **Линтинг/форматирование** | ESLint 9 (flat config, `typescript-eslint` + `eslint-plugin-react`/`react-hooks`) + Prettier, проверяются в CI (`.github/workflows/lint.yml`) |
 
 ---
 
@@ -104,6 +107,8 @@
 ├── Dockerfile           # Образ приложения с генерацией миграций
 ├── vite.config.ts       # Конфигурация Vite
 ├── tailwind.config.ts   # Конфигурация Tailwind CSS
+├── eslint.config.js     # Конфигурация ESLint (flat config)
+├── .prettierrc.json     # Конфигурация Prettier
 └── tsconfig.json        # Конфигурация TypeScript
 ```
 
@@ -187,6 +192,10 @@ docker compose up --build
 | `npm test` | Запуск тестов (Vitest) |
 | `npm run test:watch` | Запуск тестов в watch-режиме |
 | `npm run test:coverage` | Отчёт о покрытии кода тестами |
+| `npm run lint` | Проверка кода ESLint'ом |
+| `npm run lint:fix` | Проверка ESLint с автоисправлением |
+| `npm run format` | Форматирование кода Prettier |
+| `npm run format:check` | Проверка форматирования без изменения файлов (используется в CI) |
 
 ---
 
