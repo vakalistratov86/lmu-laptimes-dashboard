@@ -62,6 +62,50 @@ export interface SupersedeCandidate {
   overlap: number;
 }
 
+/**
+ * Живая телеметрия круга (топ-спид, топливо, износ шин). При реконнекте
+ * пилот теряет своё локальное физическое состояние, и сервер переписывает
+ * уже пройденные круги "с нуля" (полный бак, 0% износа, топ-спид 0) вместо
+ * сохранения реальных значений — подтверждено на реальных логах (0 расхождений
+ * во времени круга/секторов между дампами, но сотни расхождений именно в этих
+ * полях). Время круга и секторы в мёрдж не входят: они и так идентичны между
+ * дампами одной реальной сессии.
+ */
+export interface LapTelemetrySnapshot {
+  topSpeedKph: number | null;
+  fuelLevel: number | null;
+  fuelUsed: number | null;
+  tyreFLCondition: number | null;
+  tyreFRCondition: number | null;
+  tyreRLCondition: number | null;
+  tyreRRCondition: number | null;
+}
+
+/** driverId:lapNum -> телеметрия круга, снятая из заменяемой (менее полной) сессии. */
+export async function fetchLapTelemetryForSession(
+  tx: any,
+  sessionId: number,
+): Promise<Map<string, LapTelemetrySnapshot>> {
+  const rows: (LapTelemetrySnapshot & { driverId: number; lapNum: number })[] = await tx
+    .select({
+      driverId: sessionLaps.driverId,
+      lapNum: sessionLaps.lapNum,
+      topSpeedKph: sessionLaps.topSpeedKph,
+      fuelLevel: sessionLaps.fuelLevel,
+      fuelUsed: sessionLaps.fuelUsed,
+      tyreFLCondition: sessionLaps.tyreFLCondition,
+      tyreFRCondition: sessionLaps.tyreFRCondition,
+      tyreRLCondition: sessionLaps.tyreRLCondition,
+      tyreRRCondition: sessionLaps.tyreRRCondition,
+    })
+    .from(sessionLaps)
+    .where(eq(sessionLaps.sessionId, sessionId));
+
+  const map = new Map<string, LapTelemetrySnapshot>();
+  for (const row of rows) map.set(`${row.driverId}:${row.lapNum}`, row);
+  return map;
+}
+
 export interface SupersedeMatchParams {
   event: string;
   sessionType: string;

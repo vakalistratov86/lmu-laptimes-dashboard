@@ -22,18 +22,22 @@ vi.mock("../server/storage", () => ({ db }));
 const { parseRaceResults } = vi.hoisted(() => ({ parseRaceResults: vi.fn() }));
 vi.mock("../server/logParser", () => ({ parseRaceResults }));
 
-const { findSupersedeCandidate, deleteSupersededSessionData, decideSupersedeAction } = vi.hoisted(() => ({
-  findSupersedeCandidate: vi.fn(),
-  deleteSupersededSessionData: vi.fn(),
-  decideSupersedeAction: vi.fn(),
-}));
+const { findSupersedeCandidate, deleteSupersededSessionData, decideSupersedeAction, fetchLapTelemetryForSession } =
+  vi.hoisted(() => ({
+    findSupersedeCandidate: vi.fn(),
+    deleteSupersededSessionData: vi.fn(),
+    decideSupersedeAction: vi.fn(),
+    fetchLapTelemetryForSession: vi.fn(async () => new Map()),
+  }));
 vi.mock("../server/sessionSupersede", () => ({
   findSupersedeCandidate,
   deleteSupersededSessionData,
   decideSupersedeAction,
+  fetchLapTelemetryForSession,
 }));
 
 import { runImport } from "../server/importWorker";
+import { sessionLaps as sessionLapsTable } from "@shared/schema";
 
 /** Минимальный, но структурно валидный ParsedSession для тестов, идущих внутрь транзакции. */
 function makeParsedSession() {
@@ -154,6 +158,8 @@ describe("runImport — реконнект: замена/пропуск сесс
     findSupersedeCandidate.mockReset();
     deleteSupersededSessionData.mockReset();
     decideSupersedeAction.mockReset();
+    fetchLapTelemetryForSession.mockReset();
+    fetchLapTelemetryForSession.mockResolvedValue(new Map());
   });
 
   it("SUPERSEDED: найден более полный кандидат -> бросает до вставки, tx.insert/delete не вызываются", async () => {
@@ -211,5 +217,96 @@ describe("runImport — реконнект: замена/пропуск сесс
     expect(result.replacedSessionId).toBe(5);
     expect(result.replacedLapCount).toBe(1);
     expect(result.sessionId).toBe(999);
+  });
+
+  it("REPLACE: для перекрывающегося круга берёт живую телеметрию из заменяемого дампа, а не обнулённую из нового", async () => {
+    parseRaceResults.mockReturnValueOnce({
+      ...makeParsedSession(),
+      drivers: [
+        {
+          name: "Driver A",
+          lapList: [
+            // Круг 1 — уже был в старом дампе. Реконнект обнулил его телеметрию в новом файле.
+            {
+              num: 1,
+              lapMs: 100000,
+              topSpeedKph: 0,
+              fuelLevel: 1,
+              fuelUsed: 0,
+              tyreFLCondition: 0,
+              tyreFRCondition: 0,
+              tyreRLCondition: 0,
+              tyreRRCondition: 0,
+            },
+            // Круг 2 — проехан только после реконнекта, в старом дампе его нет.
+            {
+              num: 2,
+              lapMs: 105000,
+              topSpeedKph: 250,
+              fuelLevel: 0.5,
+              fuelUsed: 0.03,
+              tyreFLCondition: 0.9,
+              tyreFRCondition: 0.9,
+              tyreRLCondition: 0.9,
+              tyreRRCondition: 0.9,
+            },
+          ],
+        },
+      ],
+    });
+    const candidateSession = { id: 5, lapCount: 1 };
+    findSupersedeCandidate.mockResolvedValueOnce({ session: candidateSession, overlap: 1 });
+    decideSupersedeAction.mockReturnValueOnce("REPLACE");
+    fetchLapTelemetryForSession.mockResolvedValueOnce(
+      new Map([
+        [
+          "999:1",
+          {
+            topSpeedKph: 251.9,
+            fuelLevel: 0.82,
+            fuelUsed: 0.031,
+            tyreFLCondition: 0.976,
+            tyreFRCondition: 0.976,
+            tyreRLCondition: 0.941,
+            tyreRRCondition: 0.929,
+          },
+        ],
+      ]),
+    );
+
+    const tx = makeTxWithExistingTrack();
+    const capturedSessionLapRows: any[] = [];
+    tx.insert = vi.fn((table: any) => ({
+      values: vi.fn((payload: any) => {
+        if (table === sessionLapsTable) {
+          capturedSessionLapRows.push(...(Array.isArray(payload) ? payload : [payload]));
+        }
+        return {
+          returning: vi.fn(() => {
+            const row = { id: 999, lapCount: 0, ...(Array.isArray(payload) ? payload[0] : payload) };
+            return Promise.resolve([row]);
+          }),
+        };
+      }),
+    }));
+    tx.update = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve(undefined)) })) }));
+    db.transaction.mockImplementationOnce(async (fn: any) => fn(tx));
+
+    await runImport({ id: "job-12", fileHash: "hash-12", fileName: "reconnect-full-2.xml", content: "<x/>" });
+
+    expect(fetchLapTelemetryForSession).toHaveBeenCalledWith(tx, 5);
+
+    const lap1 = capturedSessionLapRows.find((r) => r.lapNum === 1);
+    const lap2 = capturedSessionLapRows.find((r) => r.lapNum === 2);
+
+    // Круг 1: телеметрия из старого дампа (достовернее), не обнулённая из нового.
+    expect(lap1.topSpeedKph).toBe(251.9);
+    expect(lap1.fuelLevel).toBe(0.82);
+    expect(lap1.tyreFLCondition).toBe(0.976);
+    expect(lap1.tyreRRCondition).toBe(0.929);
+
+    // Круг 2: в старом дампе его не было — берём из нового файла как есть.
+    expect(lap2.topSpeedKph).toBe(250);
+    expect(lap2.tyreFLCondition).toBe(0.9);
   });
 });

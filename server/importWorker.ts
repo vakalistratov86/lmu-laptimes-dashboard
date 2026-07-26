@@ -34,7 +34,13 @@ import { parseRaceResults, type ParsedSession } from "./logParser";
 import { validateLapTime } from "@shared/validators";
 import { normalizeLapTime, normalizeDriverNameForStorage, toMilliseconds } from "./normalizer";
 import type { Track, Driver, InsertLapTime, InsertSessionLap, InsertImportError } from "@shared/schema";
-import { findSupersedeCandidate, deleteSupersededSessionData, decideSupersedeAction } from "./sessionSupersede";
+import {
+  findSupersedeCandidate,
+  deleteSupersededSessionData,
+  decideSupersedeAction,
+  fetchLapTelemetryForSession,
+  type LapTelemetrySnapshot,
+} from "./sessionSupersede";
 import { logImportStarted, logImportCompleted, logImportFailed, logImportSkipped, logParseError } from "./logger";
 
 export const CHUNK_SIZE = 500;
@@ -275,6 +281,10 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
     let replacedSessionId: number | null = null;
     let replacedLapCount: number | null = null;
+    // driverId:lapNum -> телеметрия из заменяемого дампа. Реконнект обнуляет
+    // топливо/износ шин/топ-спид уже пройденных кругов в новом файле — см.
+    // LapTelemetrySnapshot в sessionSupersede.ts. Пусто, если реконнекта нет.
+    let supersededLapTelemetry = new Map<string, LapTelemetrySnapshot>();
 
     if (candidate) {
       const action = decideSupersedeAction(totalParsedLaps, candidate.session.lapCount);
@@ -292,6 +302,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       }
       replacedSessionId = candidate.session.id;
       replacedLapCount = candidate.session.lapCount;
+      supersededLapTelemetry = await fetchLapTelemetryForSession(tx, candidate.session.id);
       await deleteSupersededSessionData(tx, candidate.session.id);
     }
 
@@ -394,6 +405,11 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
               ? Math.max(0, lap.lapMs - s1 - s2)
               : null;
 
+        // При реконнекте живая телеметрия уже пройденного круга в новом дампе
+        // обнулена (см. LapTelemetrySnapshot) — если этот же круг есть в
+        // заменяемой сессии, берём телеметрию оттуда, она достовернее.
+        const oldTelemetry = supersededLapTelemetry.get(`${driver.id}:${lap.num}`);
+
         sessionLapRows.push({
           sessionResultId: sr.id,
           sessionId: session.id,
@@ -405,13 +421,13 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
           sector3Ms: s3,
           isPitLap: lap.isPit ? 1 : 0,
           // Телеметрия круга
-          topSpeedKph: lap.topSpeedKph ?? null,
-          fuelLevel: lap.fuelLevel ?? null,
-          fuelUsed: lap.fuelUsed ?? null,
-          tyreFLCondition: lap.tyreFLCondition ?? null,
-          tyreFRCondition: lap.tyreFRCondition ?? null,
-          tyreRLCondition: lap.tyreRLCondition ?? null,
-          tyreRRCondition: lap.tyreRRCondition ?? null,
+          topSpeedKph: oldTelemetry?.topSpeedKph ?? lap.topSpeedKph ?? null,
+          fuelLevel: oldTelemetry?.fuelLevel ?? lap.fuelLevel ?? null,
+          fuelUsed: oldTelemetry?.fuelUsed ?? lap.fuelUsed ?? null,
+          tyreFLCondition: oldTelemetry?.tyreFLCondition ?? lap.tyreFLCondition ?? null,
+          tyreFRCondition: oldTelemetry?.tyreFRCondition ?? lap.tyreFRCondition ?? null,
+          tyreRLCondition: oldTelemetry?.tyreRLCondition ?? lap.tyreRLCondition ?? null,
+          tyreRRCondition: oldTelemetry?.tyreRRCondition ?? lap.tyreRRCondition ?? null,
           frontCompound: lap.frontCompound ?? null,
           rearCompound: lap.rearCompound ?? null,
           tyreFL: lap.tyreFL ?? null,
