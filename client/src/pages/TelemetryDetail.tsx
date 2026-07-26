@@ -85,8 +85,8 @@ export default function TelemetryDetail() {
             </p>
           ) : (
             <div className="space-y-4">
-              <div className="mx-auto max-w-md rounded-lg border border-border bg-card p-3">
-                <TelemetryTrackMap points={points} hoverIndex={hoverIndex} />
+              <div className="mx-auto max-w-2xl rounded-lg border border-border bg-card p-3">
+                <TelemetryTrackMap points={points} hoverIndex={hoverIndex} trackName={session.trackName} />
               </div>
               <div className="rounded-lg border border-border bg-card">
                 <TelemetryChart points={points} onHoverIndexChange={setHoverIndex} />

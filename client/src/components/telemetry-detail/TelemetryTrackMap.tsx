@@ -1,25 +1,38 @@
 import { useMemo } from "react";
 import { projectTrackPoints, pointsToPath } from "@/lib/telemetryGeo";
+import { hasSatelliteMap } from "@/lib/trackMapCalibration";
+import { SatelliteTrackMap } from "@/components/telemetry-detail/SatelliteTrackMap";
 import type { TelemetryLapPoint } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 
 interface TelemetryTrackMapProps {
   points: TelemetryLapPoint[];
   hoverIndex: number | null;
+  trackName: string | null;
 }
 
 const WIDTH = 420;
 const HEIGHT = 320;
 
-export function TelemetryTrackMap({ points, hoverIndex }: TelemetryTrackMapProps) {
+export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTrackMapProps) {
   const { t } = useLanguage();
 
+  // Хуки должны вызываться безусловно на каждом рендере — поэтому проекция
+  // для SVG-фолбэка считается всегда, а выбор ветки рендера (фото или SVG)
+  // делается только в JSX ниже.
   const svgPoints = useMemo(() => {
     const geoPoints = points.map((p) => ({ lat: p.lat ?? 0, lon: p.lon ?? 0 }));
     return projectTrackPoints(geoPoints, WIDTH, HEIGHT);
   }, [points]);
 
   const path = useMemo(() => pointsToPath(svgPoints), [svgPoints]);
+
+  // Для трасс с калибровкой по спутниковому снимку — фото с зумом/паном и
+  // траекторией, привязанной к его пиксельным координатам. Для остальных —
+  // прежняя схематичная SVG-проекция (без привязки к местности).
+  if (hasSatelliteMap(trackName)) {
+    return <SatelliteTrackMap points={points} hoverIndex={hoverIndex} trackName={trackName as string} />;
+  }
 
   const cursor = hoverIndex != null ? svgPoints[hoverIndex] : null;
   const start = svgPoints[0];
