@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
-import { geoToImagePixel, getSatelliteMapCalibration } from "@/lib/trackMapCalibration";
+import { geoToImagePixel, getSatelliteMapCalibration, type ImagePoint } from "@/lib/trackMapCalibration";
+import { headingAt, arrowPolygonPoints, perpendicularSegment } from "@/lib/telemetryGeo";
 import type { TelemetryLapPoint } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 
@@ -17,7 +18,7 @@ interface View {
 }
 
 const ZOOM_STEP = 1.4;
-const MAX_ZOOM_MULT = 8;
+const MAX_ZOOM_MULT = 24;
 
 export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTrackMapProps) {
   const { t } = useLanguage();
@@ -130,14 +131,28 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
     return points.map((p) => (p.lat != null && p.lon != null ? geoToImagePixel(trackName, { lat: p.lat, lon: p.lon }) : null));
   }, [points, trackName]);
 
-  const path = useMemo(() => {
-    const valid = svgPoints.filter((p): p is { x: number; y: number } => p != null);
-    if (valid.length === 0) return "";
-    return valid.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-  }, [svgPoints]);
+  // Точки без GPS (null) выкидываются в отдельный компактный массив — по нему
+  // считаем направление движения (headingAt) и путь, не спотыкаясь о дыры.
+  const validPoints = useMemo(
+    () => svgPoints.filter((p): p is ImagePoint => p != null),
+    [svgPoints],
+  );
 
-  const start = svgPoints.find((p) => p != null) ?? null;
+  const path = useMemo(() => {
+    if (validPoints.length === 0) return "";
+    return validPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  }, [validPoints]);
+
+  const start = validPoints[0] ?? null;
+  const startHeading = useMemo(() => headingAt(validPoints, 0), [validPoints]);
+  const startLine = start ? perpendicularSegment(start.x, start.y, startHeading, 42) : null;
+
   const cursor = hoverIndex != null ? (svgPoints[hoverIndex] ?? null) : null;
+  const cursorCompactIndex = useMemo(
+    () => (hoverIndex != null ? svgPoints.slice(0, hoverIndex + 1).filter((p) => p != null).length - 1 : -1),
+    [svgPoints, hoverIndex],
+  );
+  const cursorHeading = cursorCompactIndex >= 0 ? headingAt(validPoints, cursorCompactIndex) : 0;
 
   if (!calibration) return null;
 
@@ -180,17 +195,43 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
               d={path}
               fill="none"
               stroke="var(--color-border, #64748b)"
-              strokeWidth={18}
+              strokeWidth={8}
               strokeLinecap="round"
               strokeLinejoin="round"
               opacity={0.35}
             />
-            <path d={path} fill="none" stroke="var(--color-primary, #ef4444)" strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" />
-            {start && (
-              <circle cx={start.x} cy={start.y} r={20} fill="var(--color-chart-2, #16a34a)" stroke="white" strokeWidth={4} />
+            <path d={path} fill="none" stroke="var(--color-primary, #ef4444)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+            {startLine && (
+              <line
+                x1={startLine.x1}
+                y1={startLine.y1}
+                x2={startLine.x2}
+                y2={startLine.y2}
+                stroke="white"
+                strokeWidth={9}
+                strokeLinecap="round"
+              />
+            )}
+            {startLine && (
+              <line
+                x1={startLine.x1}
+                y1={startLine.y1}
+                x2={startLine.x2}
+                y2={startLine.y2}
+                stroke="#0f172a"
+                strokeWidth={4}
+                strokeDasharray="7 7"
+                strokeLinecap="butt"
+              />
             )}
             {cursor && (
-              <circle cx={cursor.x} cy={cursor.y} r={26} fill="var(--color-primary, #ef4444)" stroke="white" strokeWidth={5} />
+              <polygon
+                points={arrowPolygonPoints(cursor.x, cursor.y, cursorHeading, 34, 22)}
+                fill="var(--color-chart-2, #16a34a)"
+                stroke="white"
+                strokeWidth={3}
+                strokeLinejoin="round"
+              />
             )}
           </svg>
         </div>

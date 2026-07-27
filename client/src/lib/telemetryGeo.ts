@@ -50,3 +50,40 @@ export function pointsToPath(points: SvgPoint[]): string {
   if (points.length === 0) return "";
   return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
 }
+
+/** Направление движения (радианы, ось Y вниз) в точке `index` по соседним точкам траектории. */
+export function headingAt(points: SvgPoint[], index: number): number {
+  const n = points.length;
+  if (n < 2) return 0;
+  const a = points[Math.max(0, index - 1)];
+  const b = points[Math.min(n - 1, index + 1)];
+  return Math.atan2(b.y - a.y, b.x - a.x);
+}
+
+/** Вершины треугольника-стрелки (для <polygon points>), направленного по `headingRad`. */
+export function arrowPolygonPoints(cx: number, cy: number, headingRad: number, length: number, width: number): string {
+  const tip = { x: cx + Math.cos(headingRad) * length * 0.6, y: cy + Math.sin(headingRad) * length * 0.6 };
+  const backCenter = { x: cx - Math.cos(headingRad) * length * 0.4, y: cy - Math.sin(headingRad) * length * 0.4 };
+  const perp = headingRad + Math.PI / 2;
+  const half = width / 2;
+  const left = { x: backCenter.x + Math.cos(perp) * half, y: backCenter.y + Math.sin(perp) * half };
+  const right = { x: backCenter.x - Math.cos(perp) * half, y: backCenter.y - Math.sin(perp) * half };
+  return [tip, left, right].map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
+}
+
+/** Концы отрезка, перпендикулярного `headingRad`, центрированного в (cx, cy) — линия старт/финиша поперёк полотна трассы. */
+export function perpendicularSegment(
+  cx: number,
+  cy: number,
+  headingRad: number,
+  length: number,
+): { x1: number; y1: number; x2: number; y2: number } {
+  const perp = headingRad + Math.PI / 2;
+  const half = length / 2;
+  return {
+    x1: cx + Math.cos(perp) * half,
+    y1: cy + Math.sin(perp) * half,
+    x2: cx - Math.cos(perp) * half,
+    y2: cy - Math.sin(perp) * half,
+  };
+}

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { projectTrackPoints, pointsToPath } from "@/lib/telemetryGeo";
+import { projectTrackPoints, pointsToPath, headingAt, arrowPolygonPoints, perpendicularSegment } from "@/lib/telemetryGeo";
 import { hasSatelliteMap } from "@/lib/trackMapCalibration";
 import { SatelliteTrackMap } from "@/components/telemetry-detail/SatelliteTrackMap";
 import type { TelemetryLapPoint } from "@/lib/api";
@@ -26,6 +26,11 @@ export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTr
   }, [points]);
 
   const path = useMemo(() => pointsToPath(svgPoints), [svgPoints]);
+  const startHeading = useMemo(() => headingAt(svgPoints, 0), [svgPoints]);
+  const cursorHeading = useMemo(
+    () => (hoverIndex != null ? headingAt(svgPoints, hoverIndex) : 0),
+    [svgPoints, hoverIndex],
+  );
 
   // Для трасс с калибровкой по спутниковому снимку — фото с зумом/паном и
   // траекторией, привязанной к его пиксельным координатам. Для остальных —
@@ -36,6 +41,7 @@ export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTr
 
   const cursor = hoverIndex != null ? svgPoints[hoverIndex] : null;
   const start = svgPoints[0];
+  const startLine = start ? perpendicularSegment(start.x, start.y, startHeading, 18) : null;
 
   return (
     <svg
@@ -48,7 +54,7 @@ export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTr
         d={path}
         fill="none"
         stroke="var(--color-border, #64748b)"
-        strokeWidth={7}
+        strokeWidth={3.5}
         strokeLinecap="round"
         strokeLinejoin="round"
         opacity={0.25}
@@ -57,15 +63,41 @@ export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTr
         d={path}
         fill="none"
         stroke="var(--color-primary, #ef4444)"
-        strokeWidth={2.5}
+        strokeWidth={1.25}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {start && (
-        <circle cx={start.x} cy={start.y} r={5} fill="var(--color-chart-2, #16a34a)" stroke="white" strokeWidth={1.5} />
+      {startLine && (
+        <line
+          x1={startLine.x1}
+          y1={startLine.y1}
+          x2={startLine.x2}
+          y2={startLine.y2}
+          stroke="white"
+          strokeWidth={3}
+          strokeLinecap="round"
+        />
+      )}
+      {startLine && (
+        <line
+          x1={startLine.x1}
+          y1={startLine.y1}
+          x2={startLine.x2}
+          y2={startLine.y2}
+          stroke="#0f172a"
+          strokeWidth={1.25}
+          strokeDasharray="2.5 2.5"
+          strokeLinecap="butt"
+        />
       )}
       {cursor && (
-        <circle cx={cursor.x} cy={cursor.y} r={7} fill="var(--color-primary, #ef4444)" stroke="white" strokeWidth={2} />
+        <polygon
+          points={arrowPolygonPoints(cursor.x, cursor.y, cursorHeading, 9, 6)}
+          fill="var(--color-chart-2, #16a34a)"
+          stroke="white"
+          strokeWidth={1}
+          strokeLinejoin="round"
+        />
       )}
     </svg>
   );
