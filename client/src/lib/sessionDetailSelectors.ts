@@ -19,20 +19,22 @@ import type { NormalizedSessionType } from "./sessionDetail.types";
 // Вспомогательные утилиты
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Форматирует миллисекунды (integer) в строку «M:SS.mmm». */
+/** Форматирует миллисекунды (integer) в строку «MM:SS:mmm». */
 export function formatLapMs(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return "—";
   const totalSeconds = ms / 1000;
-  const m = Math.floor(totalSeconds / 60);
+  const m = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
   const s = totalSeconds % 60;
   const ss = Math.floor(s).toString().padStart(2, "0");
   const msStr = Math.round((s % 1) * 1000)
     .toString()
     .padStart(3, "0");
-  return `${m}:${ss}.${msStr}`;
+  return `${m}:${ss}:${msStr}`;
 }
 
-/** Форматирует секунды (float) в строку «M:SS.mmm». */
+/** Форматирует секунды (float) в строку «MM:SS:mmm». */
 export function formatLapTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "—";
   return formatLapMs(seconds * 1000);
@@ -49,6 +51,16 @@ function parseSectorSeconds(msProp: unknown, secProp: unknown, shortProp: unknow
   const sec = Number(secProp ?? shortProp);
   if (Number.isFinite(sec) && sec > 0) return sec;
   return NaN;
+}
+
+/**
+ * LMU нумерует круги в логе сессии с 0 (`<Lap num="0">` — первый круг), а не с 1.
+ * Для отображения кругам возвращается привычная гонщикам нумерация с 1 — только
+ * в вьюмодели, само поле `lapNum` в БД (используется как ключ сопоставления с
+ * телеметрией/секторами/треклимитами) не трогаем.
+ */
+function toDisplayLapNumber(rawLapNumber: unknown): number {
+  return Number(rawLapNumber ?? 0) + 1;
 }
 
 /** Форматирует отставание (gap) в секундах в строку «+X.XXX». */
@@ -385,7 +397,7 @@ export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
     const key = driverKey(lap);
     const driverName = String(lap.driverName ?? lap.driver ?? "Unknown");
     const carNumber = lap.carNumber ?? lap.number ?? "";
-    const lapNum = Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0);
+    const lapNum = toDisplayLapNumber(lap.lapNumber ?? lap.lapNum ?? lap.lap);
     const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? 0);
 
     if (!Number.isFinite(timeSeconds) || timeSeconds <= 0) continue;
@@ -553,7 +565,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
         const fuelRaw = extractFuelRaw(lap);
 
         return {
-          lapNumber: Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0),
+          lapNumber: toDisplayLapNumber(lap.lapNumber ?? lap.lapNum ?? lap.lap),
           lapTime: Number.isFinite(timeSeconds) ? formatLapTime(timeSeconds) : "—",
           isPersonalBest: Number.isFinite(timeSeconds) && timeSeconds === personalBestSeconds,
           isOverallBest: Number.isFinite(timeSeconds) && timeSeconds === overallBestSeconds,

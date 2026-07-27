@@ -15,13 +15,13 @@
 import { useMemo, useState } from "react";
 import { useRoute, useSearch } from "wouter";
 import { useSession, useSessionLaps } from "@/lib/api";
-import { formatLap } from "@/lib/format";
 import {
   buildResultRows,
   buildDriverLapGroups,
   buildLapProgressSeries,
   buildSectorSummary,
   buildTabs,
+  formatLapMs,
 } from "@/lib/sessionDetailSelectors";
 import {
   SessionInfoCard,
@@ -113,7 +113,7 @@ export default function SessionDetail() {
       const t = r.bestLapMs ?? null;
       if (typeof t === "number" && (min === null || t < min)) min = t;
     }
-    return min ? formatLap(min) : null;
+    return min ? formatLapMs(min) : null;
   }, [session]);
 
   // ── Состояния загрузки / ошибки ───────────────────────────────────────────

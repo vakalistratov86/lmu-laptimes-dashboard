@@ -55,8 +55,9 @@ describe("sessionDetailSelectors — bug-audit regressions", () => {
       expect(groups).toHaveLength(1);
       // Личный лучший должен быть настоящий круг (100с), не пит-лап (10с).
       expect(groups[0].bestLapTime).not.toBe("0:10.000");
-      const pitRow = groups[0].laps.find((l) => l.lapNumber === 1)!;
-      const realRow = groups[0].laps.find((l) => l.lapNumber === 2)!;
+      // lapNumber во вьюмодели — уже +1 к сырому значению (LMU нумерует круги с 0).
+      const pitRow = groups[0].laps.find((l) => l.lapNumber === 2)!;
+      const realRow = groups[0].laps.find((l) => l.lapNumber === 3)!;
       expect(pitRow.isPersonalBest).toBe(false);
       expect(realRow.isPersonalBest).toBe(true);
     });
