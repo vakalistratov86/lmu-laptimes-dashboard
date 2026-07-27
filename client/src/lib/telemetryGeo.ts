@@ -51,12 +51,18 @@ export function pointsToPath(points: SvgPoint[]): string {
   return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ");
 }
 
-/** Направление движения (радианы, ось Y вниз) в точке `index` по соседним точкам траектории. */
-export function headingAt(points: SvgPoint[], index: number): number {
+/**
+ * Направление движения (радианы, ось Y вниз) в точке `index` по траектории.
+ * `spread` — на сколько точек в обе стороны от `index` брать соседей: соседние
+ * GPS-сэмплы шумные (дают дёрганое/неточное направление), поэтому по умолчанию
+ * берём точки на некотором удалении — локальное направление получается устойчивее.
+ */
+export function headingAt(points: SvgPoint[], index: number, spread = 5): number {
   const n = points.length;
   if (n < 2) return 0;
-  const a = points[Math.max(0, index - 1)];
-  const b = points[Math.min(n - 1, index + 1)];
+  const a = points[Math.max(0, index - spread)];
+  const b = points[Math.min(n - 1, index + spread)];
+  if (a.x === b.x && a.y === b.y) return 0;
   return Math.atan2(b.y - a.y, b.x - a.x);
 }
 

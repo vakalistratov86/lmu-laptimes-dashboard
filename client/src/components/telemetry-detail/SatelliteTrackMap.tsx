@@ -191,16 +191,7 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
             viewBox={`0 0 ${naturalWidth} ${naturalHeight}`}
             className="pointer-events-none absolute inset-0"
           >
-            <path
-              d={path}
-              fill="none"
-              stroke="var(--color-border, #64748b)"
-              strokeWidth={8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity={0.35}
-            />
-            <path d={path} fill="none" stroke="var(--color-primary, #ef4444)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+            <path d={path} fill="none" stroke="var(--color-primary, #ef4444)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
             {startLine && (
               <line
                 x1={startLine.x1}

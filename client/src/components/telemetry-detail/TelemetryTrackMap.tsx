@@ -53,17 +53,8 @@ export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTr
       <path
         d={path}
         fill="none"
-        stroke="var(--color-border, #64748b)"
-        strokeWidth={3.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity={0.25}
-      />
-      <path
-        d={path}
-        fill="none"
         stroke="var(--color-primary, #ef4444)"
-        strokeWidth={1.25}
+        strokeWidth={0.9}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
