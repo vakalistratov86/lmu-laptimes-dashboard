@@ -74,8 +74,28 @@ describe("fetchLapTelemetryForSession", () => {
   // одной сессии встречается больше одного driverId.
   it("возвращает снапшоты для нескольких РАЗНЫХ пилотов одной сессии (командная гонка)", async () => {
     const rows = [
-      { driverId: 10, lapNum: 1, topSpeedKph: 235, fuelLevel: 0.7, fuelUsed: 0.03, tyreFLCondition: 0.98, tyreFRCondition: 0.98, tyreRLCondition: 0.98, tyreRRCondition: 0.98 },
-      { driverId: 20, lapNum: 3, topSpeedKph: 254, fuelLevel: 0.5, fuelUsed: 0.03, tyreFLCondition: 0.9, tyreFRCondition: 0.9, tyreRLCondition: 0.9, tyreRRCondition: 0.9 },
+      {
+        driverId: 10,
+        lapNum: 1,
+        topSpeedKph: 235,
+        fuelLevel: 0.7,
+        fuelUsed: 0.03,
+        tyreFLCondition: 0.98,
+        tyreFRCondition: 0.98,
+        tyreRLCondition: 0.98,
+        tyreRRCondition: 0.98,
+      },
+      {
+        driverId: 20,
+        lapNum: 3,
+        topSpeedKph: 254,
+        fuelLevel: 0.5,
+        fuelUsed: 0.03,
+        tyreFLCondition: 0.9,
+        tyreFRCondition: 0.9,
+        tyreRLCondition: 0.9,
+        tyreRRCondition: 0.9,
+      },
     ];
     const tx = {
       select: vi.fn(() => ({

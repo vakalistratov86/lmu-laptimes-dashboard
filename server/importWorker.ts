@@ -395,7 +395,8 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       const resolveStintKey = (lapNum: number): string => {
         let fallback = sortedStints[0];
         for (const s of sortedStints) {
-          if (lapNum >= s.startLap && lapNum <= s.endLap) return normalizeDriverNameForStorage(s.driverName).toLowerCase();
+          if (lapNum >= s.startLap && lapNum <= s.endLap)
+            return normalizeDriverNameForStorage(s.driverName).toLowerCase();
           if (s.startLap <= lapNum) fallback = s;
         }
         return normalizeDriverNameForStorage(fallback.driverName).toLowerCase();

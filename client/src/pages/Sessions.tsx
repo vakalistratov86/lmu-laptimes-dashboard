@@ -338,7 +338,9 @@ export default function Sessions() {
           aria-pressed={coDriversOnly}
           className={cn(
             "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3.5 py-1.5 text-xs font-semibold transition-colors",
-            coDriversOnly ? "bg-accent text-accent-foreground" : "bg-background text-muted-foreground hover:bg-accent/40",
+            coDriversOnly
+              ? "bg-accent text-accent-foreground"
+              : "bg-background text-muted-foreground hover:bg-accent/40",
           )}
         >
           <Users size={13} />

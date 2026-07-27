@@ -397,8 +397,7 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
     // Один пилот всю сессию — показываем его имя, как раньше. Несколько
     // реальных пилотов — заголовком строки становится команда (кто именно
     // вёл машину и когда — смотри вкладку "Круги", не эту таблицу).
-    const driverName =
-      driverCount === 1 ? String(primary.driverName ?? primary.driver ?? "—") : (teamName ?? "—");
+    const driverName = driverCount === 1 ? String(primary.driverName ?? primary.driver ?? "—") : (teamName ?? "—");
     const isPlayer = members.some((m) => Number(m.isPlayer) === 1) ? 1 : (primary.isPlayer ?? null);
 
     return {
@@ -426,10 +425,7 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
 // ────────────────────────────────────────────────────────────────────────────
 
 export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
-  const map = new Map<
-    string,
-    { carNumber: string | number; driverNames: Set<string>; points: LapProgressPoint[] }
-  >();
+  const map = new Map<string, { carNumber: string | number; driverNames: Set<string>; points: LapProgressPoint[] }>();
 
   for (const raw of laps) {
     const lap = raw as AnyLap;

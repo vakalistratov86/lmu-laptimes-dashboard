@@ -152,7 +152,11 @@ export default function SessionDetail() {
 
       {/* SD-20: Карточка деталей машины/команды — всегда видна, не зависит от вкладки */}
       {selectedResultRow && (
-        <SessionDriverDetailCard row={selectedResultRow} lapGroup={selectedLapGroup} sectorSummary={selectedSectorSummary} />
+        <SessionDriverDetailCard
+          row={selectedResultRow}
+          lapGroup={selectedLapGroup}
+          sectorSummary={selectedSectorSummary}
+        />
       )}
 
       {/* SD-20: Вкладки встроены в шапку общей карточки результатов/кругов/прогресса */}

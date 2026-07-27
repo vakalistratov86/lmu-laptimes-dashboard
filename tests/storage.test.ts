@@ -604,8 +604,16 @@ describe("session_results — несколько строк на одну маш
       .values({ name: "Bahrain", country: "BH", lengthKm: 5.4, turns: 15, layout: "Full" })
       .returning()
       .get();
-    const yuriy = testDb.insert(drivers).values({ name: "Yuriy Khoroshenkiy", team: "The Bend", country: "RU" }).returning().get();
-    const vasiliy = testDb.insert(drivers).values({ name: "Vasiliy Kalistratov", team: "The Bend", country: "RU" }).returning().get();
+    const yuriy = testDb
+      .insert(drivers)
+      .values({ name: "Yuriy Khoroshenkiy", team: "The Bend", country: "RU" })
+      .returning()
+      .get();
+    const vasiliy = testDb
+      .insert(drivers)
+      .values({ name: "Vasiliy Kalistratov", team: "The Bend", country: "RU" })
+      .returning()
+      .get();
 
     const session = testDb
       .insert(sessions)
@@ -673,7 +681,19 @@ describe("session_results — несколько строк на одну маш
     expect(rows).toHaveLength(2);
     const yuriyRow = rows.find((r) => r.driverId === yuriy.id)!;
     const vasiliyRow = rows.find((r) => r.driverId === vasiliy.id)!;
-    expect(yuriyRow).toMatchObject({ carNumber: "7", laps: 194, bestLapMs: 124898, stintStartLap: 1, stintEndLap: 194 });
-    expect(vasiliyRow).toMatchObject({ carNumber: "7", laps: 22, bestLapMs: 125117, stintStartLap: 195, stintEndLap: 216 });
+    expect(yuriyRow).toMatchObject({
+      carNumber: "7",
+      laps: 194,
+      bestLapMs: 124898,
+      stintStartLap: 1,
+      stintEndLap: 194,
+    });
+    expect(vasiliyRow).toMatchObject({
+      carNumber: "7",
+      laps: 22,
+      bestLapMs: 125117,
+      stintStartLap: 195,
+      stintEndLap: 216,
+    });
   });
 });
