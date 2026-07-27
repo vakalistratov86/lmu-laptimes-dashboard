@@ -249,6 +249,22 @@ function driverKey(lap: AnyLap): string {
   return `name:${String(lap.driverName ?? lap.driver ?? "Unknown")}`;
 }
 
+/**
+ * Ключ группировки по МАШИНЕ/КОМАНДЕ, а не по пилоту — командная гонка со
+ * сменой пилота (см. server/importWorker.ts) даёт несколько session_laps с
+ * разным driverId, но одним и тем же carNumber; вкладки "Результаты"/"Круги"/
+ * "Прогресс" группируют именно по машине, а конкретного пилота каждого круга
+ * показывает отдельное поле DriverLapRowView.driverName. carNumber уникален
+ * в пределах одной сессии (это гоночный номер), поэтому безопасен как ключ;
+ * при отсутствии carNumber (деградированные данные) откатываемся на driverKey,
+ * чтобы не схлопнуть в одну группу разные машины без номера.
+ */
+function carGroupKey(lap: AnyLap): string {
+  const carNumber = lap.carNumber ?? lap.number;
+  const str = carNumber != null ? String(carNumber).trim() : "";
+  return str ? `car:${str}` : driverKey(lap);
+}
+
 /** Является ли круг пит-лапом (учитываем оба варианта имени поля из разных источников). */
 function isPitLap(lap: AnyLap): boolean {
   return Boolean(lap.isPitLap ?? lap.pitLap ?? false);
@@ -290,83 +306,115 @@ export function buildHeroStats(session: unknown): SessionHeroStatItem[] {
 // buildResultRows
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Ключ группировки строк session_results по машине — см. carGroupKey(). */
+function resultCarKey(r: AnyLap, idx: number): string {
+  const carNumber = r.carNumber ?? r.number;
+  const str = carNumber != null ? String(carNumber).trim() : "";
+  return str ? `car:${str}` : `row:${idx}`;
+}
+
 export function buildResultRows(session: unknown): SessionResultRowView[] {
   const s = session as AnySession;
   const rawResults: AnyLap[] = Array.isArray(s?.results) ? s.results : [];
 
-  let minBestLapMs: number | null = null;
-  for (const r of rawResults) {
-    const ms = typeof r.bestLapMs === "number" ? r.bestLapMs : null;
-    if (ms !== null && ms > 0 && (minBestLapMs === null || ms < minBestLapMs)) {
-      minBestLapMs = ms;
+  // Командная гонка со сменой пилота даёт несколько session_results (по одному
+  // на реального пилота) с одинаковым carNumber — схлопываем их в одну строку
+  // на машину с суммарной статистикой (см. server/importWorker.ts).
+  const groupsByKey = new Map<string, AnyLap[]>();
+  const order: string[] = [];
+  rawResults.forEach((r, idx) => {
+    const key = resultCarKey(r, idx);
+    if (!groupsByKey.has(key)) {
+      groupsByKey.set(key, []);
+      order.push(key);
     }
+    groupsByKey.get(key)!.push(r);
+  });
+
+  const carGroups = order
+    .map((key) => ({ key, members: groupsByKey.get(key)! }))
+    .sort((a, b) => (a.members[0].position ?? 0) - (b.members[0].position ?? 0));
+
+  const teamBestLapMs = carGroups.map(({ members }) => {
+    let best: number | null = null;
+    for (const m of members) {
+      const ms = typeof m.bestLapMs === "number" && m.bestLapMs > 0 ? m.bestLapMs : null;
+      if (ms !== null && (best === null || ms < best)) best = ms;
+    }
+    return best;
+  });
+
+  let minBestLapMs: number | null = null;
+  for (const ms of teamBestLapMs) {
+    if (ms !== null && (minBestLapMs === null || ms < minBestLapMs)) minBestLapMs = ms;
   }
 
-  return rawResults.map((r, idx) => {
-    const bestLapMs = typeof r.bestLapMs === "number" && r.bestLapMs > 0 ? r.bestLapMs : null;
-
-    const bestLapTime =
-      bestLapMs !== null
-        ? formatLap(bestLapMs)
-        : r.bestLapTime
-          ? String(r.bestLapTime)
-          : typeof r.bestLapTimeSeconds === "number"
-            ? formatLap(r.bestLapTimeSeconds * 1000)
-            : "—";
+  return carGroups.map(({ key, members }, idx) => {
+    const primary = members[0]; // общие для машины поля (position/team/carNumber/...) одинаковы у всех строк
+    const bestLapMs = teamBestLapMs[idx];
+    const bestLapTime = bestLapMs !== null ? formatLap(bestLapMs) : "—";
 
     let gapFormatted: string | null = null;
-    if (r.gap != null) {
-      const gapVal = Number(r.gap);
-      gapFormatted = gapVal > 0 ? formatGap(gapVal) : null;
-    } else if (bestLapMs !== null && minBestLapMs !== null && bestLapMs > minBestLapMs) {
+    if (bestLapMs !== null && minBestLapMs !== null && bestLapMs > minBestLapMs) {
       gapFormatted = formatGap((bestLapMs - minBestLapMs) / 1000);
     }
 
     let intervalFormatted: string | null = null;
-    if (r.interval != null) {
-      const intervalVal = Number(r.interval);
-      intervalFormatted = intervalVal > 0 ? formatGap(intervalVal) : null;
-    } else if (idx > 0 && bestLapMs !== null) {
-      const prevMs =
-        typeof rawResults[idx - 1].bestLapMs === "number" && rawResults[idx - 1].bestLapMs > 0
-          ? (rawResults[idx - 1].bestLapMs as number)
-          : null;
+    if (idx > 0 && bestLapMs !== null) {
+      const prevMs = teamBestLapMs[idx - 1];
       if (prevMs !== null && bestLapMs > prevMs) {
         intervalFormatted = formatGap((bestLapMs - prevMs) / 1000);
       }
     }
 
-    const pitStops: number | null =
-      typeof r.pitStops === "number" ? r.pitStops : typeof r.pitstops === "number" ? r.pitstops : null;
-
-    const totalLaps: number | null =
-      typeof r.totalLaps === "number" ? r.totalLaps : typeof r.laps === "number" ? r.laps : null;
+    const pitStops = members.reduce(
+      (sum, m) => sum + (typeof m.pitStops === "number" ? m.pitStops : typeof m.pitstops === "number" ? m.pitstops : 0),
+      0,
+    );
+    const totalLaps = members.reduce(
+      (sum, m) => sum + (typeof m.totalLaps === "number" ? m.totalLaps : typeof m.laps === "number" ? m.laps : 0),
+      0,
+    );
 
     const teamName: string | null =
-      r.teamName && r.teamName !== "—" ? r.teamName : r.team && r.team !== "—" ? r.team : null;
-
-    const finishStatus: string | null =
-      r.finishStatus && r.finishStatus.trim()
-        ? r.finishStatus.trim()
-        : r.status && r.status.trim()
-          ? r.status.trim()
+      primary.teamName && primary.teamName !== "—"
+        ? primary.teamName
+        : primary.team && primary.team !== "—"
+          ? primary.team
           : null;
 
-    const carClass: string | null = r.carClass && String(r.carClass).trim() ? String(r.carClass).trim() : null;
+    const finishStatus: string | null =
+      primary.finishStatus && primary.finishStatus.trim()
+        ? primary.finishStatus.trim()
+        : primary.status && primary.status.trim()
+          ? primary.status.trim()
+          : null;
+
+    const carClass: string | null =
+      primary.carClass && String(primary.carClass).trim() ? String(primary.carClass).trim() : null;
+
+    const driverCount = members.length;
+    // Один пилот всю сессию — показываем его имя, как раньше. Несколько
+    // реальных пилотов — заголовком строки становится команда (кто именно
+    // вёл машину и когда — смотри вкладку "Круги", не эту таблицу).
+    const driverName = driverCount === 1 ? String(primary.driverName ?? primary.driver ?? "—") : (teamName ?? "—");
+    const isPlayer = members.some((m) => Number(m.isPlayer) === 1) ? 1 : (primary.isPlayer ?? null);
 
     return {
-      position: r.position ?? idx + 1,
-      driverName: String(r.driverName ?? r.driver ?? "—"),
-      carNumber: r.carNumber ?? r.number ?? "",
+      position: primary.position ?? idx + 1,
+      carKey: key,
+      driverName,
+      driverCount,
+      carNumber: primary.carNumber ?? primary.number ?? "",
       teamName,
-      carModel: r.carModel ?? r.car ?? null,
+      carModel: primary.carModel ?? primary.car ?? null,
       bestLapTime,
       gap: gapFormatted,
       interval: intervalFormatted,
       pitStops,
       totalLaps,
       finishStatus,
-      isPlayer: r.isPlayer ?? null,
+      isPlayer,
       carClass,
     };
   });
@@ -377,11 +425,11 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
 // ────────────────────────────────────────────────────────────────────────────
 
 export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
-  const map = new Map<string, { driverName: string; carNumber: string | number; points: LapProgressPoint[] }>();
+  const map = new Map<string, { carNumber: string | number; driverNames: Set<string>; points: LapProgressPoint[] }>();
 
   for (const raw of laps) {
     const lap = raw as AnyLap;
-    const key = driverKey(lap);
+    const key = carGroupKey(lap);
     const driverName = String(lap.driverName ?? lap.driver ?? "Unknown");
     const carNumber = lap.carNumber ?? lap.number ?? "";
     const lapNum = Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0);
@@ -390,20 +438,24 @@ export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
     if (!Number.isFinite(lapMs) || lapMs <= 0) continue;
 
     if (!map.has(key)) {
-      map.set(key, { driverName, carNumber, points: [] });
+      map.set(key, { carNumber, driverNames: new Set(), points: [] });
     }
     // timeSeconds — числовое значение для оси графика (LapProgressChart), поэтому
     // остаётся в секундах; timeFormatted форматируется напрямую из lapMs, без
     // обратного умножения секунд на 1000.
-    map.get(key)!.points.push({
+    const entry = map.get(key)!;
+    entry.driverNames.add(driverName);
+    entry.points.push({
       lap: lapNum,
       timeSeconds: lapMs / 1000,
       timeFormatted: formatLap(lapMs),
     });
   }
 
-  return Array.from(map.values()).map(({ driverName, carNumber, points }) => ({
-    driverName,
+  return Array.from(map.entries()).map(([key, { carNumber, driverNames, points }]) => ({
+    carKey: key,
+    // Один пилот — его имя; несколько — метка машины (командная гонка).
+    driverName: driverNames.size === 1 ? Array.from(driverNames)[0] : `#${carNumber}`,
     carNumber,
     points: points.sort((a, b) => a.lap - b.lap),
   }));
@@ -417,8 +469,8 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
   const map = new Map<
     string,
     {
-      driverName: string;
       carNumber: string | number;
+      driverNames: Set<string>;
       bestSMs: [number, number, number];
     }
   >();
@@ -428,7 +480,7 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
   for (const raw of laps) {
     const lap = raw as AnyLap;
     if (isPitLap(lap)) continue; // пит-лапы не должны выигрывать "лучший сектор"
-    const key = driverKey(lap);
+    const key = carGroupKey(lap);
     const driverName = String(lap.driverName ?? lap.driver ?? "Unknown");
     const carNumber = lap.carNumber ?? lap.number ?? "";
 
@@ -437,9 +489,10 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     const s3 = parseSectorMs(lap.sector3Ms, lap.sector3, lap.s3);
 
     if (!map.has(key)) {
-      map.set(key, { driverName, carNumber, bestSMs: [Infinity, Infinity, Infinity] });
+      map.set(key, { carNumber, driverNames: new Set(), bestSMs: [Infinity, Infinity, Infinity] });
     }
     const entry = map.get(key)!;
+    entry.driverNames.add(driverName);
 
     if (Number.isFinite(s1) && s1 < entry.bestSMs[0]) entry.bestSMs[0] = s1;
     if (Number.isFinite(s2) && s2 < entry.bestSMs[1]) entry.bestSMs[1] = s2;
@@ -450,7 +503,8 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     if (Number.isFinite(s3) && s3 < absoluteBestMs[2]) absoluteBestMs[2] = s3;
   }
 
-  return Array.from(map.values()).map(({ driverName, carNumber, bestSMs }) => {
+  return Array.from(map.entries()).map(([key, { carNumber, driverNames, bestSMs }]) => {
+    const driverName = driverNames.size === 1 ? Array.from(driverNames)[0] : `#${carNumber}`;
     // fix: раньше отсутствующий сектор (bestSMs[i] всё ещё Infinity) тихо
     // заменялся на 0 в сумме — получался правдоподобный, но заниженный
     // "теоретический" круг из 2 секторов вместо 3. Теперь при неполном
@@ -466,6 +520,7 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     ];
 
     return {
+      carKey: key,
       driverName,
       carNumber,
       bestSectors: [formatSector(bestSMs[0]), formatSector(bestSMs[1]), formatSector(bestSMs[2])] as [
@@ -489,21 +544,24 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
   const map = new Map<
     string,
     {
-      driverName: string;
       carNumber: string | number;
       isPlayer: number | null;
+      driverNames: Set<string>;
       rawLaps: AnyLap[];
     }
   >();
 
   for (const raw of laps) {
     const lap = raw as AnyLap;
-    const key = driverKey(lap);
+    const key = carGroupKey(lap);
     const driverName = String(lap.driverName ?? lap.driver ?? "Unknown");
     const carNumber = lap.carNumber ?? lap.number ?? "";
     const isPlayer: number | null = lap.isPlayer ?? null;
-    if (!map.has(key)) map.set(key, { driverName, carNumber, isPlayer, rawLaps: [] });
-    map.get(key)!.rawLaps.push(lap);
+    if (!map.has(key)) map.set(key, { carNumber, isPlayer, driverNames: new Set(), rawLaps: [] });
+    const entry = map.get(key)!;
+    entry.rawLaps.push(lap);
+    entry.driverNames.add(driverName);
+    if (isPlayer === 1) entry.isPlayer = 1; // хотя бы один реальный игрок за рулём машины
   }
 
   let overallBestMs = Infinity;
@@ -526,7 +584,7 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 
   const groups: DriverLapsGroupView[] = [];
 
-  for (const { driverName, carNumber, isPlayer, rawLaps } of map.values()) {
+  for (const [key, { carNumber, isPlayer, driverNames, rawLaps }] of map.entries()) {
     let personalBestMs = Infinity;
     // SD-21: Личный лучший сектор пилота за сессию (по каждому из трёх).
     const personalBestSectorsMs: [number, number, number] = [Infinity, Infinity, Infinity];
@@ -578,6 +636,9 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
           fuelRemaining: formatFuelPercent(fuelRaw),
           tyreWear: parseTyreWear(lap),
           tyreType: parseTyreType(lap),
+          // Командная гонка со сменой пилота — кто вёл машину на этом круге.
+          driverName: String(lap.driverName ?? lap.driver ?? "Unknown"),
+          isPlayer: lap.isPlayer ?? null,
         };
       });
 
@@ -611,8 +672,13 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 
     const pitLapsCount = sortedRawLaps.filter((lap: AnyLap) => Boolean(lap.isPitLap ?? lap.pitLap ?? false)).length;
 
+    const driverCount = driverNames.size;
+    const groupDriverName = driverCount === 1 ? Array.from(driverNames)[0] : Array.from(driverNames).join(", ");
+
     groups.push({
-      driverName,
+      carKey: key,
+      driverName: groupDriverName,
+      driverCount,
       carNumber,
       isPlayer,
       bestLapTime: formatLap(personalBestMs),

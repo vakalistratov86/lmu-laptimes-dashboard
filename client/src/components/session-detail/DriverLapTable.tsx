@@ -9,6 +9,7 @@
  */
 import type { DriverLapRowView } from "./types";
 import { useLanguage } from "@/lib/i18n";
+import { DriverName } from "@/components/DriverName";
 
 // ─── Бейдж компаунда шин ────────────────────────────────────────────────────
 
@@ -33,9 +34,12 @@ function getCompoundBadgeClass(letter: string | null): string {
 
 interface DriverLapTableProps {
   laps: DriverLapRowView[];
+  /** Показывать столбец "Пилот" — только для машин с несколькими реальными
+   * пилотами за сессию (командная гонка со сменой пилота). */
+  showDriverColumn?: boolean;
 }
 
-export function DriverLapTable({ laps }: DriverLapTableProps) {
+export function DriverLapTable({ laps, showDriverColumn }: DriverLapTableProps) {
   const { t } = useLanguage();
   return (
     <div className="overflow-x-auto">
@@ -43,6 +47,7 @@ export function DriverLapTable({ laps }: DriverLapTableProps) {
         <thead>
           <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <th className="px-4 py-2">{t("sessionDetail.colLap")}</th>
+            {showDriverColumn && <th className="px-4 py-2">{t("sessionDetail.colDriver")}</th>}
             <th className="px-4 py-2 text-right">{t("sessionDetail.colTime")}</th>
             <th className="px-4 py-2 text-right">{t("sessionDetail.sector", { n: 1 })}</th>
             <th className="px-4 py-2 text-right">{t("sessionDetail.sector", { n: 2 })}</th>
@@ -55,15 +60,22 @@ export function DriverLapTable({ laps }: DriverLapTableProps) {
           </tr>
         </thead>
         <tbody>
-          {laps.map((lap) => (
+          {laps.map((lap, idx) => (
             <tr
-              key={lap.lapNumber}
+              key={`${lap.lapNumber}-${idx}`}
               className={`border-b border-border/50 last:border-0 hover:bg-muted/40 ${
                 lap.isPersonalBest ? "bg-green-500/5" : ""
               }`}
             >
               {/* Круг */}
               <td className="px-4 py-2 font-data tabular-nums text-muted-foreground">{lap.lapNumber}</td>
+
+              {/* Пилот — кто вёл машину на этом круге (командная гонка) */}
+              {showDriverColumn && (
+                <td className="px-4 py-2">
+                  <DriverName name={lap.driverName ?? "—"} isPlayer={lap.isPlayer} className="text-xs" />
+                </td>
+              )}
 
               {/* Время */}
               <td

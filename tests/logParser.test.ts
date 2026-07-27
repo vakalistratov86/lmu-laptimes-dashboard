@@ -524,4 +524,123 @@ describe("parseRaceResults", () => {
       expect(result.drivers[1].lapList[0].s1Ms).toBe(26000);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Командные гонки: <Swap> (смена пилота за рулём общей машины) и
+  // <DriverChange> (точное время смены из Stream)
+  // -------------------------------------------------------------------------
+  describe("парсинг Swap / DriverChange (командные гонки)", () => {
+    it("без <Swap> — синтезирует один стинт на весь диапазон кругов машины", () => {
+      const driversXml = `<Driver>
+  <Name>Solo Driver</Name>
+  <isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+  <CarClass>GT3</CarClass><CarType>Porsche 911</CarType><TeamName>Team A</TeamName>
+  <Laps>2</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+  <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+  <Lap num="2" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+</Driver>`;
+      const result = parseRaceResults(makeXml({ drivers: driversXml }))!;
+      expect(result.drivers[0].stints).toEqual([
+        { driverName: "Solo Driver", startLap: 1, endLap: 2, startSec: null, endSec: null },
+      ]);
+    });
+
+    it("один <Swap>-тег — тоже единственный стинт (та же форма, что и без свопов)", () => {
+      const driversXml = `<Driver>
+  <Name>Solo Driver</Name>
+  <isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+  <CarClass>GT3</CarClass><CarType>Porsche 911</CarType><TeamName>Team A</TeamName>
+  <Laps>2</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+  <Swap startLap="1" endLap="2">Solo Driver</Swap>
+  <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+  <Lap num="2" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+</Driver>`;
+      const result = parseRaceResults(makeXml({ drivers: driversXml }))!;
+      expect(result.drivers[0].stints).toHaveLength(1);
+      expect(result.drivers[0].stints[0]).toMatchObject({ driverName: "Solo Driver", startLap: 1, endLap: 2 });
+    });
+
+    it("несколько <Swap> — реальная смена пилота, стинты возвращаются по возрастанию startLap", () => {
+      const driversXml = `<Driver>
+  <Name>Vasiliy Kalistratov</Name>
+  <isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+  <CarClass>GT3</CarClass><CarType>Porsche 911</CarType><TeamName>Team A</TeamName>
+  <Laps>3</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+  <Swap startLap="2" endLap="3">Vasiliy Kalistratov</Swap>
+  <Swap startLap="1" endLap="1">Yuriy Khoroshenkiy</Swap>
+  <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+  <Lap num="2" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+  <Lap num="3" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+</Driver>`;
+      const result = parseRaceResults(makeXml({ drivers: driversXml }))!;
+      expect(result.drivers[0].stints).toEqual([
+        { driverName: "Yuriy Khoroshenkiy", startLap: 1, endLap: 1, startSec: null, endSec: null },
+        { driverName: "Vasiliy Kalistratov", startLap: 2, endLap: 3, startSec: null, endSec: null },
+      ]);
+    });
+
+    it("битый <Swap> (без имени) пропускается — не падает, фолбэк на синтетический стинт", () => {
+      const driversXml = `<Driver>
+  <Name>Solo Driver</Name>
+  <isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+  <CarClass>GT3</CarClass><CarType>Porsche 911</CarType><TeamName>Team A</TeamName>
+  <Laps>2</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+  <Swap startLap="1" endLap="2"></Swap>
+  <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+  <Lap num="2" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+</Driver>`;
+      const result = parseRaceResults(makeXml({ drivers: driversXml }))!;
+      expect(result.drivers[0].stints).toEqual([
+        { driverName: "Solo Driver", startLap: 1, endLap: 2, startSec: null, endSec: null },
+      ]);
+    });
+
+    it("<DriverChange> сопоставляется с границей стинтов по именам Old/New — startSec/endSec", () => {
+      const driversXml = `<Driver>
+  <Name>Vasiliy Kalistratov</Name>
+  <isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+  <CarClass>GT3</CarClass><CarType>Porsche 911</CarType><TeamName>Team A</TeamName>
+  <Laps>3</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+  <Swap startLap="1" endLap="1">Yuriy Khoroshenkiy</Swap>
+  <Swap startLap="2" endLap="3">Vasiliy Kalistratov</Swap>
+  <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+  <Lap num="2" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+  <Lap num="3" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+</Driver>`;
+      const stream = `<Stream>
+    <DriverChange et="120.5">Slot=7 Vehicle="Team A" Old="Yuriy Khoroshenkiy" New="Vasiliy Kalistratov"</DriverChange>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ drivers: driversXml, stream }))!;
+      expect(result.driverChanges).toHaveLength(1);
+      expect(result.driverChanges[0]).toMatchObject({
+        elapsedTimeSec: 120.5,
+        oldDriverName: "Yuriy Khoroshenkiy",
+        newDriverName: "Vasiliy Kalistratov",
+      });
+      const [first, second] = result.drivers[0].stints;
+      expect(first.endSec).toBe(120.5);
+      expect(second.startSec).toBe(120.5);
+    });
+
+    it("<DriverChange> без пары по именам — границы стинтов остаются null", () => {
+      const driversXml = `<Driver>
+  <Name>Vasiliy Kalistratov</Name>
+  <isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
+  <CarClass>GT3</CarClass><CarType>Porsche 911</CarType><TeamName>Team A</TeamName>
+  <Laps>3</Laps><Pitstops>0</Pitstops><BestLapTime>101.000</BestLapTime>
+  <Swap startLap="1" endLap="1">Yuriy Khoroshenkiy</Swap>
+  <Swap startLap="2" endLap="3">Vasiliy Kalistratov</Swap>
+  <Lap num="1" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+  <Lap num="2" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+  <Lap num="3" s1="25.0" s2="50.0" s3="26.0">101.000</Lap>
+</Driver>`;
+      const stream = `<Stream>
+    <DriverChange et="120.5">Slot=7 Vehicle="Team A" Old="Someone Else" New="Vasiliy Kalistratov"</DriverChange>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ drivers: driversXml, stream }))!;
+      const [first, second] = result.drivers[0].stints;
+      expect(first.endSec).toBeNull();
+      expect(second.startSec).toBeNull();
+    });
+  });
 });

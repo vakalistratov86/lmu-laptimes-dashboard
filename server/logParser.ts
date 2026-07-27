@@ -30,6 +30,19 @@ export interface ParsedLap {
   tyreRR: string | null; // RR="0,Medium"
 }
 
+// Смена пилота за рулём общей машины в командной гонке:
+// <Swap startLap="1" endLap="194">Yuriy Khoroshenkiy</Swap>. Когда тегов нет
+// (обычный случай — один пилот всю сессию), parseDriverBlock() синтезирует
+// ровно один стинт на весь диапазон кругов машины, так что downstream-код
+// (server/importWorker.ts) всегда видит stints.length >= 1 без отдельной ветки.
+export interface ParsedStint {
+  driverName: string;
+  startLap: number;
+  endLap: number;
+  startSec: number | null; // из <DriverChange> в Stream; null = стинт с начала сессии
+  endSec: number | null; // null = стинт до конца сессии
+}
+
 export interface ParsedDriver {
   name: string;
   isPlayer: boolean;
@@ -50,6 +63,7 @@ export interface ParsedDriver {
   bestLapMs: number | null;
   finishStatus: string | null;
   lapList: ParsedLap[];
+  stints: ParsedStint[];
 }
 
 // #49 — инциденты из Stream
@@ -79,6 +93,17 @@ export interface ParsedTrackLimit {
   currentPoints: number | null;
   resolution: number | null;
   decision: string | null;
+}
+
+// Смена пилота из Stream: <DriverChange et="26143.5">Slot=27
+// Vehicle="The Bend Team WRT 2025 #31:LM" Old="Yuriy Khoroshenkiy"
+// New="Vasiliy Kalistratov"</DriverChange> — даёт точное время смены
+// (в секундах от старта сессии), в дополнение к диапазону кругов из <Swap>.
+export interface ParsedDriverChange {
+  elapsedTimeSec: number;
+  vehicle: string;
+  oldDriverName: string;
+  newDriverName: string;
 }
 
 export interface ParsedSession {
@@ -114,13 +139,14 @@ export interface ParsedSession {
   incidents: ParsedIncident[];
   sectorBests: ParsedSectorBest[];
   trackLimits: ParsedTrackLimit[];
+  driverChanges: ParsedDriverChange[];
 }
 
 // Теги, которые всегда должны становиться массивом, даже если в документе
 // встретился только один экземпляр (иначе fast-xml-parser даст голый объект).
 // <Name> внутри <Incident> — особый случай: там их обычно два (виновник/жертва),
 // а в <Sector>/<TrackLimits> — Name всегда один, поэтому масштабируем по jPath.
-const ALWAYS_ARRAY_TAGS = new Set(["Driver", "Lap", "Incident", "Sector", "TrackLimits"]);
+const ALWAYS_ARRAY_TAGS = new Set(["Driver", "Lap", "Incident", "Sector", "TrackLimits", "Swap", "DriverChange"]);
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -283,6 +309,26 @@ function parseDriverBlock(driverNode: XmlNode): ParsedDriver | null {
     };
   });
 
+  // Смена пилота: <Swap startLap="1" endLap="194">Yuriy Khoroshenkiy</Swap>.
+  // Не у всех машин есть этот тег (обычный случай — один пилот всю сессию) —
+  // тогда синтезируем единственный стинт на весь диапазон кругов машины, чтобы
+  // ниже по цепочке всегда было stints.length >= 1 без отдельной ветки "без свопов".
+  const swapNodes = (driverNode.Swap as XmlNode[] | undefined) ?? [];
+  const stints: ParsedStint[] = [];
+  for (const swapNode of swapNodes) {
+    const driverName = String(swapNode["#text"] ?? "").trim();
+    const startLap = toInt(attr(swapNode, "startLap"));
+    const endLap = toInt(attr(swapNode, "endLap"));
+    if (!driverName || startLap == null || endLap == null) continue; // битый тег — пропускаем, не создаём фиктивный стинт
+    stints.push({ driverName, startLap, endLap, startSec: null, endSec: null });
+  }
+  if (stints.length === 0) {
+    const maxLapNum = lapList.reduce((max, l) => Math.max(max, l.num), 0);
+    stints.push({ driverName: name, startLap: 1, endLap: maxLapNum, startSec: null, endSec: null });
+  } else {
+    stints.sort((a, b) => a.startLap - b.startLap);
+  }
+
   return {
     name,
     isPlayer,
@@ -303,6 +349,7 @@ function parseDriverBlock(driverNode: XmlNode): ParsedDriver | null {
     bestLapMs,
     finishStatus,
     lapList,
+    stints,
   };
 }
 
@@ -320,15 +367,21 @@ function parseDriverBlock(driverNode: XmlNode): ParsedDriver | null {
 const INCIDENT_TEXT_RE =
   /^(.+?)\(-?\d+\)\s+reported contact\s+\(([\d.]+)\)\s+with\s+(?:Immovable|another vehicle\s+(.+?)\(-?\d+\))\s*$/;
 
+// Смена пилота: <DriverChange et="26143.5">Slot=27 Vehicle="The Bend Team
+// WRT 2025 #31:LM" Old="Yuriy Khoroshenkiy" New="Vasiliy Kalistratov"</DriverChange>
+const DRIVER_CHANGE_TEXT_RE = /Slot=(\d+)\s+Vehicle="([^"]*)"\s+Old="([^"]*)"\s+New="([^"]*)"/;
+
 // #49 — парсинг Stream-узла
 function parseStream(streamNode: XmlNode): {
   incidents: ParsedIncident[];
   sectorBests: ParsedSectorBest[];
   trackLimits: ParsedTrackLimit[];
+  driverChanges: ParsedDriverChange[];
 } {
   const incidents: ParsedIncident[] = [];
   const sectorBests: ParsedSectorBest[] = [];
   const trackLimits: ParsedTrackLimit[] = [];
+  const driverChanges: ParsedDriverChange[] = [];
 
   // --- Incidents ---
   const incidentNodes = (streamNode.Incident as XmlNode[] | undefined) ?? [];
@@ -376,7 +429,17 @@ function parseStream(streamNode: XmlNode): {
     trackLimits.push({ driverName, lapNum, elapsedTimeSec: et, warningPoints, currentPoints, resolution, decision });
   }
 
-  return { incidents, sectorBests, trackLimits };
+  // --- DriverChanges ---
+  const driverChangeNodes = (streamNode.DriverChange as XmlNode[] | undefined) ?? [];
+  for (const dcNode of driverChangeNodes) {
+    const text = String(dcNode["#text"] ?? "").trim();
+    const m = text.match(DRIVER_CHANGE_TEXT_RE);
+    if (!m) continue; // нераспознанный формат текста — не создаём запись с фиктивными данными
+    const et = toFloat(attr(dcNode, "et")) ?? 0;
+    driverChanges.push({ elapsedTimeSec: et, vehicle: m[2], oldDriverName: m[3].trim(), newDriverName: m[4].trim() });
+  }
+
+  return { incidents, sectorBests, trackLimits, driverChanges };
 }
 
 // Определяем тип сессии по имени секции-обёртки (<Practice1>, <Qualify>, <Race> и т.п.)
@@ -486,9 +549,29 @@ export function parseRaceResults(xml: string): ParsedSession | null {
   // конкретной сессии (напр. <Practice1><Stream>...), поэтому ищем рекурсивно —
   // как и старый regex-парсер, искавший <Stream> по всему сырому тексту.
   const streamNode = findFirst(raceResults, "Stream") as XmlNode | undefined;
-  const { incidents, sectorBests, trackLimits } = streamNode
+  const { incidents, sectorBests, trackLimits, driverChanges } = streamNode
     ? parseStream(streamNode)
-    : { incidents: [], sectorBests: [], trackLimits: [] };
+    : { incidents: [], sectorBests: [], trackLimits: [], driverChanges: [] };
+
+  // Обогащаем стинты точным временем смены из <DriverChange>, когда у машины
+  // реально несколько пилотов. Сопоставляем по именам (Old/New), а не по
+  // Slot — в рамках одного файла имена пишутся идентично, доп. нормализация избыточна.
+  for (const d of drivers) {
+    if (d.stints.length <= 1) continue;
+    for (let i = 1; i < d.stints.length; i++) {
+      const prev = d.stints[i - 1];
+      const curr = d.stints[i];
+      const change = driverChanges.find(
+        (dc) =>
+          dc.newDriverName.toLowerCase() === curr.driverName.toLowerCase() &&
+          dc.oldDriverName.toLowerCase() === prev.driverName.toLowerCase(),
+      );
+      if (change) {
+        prev.endSec = change.elapsedTimeSec;
+        curr.startSec = change.elapsedTimeSec;
+      }
+    }
+  }
 
   return {
     venue,
@@ -521,5 +604,6 @@ export function parseRaceResults(xml: string): ParsedSession | null {
     incidents,
     sectorBests,
     trackLimits,
+    driverChanges,
   };
 }

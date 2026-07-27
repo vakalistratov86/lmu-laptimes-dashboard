@@ -8,7 +8,7 @@
  * выбранный пилот (по умолчанию позиция 1) и остаётся видимой при
  * переключении вкладок Результаты / Круги / Прогресс.
  */
-import { Medal } from "lucide-react";
+import { Medal, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DriverName } from "@/components/DriverName";
@@ -25,14 +25,24 @@ interface SessionDriverDetailCardProps {
 
 export function SessionDriverDetailCard({ row, lapGroup, sectorSummary }: SessionDriverDetailCardProps) {
   const { t } = useLanguage();
+  const isTeam = row.driverCount > 1;
   return (
     <Card data-testid="card-driver-detail" className="overflow-hidden">
-      {/* Заголовок */}
+      {/* Заголовок — для командной машины показываем лучший результат команды
+          в целом (кто именно вёл какой круг — смотри вкладку "Круги"), а не
+          одного из пилотов, будто он проехал всю сессию в одиночку. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-secondary/40 px-4 py-3">
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted/50 font-data text-sm font-bold tabular-nums">
           {row.position <= 3 ? <Medal size={14} className={getMedalColorClass(row.position)} /> : row.position}
         </div>
-        <DriverName name={row.driverName} isPlayer={row.isPlayer} className="font-semibold text-sm" />
+        {isTeam ? (
+          <span className="flex items-center gap-1.5 font-semibold text-sm">
+            <Users size={14} className="text-muted-foreground" />
+            {row.driverName}
+          </span>
+        ) : (
+          <DriverName name={row.driverName} isPlayer={row.isPlayer} className="font-semibold text-sm" />
+        )}
         {row.carClass && (
           <Badge variant="outline" className={getClassBadgeClass(row.carClass)}>
             {row.carClass}

@@ -55,7 +55,8 @@ function createTestDb() {
       dedicated INTEGER,
       session_duration_min INTEGER,
       session_max_laps INTEGER,
-      most_laps_completed INTEGER
+      most_laps_completed INTEGER,
+      has_co_drivers INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE lap_times (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,7 +94,11 @@ function createTestDb() {
       best_lap_ms INTEGER,
       finish_status TEXT,
       control_and_aids TEXT,
-      connected INTEGER
+      connected INTEGER,
+      stint_start_lap INTEGER,
+      stint_end_lap INTEGER,
+      stint_start_sec REAL,
+      stint_end_sec REAL
     );
     CREATE TABLE session_laps (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -578,5 +583,117 @@ describe("getSessionLapsEnriched() — JOIN вместо ручной склей
     expect(rows[0].driverName).toBeNull();
     expect(rows[0].carNumber).toBeNull();
     expect(rows[0].isPlayer).toBeNull();
+  });
+});
+
+// Командная гонка (см. server/importWorker.ts): одна машина/carNumber может
+// дать НЕСКОЛЬКО строк session_results — по одной на реального пилота,
+// деливших руль. attachSessionResults() в storage.ts выбирает все строки по
+// sessionId без GROUP BY/дедупликации по машине — фиксируем это явным тестом,
+// чтобы будущая "оптимизация" не свернула их обратно в одну строку на машину.
+describe("session_results — несколько строк на одну машину (командная гонка)", () => {
+  let testDb: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    testDb = createTestDb();
+  });
+
+  it("getSession()-подобный запрос по sessionId возвращает обе строки со-пилотов одной машины", async () => {
+    const track = testDb
+      .insert(tracks)
+      .values({ name: "Bahrain", country: "BH", lengthKm: 5.4, turns: 15, layout: "Full" })
+      .returning()
+      .get();
+    const yuriy = testDb
+      .insert(drivers)
+      .values({ name: "Yuriy Khoroshenkiy", team: "The Bend", country: "RU" })
+      .returning()
+      .get();
+    const vasiliy = testDb
+      .insert(drivers)
+      .values({ name: "Vasiliy Kalistratov", team: "The Bend", country: "RU" })
+      .returning()
+      .get();
+
+    const session = testDb
+      .insert(sessions)
+      .values({
+        trackId: track.id,
+        event: "8 Hours of Bahrain",
+        sessionType: "Гонка (Race)",
+        venue: "Bahrain",
+        dateTime: "2025-11-15T15:42:49.000Z",
+        fileName: "team-race.xml",
+        driverCount: 2,
+        lapCount: 216,
+        hasCoDrivers: 1,
+      })
+      .returning()
+      .get();
+
+    // Одна и та же машина (carNumber="7"/team) — две строки, по одной на пилота.
+    testDb
+      .insert(sessionResults)
+      .values({
+        sessionId: session.id,
+        driverId: yuriy.id,
+        isPlayer: 0,
+        position: 26,
+        classPosition: 16,
+        carClass: "GT3",
+        car: "BMW M4 LMGT3",
+        team: "The Bend",
+        carNumber: "7",
+        laps: 194,
+        pitstops: 1,
+        bestLapMs: 124898,
+        stintStartLap: 1,
+        stintEndLap: 194,
+      })
+      .run();
+    testDb
+      .insert(sessionResults)
+      .values({
+        sessionId: session.id,
+        driverId: vasiliy.id,
+        isPlayer: 1,
+        position: 26,
+        classPosition: 16,
+        carClass: "GT3",
+        car: "BMW M4 LMGT3",
+        team: "The Bend",
+        carNumber: "7",
+        laps: 22,
+        pitstops: 0,
+        bestLapMs: 125117,
+        stintStartLap: 195,
+        stintEndLap: 216,
+      })
+      .run();
+
+    const { inArray } = await import("drizzle-orm");
+    const rows = testDb
+      .select()
+      .from(sessionResults)
+      .where(inArray(sessionResults.sessionId, [session.id]))
+      .all();
+
+    expect(rows).toHaveLength(2);
+    const yuriyRow = rows.find((r) => r.driverId === yuriy.id)!;
+    const vasiliyRow = rows.find((r) => r.driverId === vasiliy.id)!;
+    expect(yuriyRow).toMatchObject({
+      carNumber: "7",
+      laps: 194,
+      bestLapMs: 124898,
+      stintStartLap: 1,
+      stintEndLap: 194,
+    });
+    expect(vasiliyRow).toMatchObject({
+      carNumber: "7",
+      laps: 22,
+      bestLapMs: 125117,
+      stintStartLap: 195,
+      stintEndLap: 216,
+    });
   });
 });
