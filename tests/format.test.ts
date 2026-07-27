@@ -18,8 +18,20 @@ describe("formatLap", () => {
     expect(formatLap(100001)).toBe("1:40.001");
   });
 
-  it("нулевое время -> 0.000", () => {
-    expect(formatLap(0)).toBe("0.000");
+  it("нулевое/невалидное время -> «—» (0мс не бывает у реального круга)", () => {
+    expect(formatLap(0)).toBe("—");
+    expect(formatLap(-100)).toBe("—");
+    expect(formatLap(NaN)).toBe("—");
+    expect(formatLap(Infinity)).toBe("—");
+  });
+
+  it("устойчив к погрешности float в ms (round-trip секунды<->мс)", () => {
+    // 1001мс -> 1.001с -> *1000 обратно даёт не строго целое (1000.9999999999999
+    // и подобные) из-за погрешности double — раньше без Math.round внутри
+    // ломало вывод хвостом типа "1.0.9999999999998863" (см. sessionDetailSelectors.ts).
+    expect((1001 / 1000) * 1000).not.toBe(1001); // подтверждаем, что погрешность реальна
+    expect(formatLap((1001 / 1000) * 1000)).toBe("1.001");
+    expect(formatLap((2002 / 1000) * 1000)).toBe("2.002");
   });
 
   it("ровная минута (1:00.000)", () => {
@@ -47,6 +59,18 @@ describe("formatSector", () => {
 
   it("возвращает «—» для отрицательного значения", () => {
     expect(formatSector(-100)).toBe("—");
+  });
+
+  it("возвращает «—» для null/NaN/Infinity (например, накопитель min без ни одного замера)", () => {
+    expect(formatSector(null)).toBe("—");
+    expect(formatSector(NaN)).toBe("—");
+    expect(formatSector(Infinity)).toBe("—");
+  });
+
+  it("устойчив к погрешности float в ms (round-trip секунды<->мс, баг сектора 2)", () => {
+    expect((2002 / 1000) * 1000).not.toBe(2002); // подтверждаем, что погрешность реальна
+    expect(formatSector((2002 / 1000) * 1000)).toBe("2.002");
+    expect(formatSector((1001 / 1000) * 1000)).toBe("1.001");
   });
 
   it("дополняет миллисекунды нулями", () => {

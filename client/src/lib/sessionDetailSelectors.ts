@@ -21,30 +21,32 @@ import type { NormalizedSessionType } from "./sessionDetail.types";
 // ────────────────────────────────────────────────────────────────────────────
 
 // Круг и сектор форматируются общими на всё приложение formatLap/formatSector
-// (client/src/lib/format.ts) — раньше здесь было локальное дублирование
-// (formatLapMs/formatLapTime) с чуть другим выводом, теперь его нет.
-// Обе функции принимают миллисекунды; ниже — обёртки под секунды (float),
-// которыми исторически оперирует этот файл.
-function formatLapSeconds(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
-  return formatLap(seconds * 1000);
+// (client/src/lib/format.ts) — обе принимают миллисекунды.
+//
+// Все величины ниже по файлу намеренно держатся в МИЛЛИСЕКУНДАХ от парсинга до
+// форматирования (сравнения — best/worst/среднее — от единиц не зависят, порядок
+// тот же что и в секундах). Раньше здесь было наоборот: парсинг сразу делил на
+// 1000, а форматирование перед вызовом formatLap/formatSector умножало обратно —
+// на значениях, для которых round-trip даёт нецелый ms (например 51669.999999…
+// вместо 51670), из этого получался кривой вывод в СЕКТОР 2 (#см. правку с
+// Math.round в format.ts). Работа в ms с самого начала убирает round-trip как
+// класс, а не просто подстраховывается округлением на выходе.
+
+/** Круговое время в МС: предпочитаем целочисленное *Ms поле, иначе секунды*1000. */
+function parseLapMs(lap: AnyLap): number {
+  const ms = Number(lap.lapTimeMs);
+  if (Number.isFinite(ms) && ms > 0) return ms;
+  const sec = Number(lap.lapTimeSeconds ?? lap.time);
+  if (Number.isFinite(sec) && sec > 0) return sec * 1000;
+  return NaN;
 }
 
-function formatSectorSeconds(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
-  return formatSector(seconds * 1000);
-}
-
-/**
- * Универсальный парсинг времени сектора.
- * Поле «*Ms» хранит значение в миллисекундах, остальные — в секундах.
- * Возвращает значение в СЕКУНДАХ для дальнейшего использования с formatSectorSeconds.
- */
-function parseSectorSeconds(msProp: unknown, secProp: unknown, shortProp: unknown): number {
+/** Время сектора в МС: тот же приоритет — целочисленное *Ms поле, иначе секунды*1000. */
+function parseSectorMs(msProp: unknown, secProp: unknown, shortProp: unknown): number {
   const ms = Number(msProp);
-  if (Number.isFinite(ms) && ms > 0) return ms / 1000;
+  if (Number.isFinite(ms) && ms > 0) return ms;
   const sec = Number(secProp ?? shortProp);
-  if (Number.isFinite(sec) && sec > 0) return sec;
+  if (Number.isFinite(sec) && sec > 0) return sec * 1000;
   return NaN;
 }
 
@@ -309,7 +311,7 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
         : r.bestLapTime
           ? String(r.bestLapTime)
           : typeof r.bestLapTimeSeconds === "number"
-            ? formatLapSeconds(r.bestLapTimeSeconds)
+            ? formatLap(r.bestLapTimeSeconds * 1000)
             : "—";
 
     let gapFormatted: string | null = null;
@@ -383,17 +385,20 @@ export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
     const driverName = String(lap.driverName ?? lap.driver ?? "Unknown");
     const carNumber = lap.carNumber ?? lap.number ?? "";
     const lapNum = Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0);
-    const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? 0);
+    const lapMs = parseLapMs(lap);
 
-    if (!Number.isFinite(timeSeconds) || timeSeconds <= 0) continue;
+    if (!Number.isFinite(lapMs) || lapMs <= 0) continue;
 
     if (!map.has(key)) {
       map.set(key, { driverName, carNumber, points: [] });
     }
+    // timeSeconds — числовое значение для оси графика (LapProgressChart), поэтому
+    // остаётся в секундах; timeFormatted форматируется напрямую из lapMs, без
+    // обратного умножения секунд на 1000.
     map.get(key)!.points.push({
       lap: lapNum,
-      timeSeconds,
-      timeFormatted: formatLapSeconds(timeSeconds),
+      timeSeconds: lapMs / 1000,
+      timeFormatted: formatLap(lapMs),
     });
   }
 
@@ -414,11 +419,11 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     {
       driverName: string;
       carNumber: string | number;
-      bestS: [number, number, number];
+      bestSMs: [number, number, number];
     }
   >();
 
-  const absoluteBest: [number, number, number] = [Infinity, Infinity, Infinity];
+  const absoluteBestMs: [number, number, number] = [Infinity, Infinity, Infinity];
 
   for (const raw of laps) {
     const lap = raw as AnyLap;
@@ -427,49 +432,49 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     const driverName = String(lap.driverName ?? lap.driver ?? "Unknown");
     const carNumber = lap.carNumber ?? lap.number ?? "";
 
-    const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
-    const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
-    const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
+    const s1 = parseSectorMs(lap.sector1Ms, lap.sector1, lap.s1);
+    const s2 = parseSectorMs(lap.sector2Ms, lap.sector2, lap.s2);
+    const s3 = parseSectorMs(lap.sector3Ms, lap.sector3, lap.s3);
 
     if (!map.has(key)) {
-      map.set(key, { driverName, carNumber, bestS: [Infinity, Infinity, Infinity] });
+      map.set(key, { driverName, carNumber, bestSMs: [Infinity, Infinity, Infinity] });
     }
     const entry = map.get(key)!;
 
-    if (Number.isFinite(s1) && s1 < entry.bestS[0]) entry.bestS[0] = s1;
-    if (Number.isFinite(s2) && s2 < entry.bestS[1]) entry.bestS[1] = s2;
-    if (Number.isFinite(s3) && s3 < entry.bestS[2]) entry.bestS[2] = s3;
+    if (Number.isFinite(s1) && s1 < entry.bestSMs[0]) entry.bestSMs[0] = s1;
+    if (Number.isFinite(s2) && s2 < entry.bestSMs[1]) entry.bestSMs[1] = s2;
+    if (Number.isFinite(s3) && s3 < entry.bestSMs[2]) entry.bestSMs[2] = s3;
 
-    if (Number.isFinite(s1) && s1 < absoluteBest[0]) absoluteBest[0] = s1;
-    if (Number.isFinite(s2) && s2 < absoluteBest[1]) absoluteBest[1] = s2;
-    if (Number.isFinite(s3) && s3 < absoluteBest[2]) absoluteBest[2] = s3;
+    if (Number.isFinite(s1) && s1 < absoluteBestMs[0]) absoluteBestMs[0] = s1;
+    if (Number.isFinite(s2) && s2 < absoluteBestMs[1]) absoluteBestMs[1] = s2;
+    if (Number.isFinite(s3) && s3 < absoluteBestMs[2]) absoluteBestMs[2] = s3;
   }
 
-  return Array.from(map.values()).map(({ driverName, carNumber, bestS }) => {
-    // fix: раньше отсутствующий сектор (bestS[i] всё ещё Infinity) тихо
+  return Array.from(map.values()).map(({ driverName, carNumber, bestSMs }) => {
+    // fix: раньше отсутствующий сектор (bestSMs[i] всё ещё Infinity) тихо
     // заменялся на 0 в сумме — получался правдоподобный, но заниженный
     // "теоретический" круг из 2 секторов вместо 3. Теперь при неполном
-    // наборе секторов результат — NaN, что formatLapSeconds корректно рисует как «—».
-    const hasAllSectors = bestS.every((s) => Number.isFinite(s));
-    const theoreticalSeconds = hasAllSectors ? bestS[0] + bestS[1] + bestS[2] : NaN;
+    // наборе секторов результат — NaN, что formatLap корректно рисует как «—».
+    const hasAllSectors = bestSMs.every((s) => Number.isFinite(s));
+    const theoreticalMs = hasAllSectors ? bestSMs[0] + bestSMs[1] + bestSMs[2] : NaN;
     // SD-21: Абсолютный лучший по КАЖДОМУ сектору отдельно (не общий флаг) —
     // используется, чтобы красить именно тот сектор, который является рекордом сессии.
     const sectorAbsoluteBest: [boolean, boolean, boolean] = [
-      Number.isFinite(bestS[0]) && bestS[0] === absoluteBest[0],
-      Number.isFinite(bestS[1]) && bestS[1] === absoluteBest[1],
-      Number.isFinite(bestS[2]) && bestS[2] === absoluteBest[2],
+      Number.isFinite(bestSMs[0]) && bestSMs[0] === absoluteBestMs[0],
+      Number.isFinite(bestSMs[1]) && bestSMs[1] === absoluteBestMs[1],
+      Number.isFinite(bestSMs[2]) && bestSMs[2] === absoluteBestMs[2],
     ];
 
     return {
       driverName,
       carNumber,
-      bestSectors: [formatSectorSeconds(bestS[0]), formatSectorSeconds(bestS[1]), formatSectorSeconds(bestS[2])] as [
+      bestSectors: [formatSector(bestSMs[0]), formatSector(bestSMs[1]), formatSector(bestSMs[2])] as [
         string,
         string,
         string,
       ],
       // Теоретический лучший — сумма трёх лучших секторов, т.е. это круговое время, не сектор.
-      theoreticalBest: formatLapSeconds(theoreticalSeconds),
+      theoreticalBest: formatLap(theoreticalMs),
       sectorAbsoluteBest,
       hasAbsoluteBest: sectorAbsoluteBest.some(Boolean),
     };
@@ -501,50 +506,50 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
     map.get(key)!.rawLaps.push(lap);
   }
 
-  let overallBestSeconds = Infinity;
+  let overallBestMs = Infinity;
   // SD-21: Абсолютный лучший сектор среди ВСЕХ пилотов сессии (по каждому из трёх).
-  const overallBestSectors: [number, number, number] = [Infinity, Infinity, Infinity];
+  const overallBestSectorsMs: [number, number, number] = [Infinity, Infinity, Infinity];
   for (const { rawLaps } of map.values()) {
     for (const lap of rawLaps) {
       if (isPitLap(lap)) continue; // пит-лапы не должны выигрывать лучший круг/сектор сессии
-      const t = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
-      if (Number.isFinite(t) && t < overallBestSeconds) overallBestSeconds = t;
+      const t = parseLapMs(lap);
+      if (Number.isFinite(t) && t < overallBestMs) overallBestMs = t;
 
-      const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
-      const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
-      const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
-      if (Number.isFinite(s1) && s1 < overallBestSectors[0]) overallBestSectors[0] = s1;
-      if (Number.isFinite(s2) && s2 < overallBestSectors[1]) overallBestSectors[1] = s2;
-      if (Number.isFinite(s3) && s3 < overallBestSectors[2]) overallBestSectors[2] = s3;
+      const s1 = parseSectorMs(lap.sector1Ms, lap.sector1, lap.s1);
+      const s2 = parseSectorMs(lap.sector2Ms, lap.sector2, lap.s2);
+      const s3 = parseSectorMs(lap.sector3Ms, lap.sector3, lap.s3);
+      if (Number.isFinite(s1) && s1 < overallBestSectorsMs[0]) overallBestSectorsMs[0] = s1;
+      if (Number.isFinite(s2) && s2 < overallBestSectorsMs[1]) overallBestSectorsMs[1] = s2;
+      if (Number.isFinite(s3) && s3 < overallBestSectorsMs[2]) overallBestSectorsMs[2] = s3;
     }
   }
 
   const groups: DriverLapsGroupView[] = [];
 
   for (const { driverName, carNumber, isPlayer, rawLaps } of map.values()) {
-    let personalBestSeconds = Infinity;
+    let personalBestMs = Infinity;
     // SD-21: Личный лучший сектор пилота за сессию (по каждому из трёх).
-    const personalBestSectors: [number, number, number] = [Infinity, Infinity, Infinity];
+    const personalBestSectorsMs: [number, number, number] = [Infinity, Infinity, Infinity];
     for (const lap of rawLaps) {
       if (isPitLap(lap)) continue; // пит-лапы не должны выигрывать личный лучший круг/сектор
-      const t = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
-      if (Number.isFinite(t) && t < personalBestSeconds) personalBestSeconds = t;
+      const t = parseLapMs(lap);
+      if (Number.isFinite(t) && t < personalBestMs) personalBestMs = t;
 
-      const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
-      const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
-      const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
-      if (Number.isFinite(s1) && s1 < personalBestSectors[0]) personalBestSectors[0] = s1;
-      if (Number.isFinite(s2) && s2 < personalBestSectors[1]) personalBestSectors[1] = s2;
-      if (Number.isFinite(s3) && s3 < personalBestSectors[2]) personalBestSectors[2] = s3;
+      const s1 = parseSectorMs(lap.sector1Ms, lap.sector1, lap.s1);
+      const s2 = parseSectorMs(lap.sector2Ms, lap.sector2, lap.s2);
+      const s3 = parseSectorMs(lap.sector3Ms, lap.sector3, lap.s3);
+      if (Number.isFinite(s1) && s1 < personalBestSectorsMs[0]) personalBestSectorsMs[0] = s1;
+      if (Number.isFinite(s2) && s2 < personalBestSectorsMs[1]) personalBestSectorsMs[1] = s2;
+      if (Number.isFinite(s3) && s3 < personalBestSectorsMs[2]) personalBestSectorsMs[2] = s3;
     }
 
     const lapRows: DriverLapRowView[] = rawLaps
       .sort((a, b) => Number(a.lapNumber ?? a.lapNum ?? a.lap ?? 0) - Number(b.lapNumber ?? b.lapNum ?? b.lap ?? 0))
       .map((lap) => {
-        const timeSeconds = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
-        const s1 = parseSectorSeconds(lap.sector1Ms, lap.sector1, lap.s1);
-        const s2 = parseSectorSeconds(lap.sector2Ms, lap.sector2, lap.s2);
-        const s3 = parseSectorSeconds(lap.sector3Ms, lap.sector3, lap.s3);
+        const lapMs = parseLapMs(lap);
+        const s1 = parseSectorMs(lap.sector1Ms, lap.sector1, lap.s1);
+        const s2 = parseSectorMs(lap.sector2Ms, lap.sector2, lap.s2);
+        const s3 = parseSectorMs(lap.sector3Ms, lap.sector3, lap.s3);
 
         // SD-18: Максимальная скорость и остаток топлива
         const maxSpeedRaw = extractMaxSpeedRaw(lap);
@@ -552,24 +557,20 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 
         return {
           lapNumber: Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0),
-          lapTime: Number.isFinite(timeSeconds) ? formatLapSeconds(timeSeconds) : "—",
-          isPersonalBest: Number.isFinite(timeSeconds) && timeSeconds === personalBestSeconds,
-          isOverallBest: Number.isFinite(timeSeconds) && timeSeconds === overallBestSeconds,
-          sectors: [
-            Number.isFinite(s1) ? formatSectorSeconds(s1) : "—",
-            Number.isFinite(s2) ? formatSectorSeconds(s2) : "—",
-            Number.isFinite(s3) ? formatSectorSeconds(s3) : "—",
-          ] as [string, string, string],
+          lapTime: formatLap(lapMs),
+          isPersonalBest: Number.isFinite(lapMs) && lapMs === personalBestMs,
+          isOverallBest: Number.isFinite(lapMs) && lapMs === overallBestMs,
+          sectors: [formatSector(s1), formatSector(s2), formatSector(s3)] as [string, string, string],
           // SD-21: Личный лучший / абсолютный лучший сектор сессии, по каждому сектору
           sectorsPersonalBest: [
-            Number.isFinite(s1) && s1 === personalBestSectors[0],
-            Number.isFinite(s2) && s2 === personalBestSectors[1],
-            Number.isFinite(s3) && s3 === personalBestSectors[2],
+            Number.isFinite(s1) && s1 === personalBestSectorsMs[0],
+            Number.isFinite(s2) && s2 === personalBestSectorsMs[1],
+            Number.isFinite(s3) && s3 === personalBestSectorsMs[2],
           ] as [boolean, boolean, boolean],
           sectorsAbsoluteBest: [
-            Number.isFinite(s1) && s1 === overallBestSectors[0],
-            Number.isFinite(s2) && s2 === overallBestSectors[1],
-            Number.isFinite(s3) && s3 === overallBestSectors[2],
+            Number.isFinite(s1) && s1 === overallBestSectorsMs[0],
+            Number.isFinite(s2) && s2 === overallBestSectorsMs[1],
+            Number.isFinite(s3) && s3 === overallBestSectorsMs[2],
           ] as [boolean, boolean, boolean],
           isPitLap: Boolean(lap.isPitLap ?? lap.pitLap ?? false),
           // SD-18: Новые поля — имена взяты из реальной схемы session_laps
@@ -584,17 +585,17 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
     // rawLaps уже отсортированы по номеру круга (sort() выше мутирует массив).
     const sortedRawLaps = rawLaps as AnyLap[];
     const timedLaps = sortedRawLaps.filter((lap: AnyLap) => {
-      const t = Number(lap.lapTimeSeconds ?? lap.time ?? NaN);
+      const t = parseLapMs(lap);
       return Number.isFinite(t) && t > 0;
     });
     // Пит-лапы искажают среднее/худшее время — считаем без них,
     // но если все круги были пит-лапами, используем все круги как fallback.
     const nonPitTimedLaps = timedLaps.filter((lap: AnyLap) => !isPitLap(lap));
     const lapsForAvg = nonPitTimedLaps.length > 0 ? nonPitTimedLaps : timedLaps;
-    const lapSeconds: number[] = lapsForAvg.map((lap: AnyLap) => Number(lap.lapTimeSeconds ?? lap.time ?? NaN));
-    const avgSeconds =
-      lapSeconds.length > 0 ? lapSeconds.reduce((sum: number, t: number) => sum + t, 0) / lapSeconds.length : NaN;
-    const worstSeconds = lapSeconds.length > 0 ? Math.max(...lapSeconds) : NaN;
+    const lapMsValues: number[] = lapsForAvg.map((lap: AnyLap) => parseLapMs(lap));
+    const avgMs =
+      lapMsValues.length > 0 ? lapMsValues.reduce((sum: number, t: number) => sum + t, 0) / lapMsValues.length : NaN;
+    const worstMs = lapMsValues.length > 0 ? Math.max(...lapMsValues) : NaN;
 
     let maxSpeedRawAgg = -Infinity;
     const tyreTypesUsed = new Set<string>();
@@ -614,10 +615,10 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
       driverName,
       carNumber,
       isPlayer,
-      bestLapTime: Number.isFinite(personalBestSeconds) ? formatLapSeconds(personalBestSeconds) : "—",
+      bestLapTime: formatLap(personalBestMs),
       laps: lapRows,
-      avgLapTime: formatLapSeconds(avgSeconds),
-      worstLapTime: formatLapSeconds(worstSeconds),
+      avgLapTime: formatLap(avgMs),
+      worstLapTime: formatLap(worstMs),
       maxSpeedObserved: formatSpeed(Number.isFinite(maxSpeedRawAgg) ? maxSpeedRawAgg : null),
       tyreTypesUsed: Array.from(tyreTypesUsed),
       fuelStart: formatFuelPercent(fuelStartRaw),

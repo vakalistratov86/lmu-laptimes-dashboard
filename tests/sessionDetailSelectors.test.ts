@@ -43,6 +43,21 @@ describe("sessionDetailSelectors — bug-audit regressions", () => {
       const summary = buildSectorSummary(laps);
       expect(summary).toHaveLength(2);
     });
+
+    it("бьёт «—», а не «Infinity.NaN», для сектора, который пилот вообще ни разу не проехал (не пит-лапы)", () => {
+      // У пилота нет ни одной валидной sector3 — аккумулятор так и остаётся Infinity.
+      const laps = [{ driverName: "Alpha", driverId: 1, lapNumber: 1, sector1: 25.0, sector2: 50.0 }];
+      const summary = buildSectorSummary(laps);
+      expect(summary[0].bestSectors[2]).toBe("—");
+    });
+
+    it("*Ms-поля (целые мс из БД) форматируются без хвоста от погрешности float", () => {
+      // 2002мс — из значений, для которых seconds*1000 после ms/1000 даёт
+      // нецелое число (2001.9999999999998) — раньше рушило вывод сектора 2.
+      const laps = [{ driverName: "Alpha", driverId: 1, lapNumber: 1, sector1Ms: 25000, sector2Ms: 2002 }];
+      const summary = buildSectorSummary(laps);
+      expect(summary[0].bestSectors[1]).toBe("2.002");
+    });
   });
 
   describe("buildDriverLapGroups", () => {

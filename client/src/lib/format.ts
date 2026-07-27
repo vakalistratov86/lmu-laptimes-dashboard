@@ -1,9 +1,13 @@
 // Форматирование времени круга из миллисекунд в M:SS.mmm.
-// ms округляется до целого перед разбором на секунды/мс: вызывающий код (например,
-// секунды*1000 после деления *1000 в другом месте) может отдать не строго целое
-// значение из-за погрешности float — без округления «дробный хвост» мс (типа
-// 439.99999999999994) ломает вывод вместо аккуратных «440».
+// Невалидный ms (NaN/Infinity/<=0 — например Infinity как «ещё не было ни одного
+// замера» в аккумуляторах min/max) рисуется как «—» самой функцией, а не отдаётся
+// на откуп каждому месту вызова.
+// Валидный ms округляется до целого перед разбором на секунды/мс: вызывающий код
+// (например, секунды*1000 после деления *1000 в другом месте) может отдать не
+// строго целое значение из-за погрешности float — без округления «дробный хвост»
+// мс (типа 439.99999999999994) ломает вывод вместо аккуратных «440».
 export function formatLap(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "—";
   const roundedMs = Math.round(ms);
   const totalSeconds = Math.floor(roundedMs / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -15,9 +19,9 @@ export function formatLap(ms: number): string {
   return `${seconds}.${String(millis).padStart(3, "0")}`;
 }
 
-// Форматирование сектора в SS.mmm (см. комментарий у formatLap про округление ms).
+// Форматирование сектора в SS.mmm (см. комментарий у formatLap про невалидный ms и округление).
 export function formatSector(ms: number | null): string {
-  if (!ms || ms <= 0) return "—";
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) return "—";
   const roundedMs = Math.round(ms);
   const seconds = Math.floor(roundedMs / 1000);
   const millis = roundedMs % 1000;
