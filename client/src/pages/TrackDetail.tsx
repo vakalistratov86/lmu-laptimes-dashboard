@@ -262,9 +262,9 @@ export default function TrackDetail() {
     return (
       <div className="space-y-5">
         <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4">
           {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-24" />
+            <Skeleton key={i} className="h-24 min-w-[140px]" />
           ))}
         </div>
         <Skeleton className="h-80" />
@@ -380,7 +380,7 @@ export default function TrackDetail() {
 
       {stats ? (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4">
             <Stat
               icon={Timer}
               label={t("trackDetail.lapRecord")}
@@ -478,7 +478,7 @@ export default function TrackDetail() {
 
 function Stat({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) {
   return (
-    <Card className="p-4">
+    <Card className="min-w-[140px] p-4">
       <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
         <Icon size={13} /> {label}
       </div>

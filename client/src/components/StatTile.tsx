@@ -19,11 +19,16 @@ interface StatTileProps {
 /** Единая мини-плитка статистики — переиспользуется во всех info-карточках приложения. */
 export function StatTile({ label, value, variant, className }: StatTileProps) {
   return (
-    <div className={cn("rounded-lg border border-border bg-card px-3.5 py-2.5 space-y-0.5", className)}>
-      <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{label}</p>
+    <div
+      className={cn(
+        "min-w-[110px] rounded-lg border border-border bg-card px-3.5 py-2.5 space-y-0.5 text-left",
+        className,
+      )}
+    >
+      <p className="text-left text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
       <p
         className={cn(
-          "font-data text-sm font-semibold tabular-nums truncate",
+          "font-data text-xs font-semibold tabular-nums truncate text-left",
           variant && STAT_TILE_VARIANT_CLASS[variant],
         )}
       >

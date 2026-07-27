@@ -28,25 +28,38 @@ export interface SessionHeroStatItem {
 
 // ── Таблица результатов ──────────────────────────────────────────────────────
 
-/** Строка в таблице итогов сессии. */
+/**
+ * Строка в таблице итогов сессии — ОДНА МАШИНА/КОМАНДА, не один пилот.
+ * Командная гонка со сменой пилота даёт несколько session_results (по одному
+ * на реального пилота) с одинаковым carNumber — buildResultRows() схлопывает
+ * их в одну строку с суммарной статистикой (см. server/importWorker.ts про
+ * происхождение driverCount/стинтов). Кто именно вёл какой круг — смотри
+ * вкладку "Круги" (DriverLapRowView.driverName), не эту таблицу.
+ */
 export interface SessionResultRowView {
   position: number;
+  /** Ключ группировки/выбора строки — carNumber (или синтетический фолбэк). */
+  carKey: string;
+  /** Имя пилота (driverCount === 1) или название команды (driverCount > 1). */
   driverName: string;
+  /** Сколько разных реальных пилотов сидело за рулём этой машины за сессию. */
+  driverCount: number;
   carNumber: string | number;
   teamName?: string | null;
   carModel?: string | null;
-  /** Отформатированное лучшее время круга. */
+  /** Отформатированное лучшее время круга — минимум среди всех пилотов машины. */
   bestLapTime: string;
   /** Отставание от лидера. */
   gap?: string | null;
   /** Интервал до предыдущего гонщика. */
   interval?: string | null;
-  /** Количество пит-стопов. */
+  /** Суммарное количество пит-стопов по всем пилотам машины. */
   pitStops?: number | null;
+  /** Суммарное количество кругов по всем пилотам машины. */
   totalLaps?: number | null;
   /** Признак флага финиша (DNS / DNF / DSQ…). */
   finishStatus?: string | null;
-  /** 1 — живой игрок, 0 / null — ИИ. */
+  /** 1 — за рулём был живой игрок (хотя бы один из пилотов машины), 0 / null — ИИ. */
   isPlayer?: number | null;
   /** Класс машины (Hypercar / LMP2 / GT3…). */
   carClass?: string | null;
@@ -93,11 +106,19 @@ export interface DriverLapRowView {
   tyreWear: TyreWear | null;
   /** Тип/состав шин (например «Soft», «Medium», «Hard» или строка из данных). */
   tyreType: string;
+  /** Кто вёл машину на этом круге (командная гонка со сменой пилота). */
+  driverName?: string;
+  /** 1 — за рулём был живой игрок, 0 / null — ИИ (см. driverName). */
+  isPlayer?: number | null;
 }
 
-/** Группа кругов одного пилота. */
+/** Группа кругов одной МАШИНЫ (может объединять несколько реальных пилотов). */
 export interface DriverLapsGroupView {
+  carKey: string;
+  /** Имя пилота (driverCount === 1) или сводное обозначение команды (driverCount > 1). */
   driverName: string;
+  /** Сколько разных реальных пилотов вело эту машину за сессию. */
+  driverCount: number;
   carNumber: string | number;
   bestLapTime: string;
   laps: DriverLapRowView[];
@@ -122,8 +143,9 @@ export interface DriverLapsGroupView {
 
 // ── Секторы ──────────────────────────────────────────────────────────────────
 
-/** Лучшие времена по секторам для одного пилота. */
+/** Лучшие времена по секторам одной машины (сумма/минимум по всем её пилотам). */
 export interface DriverSectorSummary {
+  carKey: string;
   driverName: string;
   carNumber: string | number;
   /** Лучшие времена секторов [S1, S2, S3] в виде строк. */
@@ -154,8 +176,9 @@ export interface LapProgressPoint {
   timeFormatted: string;
 }
 
-/** Серия данных одного пилота для графика прогресса по кругам. */
+/** Серия данных одной машины для графика прогресса по кругам. */
 export interface LapProgressSeries {
+  carKey: string;
   driverName: string;
   carNumber: string | number;
   points: LapProgressPoint[];

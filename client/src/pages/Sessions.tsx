@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Upload, Dumbbell, Timer, Trophy, ChevronRight, type LucideIcon } from "lucide-react";
+import { Upload, Dumbbell, Timer, Trophy, ChevronRight, Users, User, type LucideIcon } from "lucide-react";
 import {
   normalizeSessionCategory,
   getSessionTypeBadgeClass,
@@ -61,6 +61,8 @@ type SessionItem = {
   sessionDurationMin?: number | null;
   /** Настроенная длительность гонки в минутах (из лога игры; для гонок). */
   raceTimeMin?: number | null;
+  /** Хотя бы одна машина сессии вела несколько реальных пилотов по очереди. */
+  hasCoDrivers?: number | null;
   results: {
     isPlayer: number;
     position: number;
@@ -174,20 +176,48 @@ export default function Sessions() {
     return filter === "practice" || filter === "qualify" || filter === "race" ? filter : "all";
   }, [searchString]);
 
-  const setActiveFilter = (key: string) => {
-    if (key === "all") {
+  // Независимый от типа сессии переключатель — "только командные" (hasCoDrivers),
+  // комбинируется с activeFilter через AND, а не заменяет его.
+  const coDriversOnly = useMemo(() => {
+    const normalizedSearch = searchString.startsWith("?") ? searchString.slice(1) : searchString;
+    return new URLSearchParams(normalizedSearch).get("coDrivers") === "1";
+  }, [searchString]);
+
+  // Строит новую query-строку поверх ТЕКУЩЕЙ, меняя только переданные ключи —
+  // чтобы переключение одного фильтра (тип сессии / только командные) не
+  // затирало значение другого.
+  const navigateWithParams = (overrides: { filter?: string; coDrivers?: boolean }) => {
+    const currentSearch = window.location.search.startsWith("?")
+      ? window.location.search.slice(1)
+      : window.location.search;
+    const params = new URLSearchParams(currentSearch);
+
+    if (overrides.filter !== undefined) {
+      if (overrides.filter === "all") params.delete("filter");
+      else params.set("filter", overrides.filter);
+    }
+    if (overrides.coDrivers !== undefined) {
+      if (overrides.coDrivers) params.set("coDrivers", "1");
+      else params.delete("coDrivers");
+    }
+
+    const qs = params.toString();
+    if (qs) {
+      navigate(`/sessions?${qs}`);
+    } else {
       // wouter's hash-location navigate() only overwrites location.search
       // when the target URL has a query string of its own — it never
-      // clears an existing one, so switching to "all" from another filter
-      // silently keeps the old ?filter= param. Clear it explicitly first.
+      // clears an existing one, so navigating to a param-less URL silently
+      // keeps the old query string. Clear it explicitly first.
       if (window.location.search) {
         window.history.replaceState(window.history.state, "", window.location.pathname + window.location.hash);
       }
       navigate("/sessions");
-    } else {
-      navigate(`/sessions?filter=${encodeURIComponent(key)}`);
     }
   };
+
+  const setActiveFilter = (key: string) => navigateWithParams({ filter: key });
+  const setCoDriversOnly = (value: boolean) => navigateWithParams({ coDrivers: value });
 
   // Сводка по ВСЕМ сессиям — не зависит от текущего фильтра типа.
   const summary = useMemo(() => buildSessionsSummary((sessions ?? []) as SessionItem[]), [sessions]);
@@ -196,10 +226,12 @@ export default function Sessions() {
     if (!sessions) return [] as SessionItem[];
     const all = sessions as SessionItem[];
 
-    if (activeFilter === "all") return all;
-
-    return all.filter((s) => normalizeSessionCategory(s.sessionType) === activeFilter);
-  }, [sessions, activeFilter]);
+    return all.filter((s) => {
+      if (activeFilter !== "all" && normalizeSessionCategory(s.sessionType) !== activeFilter) return false;
+      if (coDriversOnly && !s.hasCoDrivers) return false;
+      return true;
+    });
+  }, [sessions, activeFilter, coDriversOnly]);
 
   // Sort by date descending, then by session type order
   const sorted = useMemo(
@@ -231,7 +263,7 @@ export default function Sessions() {
           Та же плитка ActivityTile, что и на Обзоре. */}
       {hasSessions && (
         <Card className="p-4">
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-2.5">
             <ActivityTile
               category="practice"
               label={t("sessionType.practice")}
@@ -260,41 +292,58 @@ export default function Sessions() {
       {/* Filter — одна кнопка, разделённая на секции; цвет секции совпадает с плашкой.
           На узких экранах группа целиком не помещается — делаем её горизонтально
           прокручиваемой вместо того, чтобы обрезать последние секции. */}
-      <div
-        className="inline-flex max-w-full overflow-x-auto rounded-lg border border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        role="group"
-        aria-label={t("sessions.filterAria")}
-      >
-        {FILTER_OPTIONS.map(({ key, label }, index) => {
-          const isAll = key === "all";
-          const isActive = activeFilter === key;
-          const Icon = isAll ? null : FILTER_ICON[key];
+      <div className="flex flex-wrap items-center gap-2">
+        <div
+          className="inline-flex max-w-full overflow-x-auto rounded-lg border border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          role="group"
+          aria-label={t("sessions.filterAria")}
+        >
+          {FILTER_OPTIONS.map(({ key, label }, index) => {
+            const isAll = key === "all";
+            const isActive = activeFilter === key;
+            const Icon = isAll ? null : FILTER_ICON[key];
 
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setActiveFilter(key)}
-              aria-pressed={isActive}
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 py-1.5 text-xs font-semibold transition-colors",
-                index > 0 && "border-l border-border",
-                isAll
-                  ? isActive
-                    ? "bg-accent text-accent-foreground"
-                    : "bg-background text-muted-foreground hover:bg-accent/40"
-                  : isActive
-                    ? // Активная цветная секция: тот же цвет, что и плашка этого типа
-                      getSessionTypeBadgeClass(key)
-                    : // Неактивная: нейтральный фон
-                      "bg-background text-muted-foreground/80 hover:bg-accent/10",
-              )}
-            >
-              {Icon && <Icon size={13} />}
-              <span>{label}</span>
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setActiveFilter(key)}
+                aria-pressed={isActive}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 py-1.5 text-xs font-semibold transition-colors",
+                  index > 0 && "border-l border-border",
+                  isAll
+                    ? isActive
+                      ? "bg-accent text-accent-foreground"
+                      : "bg-background text-muted-foreground hover:bg-accent/40"
+                    : isActive
+                      ? // Активная цветная секция: тот же цвет, что и плашка этого типа
+                        getSessionTypeBadgeClass(key)
+                      : // Неактивная: нейтральный фон
+                        "bg-background text-muted-foreground/80 hover:bg-accent/10",
+                )}
+              >
+                {Icon && <Icon size={13} />}
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Независимый переключатель — комбинируется с фильтром по типу через AND. */}
+        <button
+          type="button"
+          data-testid="button-filter-co-drivers"
+          onClick={() => setCoDriversOnly(!coDriversOnly)}
+          aria-pressed={coDriversOnly}
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3.5 py-1.5 text-xs font-semibold transition-colors",
+            coDriversOnly ? "bg-accent text-accent-foreground" : "bg-background text-muted-foreground hover:bg-accent/40",
+          )}
+        >
+          <Users size={13} />
+          <span>{t("sessions.filterTeamOnly")}</span>
+        </button>
       </div>
 
       {/* Loading state */}
@@ -334,8 +383,8 @@ export default function Sessions() {
         </div>
       )}
 
-      {/* Sessions table. Колонки фиксированной ширины (160+140+170+140+80+110+24 = 824px)
-          плюс gap-x-3 между 8 колонками (84px) = 908px, шире, чем мобильный экран — раньше
+      {/* Sessions table. Колонки фиксированной ширины (160+110+140+170+140+80+110+24 = 934px)
+          плюс gap-x-3 между 9 колонками (96px) = 1030px, шире, чем мобильный экран — раньше
           внешний контейнер был overflow-hidden и просто обрезал Трек/Лучший круг/Кругов/Дату
           без возможности их увидеть. Теперь контейнер overflow-x-auto, а строки
           min-w-[1068px] (с запасом под "Трек" minmax(160px,…)) — на мобильном таблица целиком
@@ -351,10 +400,11 @@ export default function Sessions() {
           {/* Table header */}
           <div
             className="grid min-w-[1068px] gap-x-3 border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            style={{ gridTemplateColumns: "160px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px" }}
+            style={{ gridTemplateColumns: "160px 110px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px" }}
             role="row"
           >
             <div role="columnheader">{t("sessions.colType")}</div>
+            <div role="columnheader">{t("sessions.colRaceType")}</div>
             <div role="columnheader">{t("sessions.colTrack")}</div>
             <div role="columnheader">{t("sessions.colConfig")}</div>
             <div role="columnheader">{t("sessions.colClasses")}</div>
@@ -384,13 +434,21 @@ export default function Sessions() {
                 href={href}
                 data-testid={`row-session-${session.id}`}
                 className="grid min-w-[1068px] cursor-pointer items-center gap-x-3 border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                style={{ gridTemplateColumns: "160px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px" }}
+                style={{ gridTemplateColumns: "160px 110px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px" }}
                 role="row"
                 aria-label={`${t(`sessionType.${cat}`)} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime, intlLocale)}`}
               >
                 {/* Type badge */}
                 <div role="cell">
                   <SessionTypeBadge sessionType={session.sessionType} />
+                </div>
+
+                {/* Race type: solo / team */}
+                <div role="cell">
+                  <Badge variant="outline" className="gap-1 text-[11px]">
+                    {session.hasCoDrivers ? <Users size={11} /> : <User size={11} />}
+                    {session.hasCoDrivers ? t("sessions.raceTypeTeam") : t("sessions.raceTypeSolo")}
+                  </Badge>
                 </div>
 
                 {/* Track */}

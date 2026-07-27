@@ -28,7 +28,7 @@ export function ActivityTile({ category, label, count, minutes, locale }: Activi
   const { t } = useLanguage();
   const Icon = ACTIVITY_ICON[category];
   return (
-    <div className={`flex flex-col gap-2 rounded-md p-3.5 ${ACTIVITY_CLASS[category]}`}>
+    <div className={`flex min-w-[130px] flex-col gap-2 rounded-md p-3.5 ${ACTIVITY_CLASS[category]}`}>
       <div className="flex items-center gap-1.5 text-xs font-semibold">
         <Icon size={13} />
         {label}

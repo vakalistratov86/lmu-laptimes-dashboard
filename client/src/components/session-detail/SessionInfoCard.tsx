@@ -5,8 +5,9 @@
  * остаётся неизменной при переключении вкладок Результаты / Круги / Прогресс.
  */
 import { Link } from "wouter";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
 import { StatTile } from "@/components/StatTile";
 import { useLanguage } from "@/lib/i18n";
@@ -22,6 +23,8 @@ interface SessionInfoCardProps {
   lapCount?: number | null;
   trackLengthKm?: string | null;
   gameVersion?: string | null;
+  /** Хотя бы одна машина сессии вела несколько реальных пилотов по очереди. */
+  hasCoDrivers?: boolean;
 }
 
 export function SessionInfoCard({
@@ -35,6 +38,7 @@ export function SessionInfoCard({
   lapCount,
   trackLengthKm,
   gameVersion,
+  hasCoDrivers,
 }: SessionInfoCardProps) {
   const { t } = useLanguage();
   return (
@@ -50,6 +54,12 @@ export function SessionInfoCard({
 
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <SessionTypeBadge sessionType={sessionType} />
+          {hasCoDrivers && (
+            <Badge variant="outline" className="gap-1 text-xs" data-testid="badge-team-race">
+              <Users size={12} />
+              {t("sessionDetail.teamRace")}
+            </Badge>
+          )}
           <h1 className="font-display text-xl font-bold tracking-tight" data-testid="text-session-title">
             {trackName}
             {courseLabel && <span className="ml-2 text-base font-normal text-muted-foreground">· {courseLabel}</span>}

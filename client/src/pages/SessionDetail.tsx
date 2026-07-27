@@ -61,8 +61,10 @@ export default function SessionDetail() {
 
   const [activeTab, setActiveTab] = useState<SessionTabKey>("results");
 
-  // SD-15/SD-20: Выбранный пилот для карточки деталей — всегда ровно один.
-  const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
+  // Выбранная МАШИНА/КОМАНДА для карточки деталей — всегда ровно одна
+  // (командная гонка со сменой пилота группирует результаты по машине, не по
+  // отдельному пилоту — см. buildResultRows() в sessionDetailSelectors.ts).
+  const [selectedCarKey, setSelectedCarKey] = useState<string | null>(null);
 
   // ── Вычисляемые данные ────────────────────────────────────────────────────
   const hasLapData = (laps?.length ?? 0) > 0;
@@ -85,20 +87,20 @@ export default function SessionDetail() {
 
   // SD-20: По умолчанию выбрана позиция 1 (resultRows уже отсортированы по
   // позиции) — без этого при первой отрисовке карточка была бы пустой.
-  const effectiveSelectedDriver = selectedDriver ?? resultRows[0]?.driverName ?? null;
+  const effectiveSelectedCarKey = selectedCarKey ?? resultRows[0]?.carKey ?? null;
 
-  // SD-19: Данные выбранного пилота для детальной карточки над таблицей
+  // SD-19: Данные выбранной машины для детальной карточки над таблицей
   const selectedResultRow = useMemo(
-    () => resultRows.find((r) => r.driverName === effectiveSelectedDriver),
-    [resultRows, effectiveSelectedDriver],
+    () => resultRows.find((r) => r.carKey === effectiveSelectedCarKey),
+    [resultRows, effectiveSelectedCarKey],
   );
   const selectedLapGroup = useMemo(
-    () => lapGroups.find((g) => g.driverName === effectiveSelectedDriver),
-    [lapGroups, effectiveSelectedDriver],
+    () => lapGroups.find((g) => g.carKey === effectiveSelectedCarKey),
+    [lapGroups, effectiveSelectedCarKey],
   );
   const selectedSectorSummary = useMemo(
-    () => sectorRows.find((s) => s.driverName === effectiveSelectedDriver),
-    [sectorRows, effectiveSelectedDriver],
+    () => sectorRows.find((s) => s.carKey === effectiveSelectedCarKey),
+    [sectorRows, effectiveSelectedCarKey],
   );
 
   const progressSeries = useMemo(() => buildLapProgressSeries(laps ?? []), [laps]);
@@ -145,15 +147,12 @@ export default function SessionDetail() {
         lapCount={s.lapCount}
         trackLengthKm={trackLengthKm}
         gameVersion={s.gameVersion}
+        hasCoDrivers={!!s.hasCoDrivers}
       />
 
-      {/* SD-20: Карточка деталей пилота — всегда видна, не зависит от вкладки */}
+      {/* SD-20: Карточка деталей машины/команды — всегда видна, не зависит от вкладки */}
       {selectedResultRow && (
-        <SessionDriverDetailCard
-          row={selectedResultRow}
-          lapGroup={selectedLapGroup}
-          sectorSummary={selectedSectorSummary}
-        />
+        <SessionDriverDetailCard row={selectedResultRow} lapGroup={selectedLapGroup} sectorSummary={selectedSectorSummary} />
       )}
 
       {/* SD-20: Вкладки встроены в шапку общей карточки результатов/кругов/прогресса */}
@@ -166,15 +165,16 @@ export default function SessionDetail() {
             <SessionResultsTable
               rows={resultRows}
               fastestLapTime={fastestLapTime}
-              selectedDriver={effectiveSelectedDriver}
-              onSelectDriver={setSelectedDriver}
+              selectedCarKey={effectiveSelectedCarKey}
+              onSelectCar={setSelectedCarKey}
             />
           )}
 
-          {/* SD-17/SD-20: Круги выбранного пилота */}
+          {/* SD-17/SD-20: Круги выбранной машины — показываем "Пилот" на круг,
+              только если машину вело больше одного реального человека. */}
           {activeTab === "laps" &&
             (selectedLapGroup ? (
-              <DriverLapTable laps={selectedLapGroup.laps} />
+              <DriverLapTable laps={selectedLapGroup.laps} showDriverColumn={selectedLapGroup.driverCount > 1} />
             ) : (
               <p className="py-8 text-center text-sm text-muted-foreground">{t("sessionDetail.noLapDataForSession")}</p>
             ))}

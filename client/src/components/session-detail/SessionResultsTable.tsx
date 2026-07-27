@@ -7,7 +7,7 @@
  * пилот (по умолчанию — позиция 1), карточка с его деталями видна
  * постоянно на всех вкладках.
  */
-import { Medal } from "lucide-react";
+import { Medal, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DriverName } from "@/components/DriverName";
 import { getMedalColorClass, getClassBadgeClass } from "@/lib/classStyles";
@@ -20,14 +20,14 @@ interface SessionResultsRowProps {
   row: SessionResultRowView;
   isFastest: boolean;
   isSelected: boolean;
-  onSelect: (driverName: string) => void;
+  onSelect: (carKey: string) => void;
 }
 
 export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: SessionResultsRowProps) {
   return (
     <tr
-      data-testid={`row-result-${row.position}`}
-      onClick={() => onSelect(row.driverName)}
+      data-testid={`row-result-${row.position}-${row.carKey}`}
+      onClick={() => onSelect(row.carKey)}
       className={[
         "border-b border-border/60 last:border-0 cursor-pointer transition-colors",
         isSelected ? "bg-primary/15 ring-1 ring-inset ring-primary/40" : "hover:bg-muted/40",
@@ -40,11 +40,24 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
         </div>
       </td>
 
-      {/* Пилот */}
+      {/* Пилот — командная гонка со сменой пилота показывает здесь только
+          признак "несколько пилотов", а не состав (см. вкладку "Круги"). */}
       <td className="px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <DriverName name={row.driverName} isPlayer={row.isPlayer} className="font-medium" />
+          {row.driverCount > 1 ? (
+            <Badge variant="outline" className="gap-1 text-xs">
+              <Users size={12} />
+              {row.driverCount}
+            </Badge>
+          ) : (
+            <DriverName name={row.driverName} isPlayer={row.isPlayer} className="font-medium" />
+          )}
         </div>
+      </td>
+
+      {/* Команда */}
+      <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
+        <div className="truncate text-[11px]">{row.teamName ?? "—"}</div>
       </td>
 
       {/* Класс машины */}
@@ -58,10 +71,9 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
         )}
       </td>
 
-      {/* Команда / машина */}
+      {/* Авто */}
       <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
-        <div className="truncate">{row.teamName ?? "—"}</div>
-        <div className="truncate text-xs">
+        <div className="truncate text-[11px]">
           {row.carModel}
           {row.carNumber ? ` · #${row.carNumber}` : ""}
         </div>
@@ -103,18 +115,13 @@ interface SessionResultsTableProps {
   rows: SessionResultRowView[];
   /** Лучшее время сессии (отформатированное). */
   fastestLapTime?: string | null;
-  /** Имя выбранного пилота — всегда задано (по умолчанию позиция 1). */
-  selectedDriver?: string | null;
-  /** Колбэк при клике на строку пилота. */
-  onSelectDriver: (driverName: string) => void;
+  /** Ключ выбранной машины/команды — всегда задан (по умолчанию позиция 1). */
+  selectedCarKey?: string | null;
+  /** Колбэк при клике на строку машины/команды. */
+  onSelectCar: (carKey: string) => void;
 }
 
-export function SessionResultsTable({
-  rows,
-  fastestLapTime,
-  selectedDriver,
-  onSelectDriver,
-}: SessionResultsTableProps) {
+export function SessionResultsTable({ rows, fastestLapTime, selectedCarKey, onSelectCar }: SessionResultsTableProps) {
   const { t } = useLanguage();
   return (
     <div className="overflow-x-auto">
@@ -123,8 +130,9 @@ export function SessionResultsTable({
           <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <th className="px-4 py-2.5 w-12">{t("sessionDetail.colPos")}</th>
             <th className="px-4 py-2.5">{t("sessionDetail.colDriver")}</th>
+            <th className="hidden px-4 py-2.5 sm:table-cell">{t("sessionDetail.colTeam")}</th>
             <th className="px-4 py-2.5">{t("sessionDetail.colClass")}</th>
-            <th className="hidden px-4 py-2.5 sm:table-cell">{t("sessionDetail.colTeamCar")}</th>
+            <th className="hidden px-4 py-2.5 sm:table-cell">{t("sessionDetail.colCar")}</th>
             <th className="px-4 py-2.5">{t("sessionDetail.colStatus")}</th>
             <th className="px-4 py-2.5 text-right">{t("sessionDetail.colLaps")}</th>
             <th className="hidden px-4 py-2.5 text-right md:table-cell">{t("sessionDetail.colPit")}</th>
@@ -135,11 +143,11 @@ export function SessionResultsTable({
         <tbody>
           {rows.map((row) => (
             <SessionResultsRow
-              key={row.position}
+              key={row.carKey}
               row={row}
               isFastest={!!fastestLapTime && row.bestLapTime === fastestLapTime}
-              isSelected={selectedDriver === row.driverName}
-              onSelect={onSelectDriver}
+              isSelected={selectedCarKey === row.carKey}
+              onSelect={onSelectCar}
             />
           ))}
         </tbody>

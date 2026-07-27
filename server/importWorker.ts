@@ -30,7 +30,7 @@ import {
   drivers,
 } from "@shared/schema";
 import { eq, inArray, sql } from "drizzle-orm";
-import { parseRaceResults, type ParsedSession } from "./logParser";
+import { parseRaceResults, type ParsedSession, type ParsedStint } from "./logParser";
 import { validateLapTime } from "@shared/validators";
 import { normalizeLapTime, normalizeDriverNameForStorage, toMilliseconds } from "./normalizer";
 import type { Track, Driver, InsertLapTime, InsertSessionLap, InsertImportError } from "@shared/schema";
@@ -267,6 +267,20 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     const track = await findOrCreateTrack(tx, parsed!);
     const dateOnly = parsed!.dateTimeIso.slice(0, 10);
 
+    // Командные гонки: <Swap> может отдать одну машину нескольким реальным
+    // пилотам по очереди (server/logParser.ts). Считаем ростер и "командность"
+    // по РЕАЛЬНЫМ пилотам-стинтам, а не по числу блоков <Driver> (машин) —
+    // иначе со-пилот, не оказавшийся последним за рулём, никогда не попал бы
+    // ни в ростер для supersede-сравнения, ни в счётчик "Пилотов" сессии.
+    const stintNameEntries = parsed!.drivers.flatMap((d) =>
+      d.stints.map((s) => ({ name: normalizeDriverNameForStorage(s.driverName), team: d.teamName })),
+    );
+    const distinctDriverNames = new Set(stintNameEntries.map((e) => e.name.toLowerCase()));
+    const hasCoDrivers = parsed!.drivers.some((d) => {
+      const distinctForCar = new Set(d.stints.map((s) => normalizeDriverNameForStorage(s.driverName).toLowerCase()));
+      return distinctForCar.size > 1;
+    });
+
     // Реконнект: сервер LMU пишет НОВЫЙ файл вместо дополнения старого —
     // если это дамп той же самой реальной сессии (совпадает событие/тип/
     // трасса/ростер пилотов в пределах суток), заменяем менее полный дамп
@@ -275,7 +289,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       event: parsed!.event,
       sessionType: parsed!.sessionType,
       trackId: track.id,
-      newDriverNames: parsed!.drivers.map((d) => d.name),
+      newDriverNames: stintNameEntries.map((e) => e.name),
       newDateTimeIso: parsed!.dateTimeIso,
     });
 
@@ -320,7 +334,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
         dateTimeUnix: parsed!.dateTimeUnix ?? null,
         fileName: job.fileName,
         setting: parsed!.setting ?? null,
-        driverCount: parsed!.drivers.length,
+        driverCount: distinctDriverNames.size,
         lapCount: 0,
         raceLaps: parsed!.raceLaps ?? null,
         raceTimeMin: parsed!.raceTimeMin ?? null,
@@ -338,6 +352,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
         sessionDurationMin: parsed!.sessionDurationMin ?? null,
         sessionMaxLaps: parsed!.sessionMaxLaps ?? null,
         mostLapsCompleted: parsed!.mostLapsCompleted ?? null,
+        hasCoDrivers: hasCoDrivers ? 1 : 0,
       })
       .returning();
     const session = sessionRows[0];
@@ -348,10 +363,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     // findOrCreateDriver() делала SELECT * FROM drivers на каждый вызов —
     // полное сканирование всей таблицы пилотов для КАЖДОГО участника КАЖДОГО
     // импортируемого файла.
-    const driversByNormalizedName = await findOrCreateDrivers(
-      tx,
-      parsed!.drivers.map((d) => ({ name: normalizeDriverNameForStorage(d.name), team: d.teamName })),
-    );
+    const driversByNormalizedName = await findOrCreateDrivers(tx, stintNameEntries);
 
     const driverIdByName = new Map<string, number>();
     const lapTimeRows: InsertLapTime[] = [];
@@ -361,40 +373,96 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     let validLapsCount = 0;
 
     for (const d of parsed!.drivers) {
-      const normalizedName = normalizeDriverNameForStorage(d.name);
-      const driver = driversByNormalizedName.get(normalizedName.toLowerCase())!;
-      driverIdByName.set(normalizedName.toLowerCase(), driver.id);
       const cls = normalizeClass(d.carClass);
+      const primaryKey = normalizeDriverNameForStorage(d.name).toLowerCase();
 
-      const srRows = await tx
-        .insert(sessionResults)
-        .values({
-          sessionId: session.id,
-          driverId: driver.id,
-          isPlayer: d.isPlayer ? 1 : 0,
-          position: d.position,
-          classPosition: d.classPosition,
-          lapRankIncludingDiscos: d.lapRankIncludingDiscos ?? null,
-          carClass: cls,
-          car: d.carType,
-          carType: d.carType,
-          team: d.teamName,
-          carNumber: d.carNumber ?? null,
-          vehFile: d.vehFile ?? null,
-          vehName: d.vehName ?? null,
-          category: d.category ?? null,
-          laps: d.laps,
-          pitstops: d.pitstops,
-          bestLapMs: d.bestLapMs ?? null,
-          finishStatus: d.finishStatus ?? null,
-          controlAndAids: d.controlAndAids ?? null,
-          connected: d.connected ?? null,
-        })
-        .returning();
-      const sr = srRows[0];
+      // Группируем стинты машины по реальному пилоту — один человек может
+      // появиться в 2+ несмежных стинтах (свап туда-обратно), объединяем их
+      // диапазоны в одну строку session_results вместо двух.
+      const stintsByDriver = new Map<string, ParsedStint[]>();
+      for (const s of d.stints) {
+        const key = normalizeDriverNameForStorage(s.driverName).toLowerCase();
+        const list = stintsByDriver.get(key) ?? [];
+        list.push(s);
+        stintsByDriver.set(key, list);
+      }
+      // Один синтетический стинт на всю машину = обычный сольный заезд (нет
+      // реального <Swap>) — диапазон стинта в этом случае не показываем
+      // (stint*Lap/Sec остаются null), это не срез командной гонки.
+      const isSoloCar = d.stints.length === 1 && stintsByDriver.size === 1;
+
+      const sortedStints = [...d.stints].sort((a, b) => a.startLap - b.startLap);
+      const resolveStintKey = (lapNum: number): string => {
+        let fallback = sortedStints[0];
+        for (const s of sortedStints) {
+          if (lapNum >= s.startLap && lapNum <= s.endLap) return normalizeDriverNameForStorage(s.driverName).toLowerCase();
+          if (s.startLap <= lapNum) fallback = s;
+        }
+        return normalizeDriverNameForStorage(fallback.driverName).toLowerCase();
+      };
+
+      // На каждого реального пилота машины — своя строка session_results.
+      // laps/pitstops/bestLapMs пересчитываются по факту из СОБСТВЕННЫХ кругов
+      // этого пилота — машинным <Laps>/<Pitstops>/<BestLapTime> не доверяем,
+      // это агрегаты по машине целиком, включая круги со-пилота (подтверждено
+      // на реальном логе: best_lap там оказался чужим кругом).
+      const perDriverRows = new Map<string, { sessionResultId: number; driverId: number }>();
+      for (const [key, stints] of stintsByDriver) {
+        const driver = driversByNormalizedName.get(key)!;
+        driverIdByName.set(key, driver.id);
+
+        const ownLaps = d.lapList.filter((lap) => resolveStintKey(lap.num) === key);
+        const ownLapTimes = ownLaps.filter((l) => l.lapMs != null && !l.isPit).map((l) => l.lapMs as number);
+
+        const startSecs = stints.map((s) => s.startSec).filter((v): v is number => v != null);
+        const endSecs = stints.map((s) => s.endSec).filter((v): v is number => v != null);
+
+        const srRows = await tx
+          .insert(sessionResults)
+          .values({
+            sessionId: session.id,
+            driverId: driver.id,
+            // Машинный <isPlayer> — единственный флаг на всю машину, привязанный
+            // к "зачётному" (последнему за рулём) пилоту. Для реального свапа
+            // (isSoloCar=false) этого недостаточно: со-пилот, названный в <Swap>,
+            // сам по себе такое же доказательство реального человека, как и
+            // сам факт смены (ИИ не "сменяют" по имени) — подтверждено на живом
+            // логе: у обоих пилотов машины #7 в <ControlAndAids> стоит
+            // "PlayerControl" на весь диапазон кругов, включая стинт со-пилота,
+            // которого машинный <isPlayer> прежде ошибочно превращал в ИИ.
+            isPlayer: isSoloCar ? (key === primaryKey && d.isPlayer ? 1 : 0) : 1,
+            position: d.position,
+            classPosition: d.classPosition,
+            lapRankIncludingDiscos: d.lapRankIncludingDiscos ?? null,
+            carClass: cls,
+            car: d.carType,
+            carType: d.carType,
+            team: d.teamName,
+            carNumber: d.carNumber ?? null,
+            vehFile: d.vehFile ?? null,
+            vehName: d.vehName ?? null,
+            category: d.category ?? null,
+            laps: ownLaps.length,
+            pitstops: ownLaps.filter((l) => l.isPit).length,
+            bestLapMs: ownLapTimes.length ? Math.min(...ownLapTimes) : null,
+            finishStatus: d.finishStatus ?? null,
+            controlAndAids: d.controlAndAids ?? null,
+            connected: d.connected ?? null,
+            stintStartLap: isSoloCar ? null : Math.min(...stints.map((s) => s.startLap)),
+            stintEndLap: isSoloCar ? null : Math.max(...stints.map((s) => s.endLap)),
+            stintStartSec: isSoloCar || startSecs.length === 0 ? null : Math.min(...startSecs),
+            stintEndSec: isSoloCar || endSecs.length === 0 ? null : Math.max(...endSecs),
+          })
+          .returning();
+        perDriverRows.set(key, { sessionResultId: srRows[0].id, driverId: driver.id });
+      }
 
       for (const lap of d.lapList) {
         totalLapsCount++;
+
+        const stintKey = resolveStintKey(lap.num);
+        const { sessionResultId, driverId } = perDriverRows.get(stintKey)!;
+        const stintDriverName = driversByNormalizedName.get(stintKey)!.name;
 
         const s1 = lap.s1Ms;
         const s2 = lap.s2Ms;
@@ -408,12 +476,12 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
         // При реконнекте живая телеметрия уже пройденного круга в новом дампе
         // обнулена (см. LapTelemetrySnapshot) — если этот же круг есть в
         // заменяемой сессии, берём телеметрию оттуда, она достовернее.
-        const oldTelemetry = supersededLapTelemetry.get(`${driver.id}:${lap.num}`);
+        const oldTelemetry = supersededLapTelemetry.get(`${driverId}:${lap.num}`);
 
         sessionLapRows.push({
-          sessionResultId: sr.id,
+          sessionResultId,
           sessionId: session.id,
-          driverId: driver.id,
+          driverId,
           lapNum: lap.num,
           lapTimeMs: lap.lapMs,
           sector1Ms: s1,
@@ -438,7 +506,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
         if (lap.lapMs != null && !lap.isPit) {
           const rawForValidation = {
-            driverName: d.name,
+            driverName: stintDriverName,
             trackName: parsed!.venue,
             lapTimeMs: toMilliseconds(lap.lapMs),
             sessionDate: parsed!.dateTimeIso,
@@ -454,14 +522,14 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
             logParseError(
               {
                 importJobId: job.id,
-                raw: JSON.stringify({ driverName: d.name, lapNum: lap.num, lapMs: lap.lapMs }),
+                raw: JSON.stringify({ driverName: stintDriverName, lapNum: lap.num, lapMs: lap.lapMs }),
                 code: validation.errorCode,
               },
               `Failed to parse lap time: ${validation.errorMessage}`,
             );
             dlqRows.push({
               importJobId: job.id,
-              rawPayload: JSON.stringify({ driverName: d.name, lapNum: lap.num, lapMs: lap.lapMs }),
+              rawPayload: JSON.stringify({ driverName: stintDriverName, lapNum: lap.num, lapMs: lap.lapMs }),
               errorCode: validation.errorCode,
               errorMessage: validation.errorMessage,
               occurredAt: Date.now(),
@@ -480,7 +548,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
           // Warn about laps with missing sector times so they are easy to spot in logs
           if (ltS1 == null || ltS2 == null || ltS3 == null) {
             console.warn("[importWorker] Lap with missing sector times — will be stored with NULL sectors", {
-              driverName: d.name,
+              driverName: stintDriverName,
               lapNum: lap.num,
               lapMs: lap.lapMs,
               s1: ltS1,
@@ -491,7 +559,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
           lapTimeRows.push({
             trackId: track.id,
-            driverId: driver.id,
+            driverId,
             carClass: cls,
             car: d.carType,
             lapMs: normalized.lapTimeMs,
@@ -633,7 +701,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       event: parsed!.event,
       venue: parsed!.venue,
       sessionType: parsed!.sessionType,
-      driverCount: parsed!.drivers.length,
+      driverCount: distinctDriverNames.size,
       replacedSessionId,
       replacedLapCount,
     };

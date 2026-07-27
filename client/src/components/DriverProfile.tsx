@@ -52,6 +52,9 @@ interface DriverSessionRow {
   pitstops: number;
   bestLapMs: number | null;
   finishStatus: string | null;
+  // Командная гонка со сменой пилота — null, если этот пилот вёл машину всю сессию.
+  stintStartLap: number | null;
+  stintEndLap: number | null;
 }
 
 // ─── Date formatting (same convention as Leaderboards/Sessions) ───────────────
@@ -117,6 +120,8 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
         pitstops: own.pitstops,
         bestLapMs: own.bestLapMs,
         finishStatus: own.finishStatus,
+        stintStartLap: own.stintStartLap ?? null,
+        stintEndLap: own.stintEndLap ?? null,
       });
     }
     return rows.sort((a, b) => b.dateTime.localeCompare(a.dateTime));
@@ -230,9 +235,9 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
     return (
       <div className="space-y-5">
         <Skeleton className="h-28" />
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4">
           {[...Array(6)].map((_, i) => (
-            <Skeleton key={i} className="h-24" />
+            <Skeleton key={i} className="h-24 min-w-[140px]" />
           ))}
         </div>
         <Skeleton className="h-64" />
@@ -302,7 +307,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
       ) : (
         <>
           {/* Stat tiles */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4">
             <Stat
               icon={Timer}
               label={t("driverDetail.bestLap")}
@@ -408,7 +413,14 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                     <div className="w-[130px] shrink-0 text-xs text-muted-foreground">
                       {formatDateTime(s.dateTime, intlLocale)}
                     </div>
-                    <div className="min-w-0 flex-1 truncate font-medium">{s.trackName}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{s.trackName}</div>
+                      {s.stintStartLap != null && s.stintEndLap != null && (
+                        <div className="truncate text-xs text-muted-foreground">
+                          {t("sessionDetail.stintRange", { start: s.stintStartLap, end: s.stintEndLap })}
+                        </div>
+                      )}
+                    </div>
                     <div className="w-[70px] shrink-0">
                       <Badge variant="outline" className={`text-xs ${getClassBadgeClass(s.carClass)}`}>
                         {s.carClass}
@@ -534,7 +546,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
 
 function Stat({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) {
   return (
-    <Card className="p-4">
+    <Card className="min-w-[140px] p-4">
       <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
         <Icon size={13} /> {label}
       </div>

@@ -297,7 +297,7 @@ export default function Import() {
           )}
 
           {/* Счётчики */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2">
             <StatCard label={t("imp.statDetected")} value={counters.total} tone="muted" />
             <StatCard label={t("imp.statQueued")} value={counters.queued} tone="muted" />
             <StatCard label={t("imp.statImported")} value={counters.imported} tone="ok" />
@@ -356,7 +356,7 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
           ? "text-red-500"
           : "text-muted-foreground";
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
+    <div className="min-w-[100px] rounded-lg border border-border bg-card p-3">
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={`mt-1 font-data text-xl font-bold tabular-nums ${color}`}>{value}</div>
     </div>

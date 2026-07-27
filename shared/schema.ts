@@ -70,6 +70,9 @@ export const sessions = pgTable("sessions", {
   sessionDurationMin: integer("session_duration_min"),
   sessionMaxLaps: integer("session_max_laps"),
   mostLapsCompleted: integer("most_laps_completed"),
+  // 1, если хотя бы у одной машины сессии несколько реальных пилотов
+  // (обнаружен <Swap> с разными именами) — командная гонка со сменой пилота.
+  hasCoDrivers: integer("has_co_drivers").notNull().default(0),
 });
 
 // Задания импорта — idempotency + async status (#5, #6)
@@ -121,6 +124,12 @@ export const sessionResults = pgTable("session_results", {
   finishStatus: text("finish_status"),
   controlAndAids: text("control_and_aids"),
   connected: integer("connected"),
+  // Диапазон кругов/времени этого пилота за рулём общей машины — null, если
+  // машину вёл один человек всю сессию (см. <Swap> в server/logParser.ts).
+  stintStartLap: integer("stint_start_lap"),
+  stintEndLap: integer("stint_end_lap"),
+  stintStartSec: real("stint_start_sec"),
+  stintEndSec: real("stint_end_sec"),
 });
 
 // Детальные данные по каждому кругу конкретного пилота в сессии
