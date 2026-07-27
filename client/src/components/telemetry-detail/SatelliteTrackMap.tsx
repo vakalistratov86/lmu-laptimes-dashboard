@@ -1,7 +1,8 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { geoToImagePixel, getSatelliteMapCalibration, type ImagePoint } from "@/lib/trackMapCalibration";
-import { headingAt, arrowPolygonPoints, perpendicularSegment } from "@/lib/telemetryGeo";
+import { headingAt, arrowPolygonPoints, perpendicularSegment, offsetPerpendicular } from "@/lib/telemetryGeo";
+import { buildColoredSegments, detectCornerSpeedMarkers, type SpeedSample } from "@/lib/telemetrySpeed";
 import type { TelemetryLapPoint } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 
@@ -154,6 +155,21 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
   );
   const cursorHeading = cursorCompactIndex >= 0 ? headingAt(validPoints, cursorCompactIndex) : 0;
 
+  const speedSamples = useMemo(() => {
+    const result: SpeedSample[] = [];
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const sp = svgPoints[i];
+      if (sp && p.speedKph != null && p.lapDist != null) {
+        result.push({ x: sp.x, y: sp.y, speedKph: p.speedKph, distM: p.lapDist });
+      }
+    }
+    return result;
+  }, [points, svgPoints]);
+
+  const coloredSegments = useMemo(() => buildColoredSegments(speedSamples, 500), [speedSamples]);
+  const cornerMarkers = useMemo(() => detectCornerSpeedMarkers(speedSamples), [speedSamples]);
+
   if (!calibration) return null;
 
   return (
@@ -191,14 +207,67 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
             viewBox={`0 0 ${naturalWidth} ${naturalHeight}`}
             className="pointer-events-none absolute inset-0"
           >
-            <path
-              d={path}
-              fill="none"
-              stroke="var(--color-primary, #ef4444)"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            {coloredSegments.length > 0 ? (
+              coloredSegments.map((seg, i) => (
+                <line
+                  key={i}
+                  x1={seg.x1}
+                  y1={seg.y1}
+                  x2={seg.x2}
+                  y2={seg.y2}
+                  stroke={seg.color}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                />
+              ))
+            ) : (
+              <path
+                d={path}
+                fill="none"
+                stroke="var(--color-primary, #ef4444)"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+            {cornerMarkers.map((m, i) => {
+              const maxPos = offsetPerpendicular(m.maxSpeed.x, m.maxSpeed.y, m.maxSpeedHeading, 55);
+              const minPos = offsetPerpendicular(m.minSpeed.x, m.minSpeed.y, m.minSpeedHeading, 55);
+              return (
+                <g key={i}>
+                  <circle cx={m.maxSpeed.x} cy={m.maxSpeed.y} r={9} fill="#dc2626" stroke="white" strokeWidth={2.5} />
+                  <text
+                    x={maxPos.x}
+                    y={maxPos.y}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={54}
+                    fontWeight={700}
+                    fill="#dc2626"
+                    stroke="white"
+                    strokeWidth={10}
+                    paintOrder="stroke"
+                  >
+                    {Math.round(m.maxSpeed.speedKph)}
+                  </text>
+                  <circle cx={m.minSpeed.x} cy={m.minSpeed.y} r={9} fill="#16a34a" stroke="white" strokeWidth={2.5} />
+                  <text
+                    x={minPos.x}
+                    y={minPos.y}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={54}
+                    fontWeight={700}
+                    fill="#16a34a"
+                    stroke="white"
+                    strokeWidth={10}
+                    paintOrder="stroke"
+                  >
+                    {Math.round(m.minSpeed.speedKph)}
+                  </text>
+                </g>
+              );
+            })}
             {startLine && (
               <line
                 x1={startLine.x1}

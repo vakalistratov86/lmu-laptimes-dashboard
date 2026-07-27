@@ -77,6 +77,12 @@ export function arrowPolygonPoints(cx: number, cy: number, headingRad: number, l
   return [tip, left, right].map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
 }
 
+/** Точка, смещённая от (cx, cy) на `distance` перпендикулярно `headingRad` — для подписей рядом с траекторией, не поверх неё. */
+export function offsetPerpendicular(cx: number, cy: number, headingRad: number, distance: number): SvgPoint {
+  const perp = headingRad + Math.PI / 2;
+  return { x: cx + Math.cos(perp) * distance, y: cy + Math.sin(perp) * distance };
+}
+
 /** Концы отрезка, перпендикулярного `headingRad`, центрированного в (cx, cy) — линия старт/финиша поперёк полотна трассы. */
 export function perpendicularSegment(
   cx: number,

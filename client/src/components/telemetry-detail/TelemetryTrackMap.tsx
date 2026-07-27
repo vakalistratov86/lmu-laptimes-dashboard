@@ -5,7 +5,9 @@ import {
   headingAt,
   arrowPolygonPoints,
   perpendicularSegment,
+  offsetPerpendicular,
 } from "@/lib/telemetryGeo";
+import { buildColoredSegments, detectCornerSpeedMarkers, type SpeedSample } from "@/lib/telemetrySpeed";
 import { hasSatelliteMap } from "@/lib/trackMapCalibration";
 import { SatelliteTrackMap } from "@/components/telemetry-detail/SatelliteTrackMap";
 import type { TelemetryLapPoint } from "@/lib/api";
@@ -38,6 +40,20 @@ export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTr
     [svgPoints, hoverIndex],
   );
 
+  const speedSamples = useMemo(() => {
+    const result: SpeedSample[] = [];
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      if (p.speedKph != null && p.lapDist != null) {
+        result.push({ x: svgPoints[i].x, y: svgPoints[i].y, speedKph: p.speedKph, distM: p.lapDist });
+      }
+    }
+    return result;
+  }, [points, svgPoints]);
+
+  const coloredSegments = useMemo(() => buildColoredSegments(speedSamples, 400), [speedSamples]);
+  const cornerMarkers = useMemo(() => detectCornerSpeedMarkers(speedSamples), [speedSamples]);
+
   // Для трасс с калибровкой по спутниковому снимку — фото с зумом/паном и
   // траекторией, привязанной к его пиксельным координатам. Для остальных —
   // прежняя схематичная SVG-проекция (без привязки к местности).
@@ -56,14 +72,67 @@ export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTr
       role="img"
       aria-label={t("telemetryPage.trackMapAria")}
     >
-      <path
-        d={path}
-        fill="none"
-        stroke="var(--color-primary, #ef4444)"
-        strokeWidth={0.9}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      {coloredSegments.length > 0 ? (
+        coloredSegments.map((seg, i) => (
+          <line
+            key={i}
+            x1={seg.x1}
+            y1={seg.y1}
+            x2={seg.x2}
+            y2={seg.y2}
+            stroke={seg.color}
+            strokeWidth={0.9}
+            strokeLinecap="round"
+          />
+        ))
+      ) : (
+        <path
+          d={path}
+          fill="none"
+          stroke="var(--color-primary, #ef4444)"
+          strokeWidth={0.9}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+      {cornerMarkers.map((m, i) => {
+        const maxPos = offsetPerpendicular(m.maxSpeed.x, m.maxSpeed.y, m.maxSpeedHeading, 14);
+        const minPos = offsetPerpendicular(m.minSpeed.x, m.minSpeed.y, m.minSpeedHeading, 14);
+        return (
+          <g key={i}>
+            <circle cx={m.maxSpeed.x} cy={m.maxSpeed.y} r={2} fill="#dc2626" stroke="white" strokeWidth={0.6} />
+            <text
+              x={maxPos.x}
+              y={maxPos.y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={9}
+              fontWeight={700}
+              fill="#dc2626"
+              stroke="white"
+              strokeWidth={2}
+              paintOrder="stroke"
+            >
+              {Math.round(m.maxSpeed.speedKph)}
+            </text>
+            <circle cx={m.minSpeed.x} cy={m.minSpeed.y} r={2} fill="#16a34a" stroke="white" strokeWidth={0.6} />
+            <text
+              x={minPos.x}
+              y={minPos.y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={9}
+              fontWeight={700}
+              fill="#16a34a"
+              stroke="white"
+              strokeWidth={2}
+              paintOrder="stroke"
+            >
+              {Math.round(m.minSpeed.speedKph)}
+            </text>
+          </g>
+        );
+      })}
       {startLine && (
         <line
           x1={startLine.x1}
