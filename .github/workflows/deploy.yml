@@ -67,6 +67,12 @@ jobs:
 
             docker pull ghcr.io/vakalistratov86/lmu-laptimes-dashboard:latest
 
+            # Применяем изменения схемы (shared/schema.ts) к БД новым образом
+            # ДО переключения на него — иначе окно между стартом нового
+            # контейнера и ручным db:push отдаёт 500 на любой запрос,
+            # затрагивающий новые колонки (см. инцидент с has_co_drivers).
+            docker compose run --rm dashboard npx drizzle-kit push --force
+
             docker rm -f lmu-dashboard || true
 
             docker compose up -d --force-recreate
