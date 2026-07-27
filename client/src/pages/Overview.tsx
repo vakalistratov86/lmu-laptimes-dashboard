@@ -302,7 +302,7 @@ export default function Overview() {
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         <Card className="p-5">
           <h2 className="mb-4 text-sm font-semibold">{t("overview.activityTitle")}</h2>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-2.5">
+          <div className="grid grid-cols-3 gap-2.5">
             <ActivityTile
               category="practice"
               label={t("sessionType.practice")}
