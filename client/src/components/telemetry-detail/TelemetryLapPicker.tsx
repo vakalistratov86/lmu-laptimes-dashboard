@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { TelemetryLap } from "@/lib/api";
-import { formatDurationMs } from "@/lib/format";
+import { formatLap } from "@/lib/format";
 import { useLanguage } from "@/lib/i18n";
 
 interface TelemetryLapPickerProps {
@@ -34,9 +34,7 @@ export function TelemetryLapPicker({ laps, activeLap, onSelect }: TelemetryLapPi
           {/* Канал телеметрии Lap нумерует круги с 0 (аутлап) — для показа сдвигаем на 1;
               сам lap.lapNumber (ключ выбора круга/запроса серии) не трогаем. */}
           <span>{t("telemetryPage.lapLabel", { n: lap.lapNumber + 1 })}</span>
-          <span className="font-data text-[10px] tabular-nums opacity-80">
-            {formatDurationMs(lap.durationSec * 1000)}
-          </span>
+          <span className="font-data text-[10px] tabular-nums opacity-80">{formatLap(lap.durationSec * 1000)}</span>
         </button>
       ))}
     </div>

@@ -10,23 +10,6 @@ export function formatLap(ms: number): string {
   return `${seconds}.${String(millis).padStart(3, "0")}`;
 }
 
-// Форматирование длительности круга (телеметрия) из миллисекунд в MM:SS:mmm
-// (минуты зафиксированы в 2 знака, разделитель перед мс — двоеточие).
-export function formatDurationMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return "—";
-  const totalSeconds = ms / 1000;
-  const minutes = Math.floor(totalSeconds / 60)
-    .toString()
-    .padStart(2, "0");
-  const seconds = Math.floor(totalSeconds % 60)
-    .toString()
-    .padStart(2, "0");
-  const millis = Math.round((totalSeconds % 1) * 1000)
-    .toString()
-    .padStart(3, "0");
-  return `${minutes}:${seconds}:${millis}`;
-}
-
 // Форматирование сектора в SS.mmm
 export function formatSector(ms: number | null): string {
   if (!ms || ms <= 0) return "—";

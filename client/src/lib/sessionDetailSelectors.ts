@@ -13,35 +13,32 @@ import type {
   LapProgressPoint,
   SessionTabItem,
 } from "@/components/session-detail/types";
+import { formatLap, formatSector } from "./format";
 import type { NormalizedSessionType } from "./sessionDetail.types";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Вспомогательные утилиты
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Форматирует миллисекунды (integer) в строку «M:SS.mmm». */
-export function formatLapMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return "—";
-  const totalSeconds = ms / 1000;
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  const ss = Math.floor(s).toString().padStart(2, "0");
-  const msStr = Math.round((s % 1) * 1000)
-    .toString()
-    .padStart(3, "0");
-  return `${m}:${ss}.${msStr}`;
+// Круг и сектор форматируются общими на всё приложение formatLap/formatSector
+// (client/src/lib/format.ts) — раньше здесь было локальное дублирование
+// (formatLapMs/formatLapTime) с чуть другим выводом, теперь его нет.
+// Обе функции принимают миллисекунды; ниже — обёртки под секунды (float),
+// которыми исторически оперирует этот файл.
+function formatLapSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+  return formatLap(seconds * 1000);
 }
 
-/** Форматирует секунды (float) в строку «M:SS.mmm». */
-export function formatLapTime(seconds: number): string {
+function formatSectorSeconds(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "—";
-  return formatLapMs(seconds * 1000);
+  return formatSector(seconds * 1000);
 }
 
 /**
  * Универсальный парсинг времени сектора.
  * Поле «*Ms» хранит значение в миллисекундах, остальные — в секундах.
- * Возвращает значение в СЕКУНДАХ для дальнейшего использования с formatLapTime.
+ * Возвращает значение в СЕКУНДАХ для дальнейшего использования с formatSectorSeconds.
  */
 function parseSectorSeconds(msProp: unknown, secProp: unknown, shortProp: unknown): number {
   const ms = Number(msProp);
@@ -308,11 +305,11 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
 
     const bestLapTime =
       bestLapMs !== null
-        ? formatLapMs(bestLapMs)
+        ? formatLap(bestLapMs)
         : r.bestLapTime
           ? String(r.bestLapTime)
           : typeof r.bestLapTimeSeconds === "number"
-            ? formatLapTime(r.bestLapTimeSeconds)
+            ? formatLapSeconds(r.bestLapTimeSeconds)
             : "—";
 
     let gapFormatted: string | null = null;
@@ -396,7 +393,7 @@ export function buildLapProgressSeries(laps: unknown[]): LapProgressSeries[] {
     map.get(key)!.points.push({
       lap: lapNum,
       timeSeconds,
-      timeFormatted: formatLapTime(timeSeconds),
+      timeFormatted: formatLapSeconds(timeSeconds),
     });
   }
 
@@ -452,7 +449,7 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     // fix: раньше отсутствующий сектор (bestS[i] всё ещё Infinity) тихо
     // заменялся на 0 в сумме — получался правдоподобный, но заниженный
     // "теоретический" круг из 2 секторов вместо 3. Теперь при неполном
-    // наборе секторов результат — NaN, что formatLapTime корректно рисует как «—».
+    // наборе секторов результат — NaN, что formatLapSeconds корректно рисует как «—».
     const hasAllSectors = bestS.every((s) => Number.isFinite(s));
     const theoreticalSeconds = hasAllSectors ? bestS[0] + bestS[1] + bestS[2] : NaN;
     // SD-21: Абсолютный лучший по КАЖДОМУ сектору отдельно (не общий флаг) —
@@ -466,12 +463,13 @@ export function buildSectorSummary(laps: unknown[]): DriverSectorSummary[] {
     return {
       driverName,
       carNumber,
-      bestSectors: [formatLapTime(bestS[0]), formatLapTime(bestS[1]), formatLapTime(bestS[2])] as [
+      bestSectors: [formatSectorSeconds(bestS[0]), formatSectorSeconds(bestS[1]), formatSectorSeconds(bestS[2])] as [
         string,
         string,
         string,
       ],
-      theoreticalBest: formatLapTime(theoreticalSeconds),
+      // Теоретический лучший — сумма трёх лучших секторов, т.е. это круговое время, не сектор.
+      theoreticalBest: formatLapSeconds(theoreticalSeconds),
       sectorAbsoluteBest,
       hasAbsoluteBest: sectorAbsoluteBest.some(Boolean),
     };
@@ -554,13 +552,13 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
 
         return {
           lapNumber: Number(lap.lapNumber ?? lap.lapNum ?? lap.lap ?? 0),
-          lapTime: Number.isFinite(timeSeconds) ? formatLapTime(timeSeconds) : "—",
+          lapTime: Number.isFinite(timeSeconds) ? formatLapSeconds(timeSeconds) : "—",
           isPersonalBest: Number.isFinite(timeSeconds) && timeSeconds === personalBestSeconds,
           isOverallBest: Number.isFinite(timeSeconds) && timeSeconds === overallBestSeconds,
           sectors: [
-            Number.isFinite(s1) ? formatLapTime(s1) : "—",
-            Number.isFinite(s2) ? formatLapTime(s2) : "—",
-            Number.isFinite(s3) ? formatLapTime(s3) : "—",
+            Number.isFinite(s1) ? formatSectorSeconds(s1) : "—",
+            Number.isFinite(s2) ? formatSectorSeconds(s2) : "—",
+            Number.isFinite(s3) ? formatSectorSeconds(s3) : "—",
           ] as [string, string, string],
           // SD-21: Личный лучший / абсолютный лучший сектор сессии, по каждому сектору
           sectorsPersonalBest: [
@@ -616,10 +614,10 @@ export function buildDriverLapGroups(laps: unknown[]): DriverLapsGroupView[] {
       driverName,
       carNumber,
       isPlayer,
-      bestLapTime: Number.isFinite(personalBestSeconds) ? formatLapTime(personalBestSeconds) : "—",
+      bestLapTime: Number.isFinite(personalBestSeconds) ? formatLapSeconds(personalBestSeconds) : "—",
       laps: lapRows,
-      avgLapTime: formatLapTime(avgSeconds),
-      worstLapTime: formatLapTime(worstSeconds),
+      avgLapTime: formatLapSeconds(avgSeconds),
+      worstLapTime: formatLapSeconds(worstSeconds),
       maxSpeedObserved: formatSpeed(Number.isFinite(maxSpeedRawAgg) ? maxSpeedRawAgg : null),
       tyreTypesUsed: Array.from(tyreTypesUsed),
       fuelStart: formatFuelPercent(fuelStartRaw),
