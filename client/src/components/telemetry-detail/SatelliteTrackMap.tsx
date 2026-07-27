@@ -235,7 +235,7 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
               const minPos = offsetPerpendicular(m.minSpeed.x, m.minSpeed.y, m.minSpeedHeading, 55);
               return (
                 <g key={i}>
-                  <circle cx={m.maxSpeed.x} cy={m.maxSpeed.y} r={9} fill="#dc2626" stroke="white" strokeWidth={2.5} />
+                  <circle cx={m.maxSpeed.x} cy={m.maxSpeed.y} r={9} fill="#16a34a" stroke="white" strokeWidth={2.5} />
                   <text
                     x={maxPos.x}
                     y={maxPos.y}
@@ -243,14 +243,14 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
                     dominantBaseline="middle"
                     fontSize={54}
                     fontWeight={700}
-                    fill="#dc2626"
+                    fill="#16a34a"
                     stroke="white"
                     strokeWidth={10}
                     paintOrder="stroke"
                   >
                     {Math.round(m.maxSpeed.speedKph)}
                   </text>
-                  <circle cx={m.minSpeed.x} cy={m.minSpeed.y} r={9} fill="#16a34a" stroke="white" strokeWidth={2.5} />
+                  <circle cx={m.minSpeed.x} cy={m.minSpeed.y} r={9} fill="#dc2626" stroke="white" strokeWidth={2.5} />
                   <text
                     x={minPos.x}
                     y={minPos.y}
@@ -258,7 +258,7 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
                     dominantBaseline="middle"
                     fontSize={54}
                     fontWeight={700}
-                    fill="#16a34a"
+                    fill="#dc2626"
                     stroke="white"
                     strokeWidth={10}
                     paintOrder="stroke"

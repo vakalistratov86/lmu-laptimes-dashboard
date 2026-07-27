@@ -17,11 +17,11 @@ export interface ColoredSegment {
   color: string;
 }
 
-/** Цвет точки по её положению между `minKph` и `maxKph`: зелёный (медленно) -> жёлтый -> красный (быстро). */
+/** Цвет точки по её положению между `minKph` и `maxKph`: красный (медленно) -> жёлтый -> зелёный (быстро). */
 export function speedToColor(speedKph: number, minKph: number, maxKph: number): string {
   const span = maxKph - minKph || 1;
   const t = Math.min(1, Math.max(0, (speedKph - minKph) / span));
-  const hue = 120 * (1 - t);
+  const hue = 120 * t;
   return `hsl(${hue.toFixed(0)}, 75%, 45%)`;
 }
 
@@ -84,75 +84,45 @@ function smoothSpeedByDistance(samples: SpeedSample[], radiusM: number): number[
  * Для каждого поворота круга — точка максимальной скорости перед ним (конец
  * разгона/точка торможения) и минимальная скорость в апексе.
  *
- * Экстремумы профиля скорости ищутся классическим zig-zag алгоритмом (как для
- * поиска пиков/впадин в биржевых котировках): текущий предполагаемый экстремум
- * просто сдвигается вслед за трендом, пока скорость не отойдёт от него хотя бы
- * на `minDropKph` — только тогда экстремум подтверждается и начинается поиск
- * противоположного. Это устойчиво к шуму телеметрии на длинных монотонных
- * участках (разгон/торможение) — в отличие от поиска локальных минимумов «в
- * лоб», здесь шумная кочка на общем тренде не порождает ложную метку, пока не
- * наберёт полный перепад скорости сама по себе.
+ * Алгоритм — прямое отслеживание разворотов тренда скорости по кругу: пока
+ * скорость растёт, просто ждём; как только она начинает падать — предыдущая
+ * точка фиксируется как максимум. Дальше ждём, пока скорость падает; как
+ * только она начинает расти — предыдущая точка фиксируется как минимум и
+ * парится с последним зафиксированным максимумом. Так по всему кругу.
+ * Перед поиском разворотов профиль сглаживается по дистанции — иначе
+ * межсэмпловый шум телеметрии сам по себе создаёт разворот на каждом шаге.
  */
 export function detectCornerSpeedMarkers(
   samples: SpeedSample[],
-  opts: { smoothRadiusM?: number; minDropKph?: number } = {},
+  opts: { smoothRadiusM?: number } = {},
 ): CornerSpeedMarker[] {
-  const { smoothRadiusM = 20, minDropKph = 15 } = opts;
+  const { smoothRadiusM = 20 } = opts;
   const n = samples.length;
-  if (n < 5) return [];
+  if (n < 3) return [];
 
   const smoothed = smoothSpeedByDistance(samples, smoothRadiusM);
-
-  const extrema: { index: number; type: "max" | "min" }[] = [];
-  let dir: 1 | -1 | 0 = 0;
-  let extIdx = 0;
-  for (let i = 1; i < n; i++) {
-    if (dir >= 0 && smoothed[i] > smoothed[extIdx]) {
-      extIdx = i;
-      dir = 1;
-    } else if (dir <= 0 && smoothed[i] < smoothed[extIdx]) {
-      extIdx = i;
-      dir = -1;
-    }
-
-    if (dir === 1 && smoothed[extIdx] - smoothed[i] >= minDropKph) {
-      extrema.push({ index: extIdx, type: "max" });
-      extIdx = i;
-      dir = -1;
-    } else if (dir === -1 && smoothed[i] - smoothed[extIdx] >= minDropKph) {
-      extrema.push({ index: extIdx, type: "min" });
-      extIdx = i;
-      dir = 1;
-    }
-  }
-
   const positions: SvgPoint[] = samples;
+
   const markers: CornerSpeedMarker[] = [];
-  for (let i = 0; i < extrema.length; i++) {
-    if (extrema[i].type !== "min") continue;
-    const minIdx = extrema[i].index;
-
-    let maxIdx: number | null = null;
-    for (let j = i - 1; j >= 0; j--) {
-      if (extrema[j].type === "max") {
-        maxIdx = extrema[j].index;
-        break;
+  let dir: 1 | -1 | 0 = 0;
+  let pendingMaxIdx: number | null = 0;
+  for (let i = 1; i < n; i++) {
+    if (smoothed[i] > smoothed[i - 1]) {
+      if (dir === -1 && pendingMaxIdx != null) {
+        const minIdx = i - 1;
+        markers.push({
+          maxSpeed: samples[pendingMaxIdx],
+          maxSpeedHeading: headingAt(positions, pendingMaxIdx),
+          minSpeed: samples[minIdx],
+          minSpeedHeading: headingAt(positions, minIdx),
+        });
+        pendingMaxIdx = null;
       }
+      dir = 1;
+    } else if (smoothed[i] < smoothed[i - 1]) {
+      if (dir === 1) pendingMaxIdx = i - 1;
+      dir = -1;
     }
-    if (maxIdx == null) {
-      // Начало круга — подтверждённого максимума ещё не было, берём пик от старта.
-      maxIdx = 0;
-      for (let k = 0; k <= minIdx; k++) {
-        if (samples[k].speedKph > samples[maxIdx].speedKph) maxIdx = k;
-      }
-    }
-
-    markers.push({
-      maxSpeed: samples[maxIdx],
-      maxSpeedHeading: headingAt(positions, maxIdx),
-      minSpeed: samples[minIdx],
-      minSpeedHeading: headingAt(positions, minIdx),
-    });
   }
 
   return markers;
