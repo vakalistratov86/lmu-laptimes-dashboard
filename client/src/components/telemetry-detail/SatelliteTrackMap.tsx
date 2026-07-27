@@ -46,7 +46,8 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
   // Инициализация масштаба «по размеру контейнера» при первом измерении и ресайзе окна.
   useLayoutEffect(() => {
     setView(fitView());
-    const onResize = () => setView((v) => (v ? clampView(v, containerRef.current, naturalWidth, naturalHeight) : fitView()));
+    const onResize = () =>
+      setView((v) => (v ? clampView(v, containerRef.current, naturalWidth, naturalHeight) : fitView()));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,15 +129,14 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
   const handleReset = () => setView(fitView());
 
   const svgPoints = useMemo(() => {
-    return points.map((p) => (p.lat != null && p.lon != null ? geoToImagePixel(trackName, { lat: p.lat, lon: p.lon }) : null));
+    return points.map((p) =>
+      p.lat != null && p.lon != null ? geoToImagePixel(trackName, { lat: p.lat, lon: p.lon }) : null,
+    );
   }, [points, trackName]);
 
   // Точки без GPS (null) выкидываются в отдельный компактный массив — по нему
   // считаем направление движения (headingAt) и путь, не спотыкаясь о дыры.
-  const validPoints = useMemo(
-    () => svgPoints.filter((p): p is ImagePoint => p != null),
-    [svgPoints],
-  );
+  const validPoints = useMemo(() => svgPoints.filter((p): p is ImagePoint => p != null), [svgPoints]);
 
   const path = useMemo(() => {
     if (validPoints.length === 0) return "";
@@ -191,7 +191,14 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
             viewBox={`0 0 ${naturalWidth} ${naturalHeight}`}
             className="pointer-events-none absolute inset-0"
           >
-            <path d={path} fill="none" stroke="var(--color-primary, #ef4444)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d={path}
+              fill="none"
+              stroke="var(--color-primary, #ef4444)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
             {startLine && (
               <line
                 x1={startLine.x1}

@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import { projectTrackPoints, pointsToPath, headingAt, arrowPolygonPoints, perpendicularSegment } from "@/lib/telemetryGeo";
+import {
+  projectTrackPoints,
+  pointsToPath,
+  headingAt,
+  arrowPolygonPoints,
+  perpendicularSegment,
+} from "@/lib/telemetryGeo";
 import { hasSatelliteMap } from "@/lib/trackMapCalibration";
 import { SatelliteTrackMap } from "@/components/telemetry-detail/SatelliteTrackMap";
 import type { TelemetryLapPoint } from "@/lib/api";
