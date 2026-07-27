@@ -91,12 +91,16 @@ function smoothSpeedByDistance(samples: SpeedSample[], radiusM: number): number[
  * парится с последним зафиксированным максимумом. Так по всему кругу.
  * Перед поиском разворотов профиль сглаживается по дистанции — иначе
  * межсэмпловый шум телеметрии сам по себе создаёт разворот на каждом шаге.
+ *
+ * Соседние по кругу апексы ближе `minGapM` друг к другу схлопываются в один
+ * (см. `filterCloseMarkers`) — иначе на карте в одном месте накладывается
+ * несколько подписей.
  */
 export function detectCornerSpeedMarkers(
   samples: SpeedSample[],
-  opts: { smoothRadiusM?: number } = {},
+  opts: { smoothRadiusM?: number; minGapM?: number } = {},
 ): CornerSpeedMarker[] {
-  const { smoothRadiusM = 20 } = opts;
+  const { smoothRadiusM = 20, minGapM = 40 } = opts;
   const n = samples.length;
   if (n < 3) return [];
 
@@ -125,5 +129,30 @@ export function detectCornerSpeedMarkers(
     }
   }
 
-  return markers;
+  return filterCloseMarkers(markers, minGapM);
+}
+
+/**
+ * Если апексы двух меток оказались ближе `minGapM` метров друг к другу по
+ * кругу — оставляем более выраженную (с большим перепадом макс./мин.
+ * скорости), остальные из этого кластера отбрасываем. Классический
+ * non-max-suppression: сортируем по перепаду скорости по убыванию, жадно
+ * принимаем каждую, если она не ближе `minGapM` ни к одной уже принятой.
+ */
+function filterCloseMarkers(markers: CornerSpeedMarker[], minGapM: number): CornerSpeedMarker[] {
+  if (markers.length <= 1) return markers;
+
+  const ranked = markers
+    .map((marker, index) => ({ marker, index, drop: marker.maxSpeed.speedKph - marker.minSpeed.speedKph }))
+    .sort((a, b) => b.drop - a.drop);
+
+  const accepted: typeof ranked = [];
+  for (const candidate of ranked) {
+    const tooClose = accepted.some(
+      (a) => Math.abs(a.marker.minSpeed.distM - candidate.marker.minSpeed.distM) < minGapM,
+    );
+    if (!tooClose) accepted.push(candidate);
+  }
+
+  return accepted.sort((a, b) => a.index - b.index).map((a) => a.marker);
 }
