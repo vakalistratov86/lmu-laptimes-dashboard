@@ -1,20 +1,26 @@
-// Форматирование времени круга из миллисекунд в M:SS.mmm
+// Форматирование времени круга из миллисекунд в M:SS.mmm.
+// ms округляется до целого перед разбором на секунды/мс: вызывающий код (например,
+// секунды*1000 после деления *1000 в другом месте) может отдать не строго целое
+// значение из-за погрешности float — без округления «дробный хвост» мс (типа
+// 439.99999999999994) ломает вывод вместо аккуратных «440».
 export function formatLap(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
+  const roundedMs = Math.round(ms);
+  const totalSeconds = Math.floor(roundedMs / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  const millis = ms % 1000;
+  const millis = roundedMs % 1000;
   if (minutes > 0) {
     return `${minutes}:${String(seconds).padStart(2, "0")}.${String(millis).padStart(3, "0")}`;
   }
   return `${seconds}.${String(millis).padStart(3, "0")}`;
 }
 
-// Форматирование сектора в SS.mmm
+// Форматирование сектора в SS.mmm (см. комментарий у formatLap про округление ms).
 export function formatSector(ms: number | null): string {
   if (!ms || ms <= 0) return "—";
-  const seconds = Math.floor(ms / 1000);
-  const millis = ms % 1000;
+  const roundedMs = Math.round(ms);
+  const seconds = Math.floor(roundedMs / 1000);
+  const millis = roundedMs % 1000;
   return `${seconds}.${String(millis).padStart(3, "0")}`;
 }
 
