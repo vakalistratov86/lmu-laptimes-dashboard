@@ -506,6 +506,7 @@ XML (`fast-xml-parser`), а не построчный regex — регексов
 ### 5.1 Формат `.duckdb`-файла
 
 Файл записи телеметрии LMU содержит:
+
 - `metadata` — key/value о заезде (пилот, трасса, сетап, погода).
 - `channelsList` (channelName, frequency Гц, unit) — непрерывные каналы,
   каждый в одноимённой таблице (`value` либо `value1..value4`), без
