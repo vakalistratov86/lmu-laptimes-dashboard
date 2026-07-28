@@ -248,6 +248,67 @@ describe("eventsParser", () => {
       expect(result.source).toBe("static");
     });
 
+    it("заголовки месяцев между событиями не протекают в classes", async () => {
+      // fix: раньше htmlToFlatText схлопывал все теги (включая </p>/<h3>)
+      // в пробел и терял границу строки — «Hypercar, LMGT3» + следующий
+      // <h3>JULY</h3> склеивались в один список классов "Hypercar, LMGT3 JULY".
+      const fakeHtml = `
+        <html><body>
+          <h3>JUNE</h3>
+          <p>w/c 23/6 – 6 Hours Le Mans – Hypercar, WEC LMP2, LMGT3</p>
+          <h3>JULY</h3>
+          <p>w/c 7/7 – 4 Hours Imola – ELMS LMP2, LMP3, LMGT3</p>
+          <p>w/c 14/7 – 6 Hours Interlagos – Hypercar, LMGT3</p>
+          <p>w/c 8/9 – 6 Hours COTA – Hypercar, LMGT3</p>
+          <p>w/c 6/10 – 10 Hours TBA – Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 10/11 – 8 Hours Bahrain – Hypercar, LMGT3</p>
+        </body></html>
+      `;
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => fakeHtml }));
+
+      const result = await getSpecialEvents();
+      const june23 = result.events.find((e) => e.dateIso.endsWith("-06-23"));
+      expect(june23?.classes).toEqual(["Hypercar", "WEC LMP2", "LMGT3"]);
+    });
+
+    it("инлайн-теги внутри строки (например <strong>) не ломают распознавание трассы", async () => {
+      const fakeHtml = `
+        <html><body>
+          <p>w/c 23/6 – 6 Hours <strong>Le Mans</strong> – Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 7/7 – 4 Hours <a href="#">WeatherTech Raceway Laguna Seca</a> – Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 14/7 – 6 Hours Interlagos – Hypercar, LMGT3</p>
+          <p>w/c 8/9 – 6 Hours COTA – Hypercar, LMGT3</p>
+          <p>w/c 6/10 – 10 Hours TBA – Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 10/11 – 8 Hours Bahrain – Hypercar, LMGT3</p>
+        </body></html>
+      `;
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => fakeHtml }));
+
+      const result = await getSpecialEvents();
+      const jul7 = result.events.find((e) => e.dateIso.endsWith("-07-07"));
+      expect(jul7?.track).toBe("WeatherTech Raceway Laguna Seca");
+      expect(jul7?.trackTba).toBe(false);
+    });
+
+    it("HTML-сущности (&nbsp;/&ndash;) вместо буквальных символов распознаются", async () => {
+      const fakeHtml = `
+        <html><body>
+          <p>w/c 23/6&nbsp; &ndash; 6 Hours Le Mans &ndash; Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 7/7 &ndash; 4 Hours Imola &ndash; ELMS LMP2, LMP3, LMGT3</p>
+          <p>w/c 14/7 &ndash; 6 Hours Interlagos &ndash; Hypercar, LMGT3</p>
+          <p>w/c 8/9 &ndash; 6 Hours COTA &ndash; Hypercar, LMGT3</p>
+          <p>w/c 6/10 &ndash; 10 Hours TBA &ndash; Hypercar, WEC LMP2, LMGT3</p>
+          <p>w/c 10/11 &ndash; 8 Hours Bahrain &ndash; Hypercar, LMGT3</p>
+        </body></html>
+      `;
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => fakeHtml }));
+
+      const result = await getSpecialEvents();
+      expect(result.source).toBe("live");
+      const june23 = result.events.find((e) => e.dateIso.endsWith("-06-23"));
+      expect(june23?.track).toBe("Le Mans");
+    });
+
     it("при слишком малом числе распознанных событий fallback на статику", async () => {
       // Только 1 строка — меньше порога 5
       const fakeHtml = `<p>w/c 14/7 – 6 Hours Interlagos – Hypercar</p>`;
