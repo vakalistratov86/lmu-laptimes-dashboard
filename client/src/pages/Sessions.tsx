@@ -37,6 +37,14 @@ function formatDate(iso: string, intlLocale: string): string {
   return d.toLocaleDateString(intlLocale, { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+/** Время начала сессии (HH:MM) — выводится второй строкой под датой в таблице. */
+function formatTime(iso: string, intlLocale: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(intlLocale, { hour: "2-digit", minute: "2-digit" });
+}
+
 function trackDisplayLabel(trackName: string, course: string | null | undefined): string {
   if (!course || course.toLowerCase() === trackName.toLowerCase()) return trackName;
   return `${trackName} · ${course}`;
@@ -459,7 +467,7 @@ export default function Sessions() {
                 </div>
 
                 {/* Configuration */}
-                <div className="min-w-0 truncate text-muted-foreground" role="cell">
+                <div className="min-w-0 truncate text-xs text-muted-foreground" role="cell">
                   {configLabel(session.trackName, session.course)}
                 </div>
 
@@ -490,9 +498,10 @@ export default function Sessions() {
                   {session.lapCount ?? "—"}
                 </div>
 
-                {/* Date */}
+                {/* Date + время начала сессии второй строкой, мельче основной даты */}
                 <div className="text-right text-sm text-muted-foreground" role="cell">
-                  {formatDate(session.dateTime, intlLocale)}
+                  <div>{formatDate(session.dateTime, intlLocale)}</div>
+                  <div className="text-xs text-muted-foreground/70">{formatTime(session.dateTime, intlLocale)}</div>
                 </div>
 
                 {/* Chevron */}
