@@ -51,7 +51,7 @@
 ## Технологический стек
 
 | Слой | Технологии |
-|------|------------|
+| ------ | ------------ |
 | **Frontend** | React 18, Vite 7, TypeScript 5.6, Tailwind CSS 3, shadcn/ui, wouter, TanStack Query, Recharts |
 | **Backend** | Express 5 (TypeScript) |
 | **База данных** | PostgreSQL (drizzle-orm + postgres-js), миграции drizzle-kit |
@@ -188,7 +188,7 @@ docker compose up --build
 ## Доступные скрипты
 
 | Скрипт | Описание |
-|--------|----------|
+| -------- | ---------- |
 | `npm run dev` | Запуск в режиме разработки (Express + Vite) |
 | `npm run build` | Сборка для продакшена |
 | `npm start` | Запуск продакшен-сборки |

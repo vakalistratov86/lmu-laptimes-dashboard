@@ -38,7 +38,7 @@
 ## 2. Технологический стек (обязательные требования к среде выполнения)
 
 | Слой | Требование |
-|---|---|
+| --- | --- |
 | Node.js | ≥ 18 (Docker-образ собирается на `node:20-alpine`) |
 | СУБД | PostgreSQL, доступ по `DATABASE_URL` |
 | Frontend | React 18, Vite 7, TypeScript 5.6, Tailwind CSS 3, shadcn/ui (Radix), wouter (роутинг), TanStack Query, Recharts |
@@ -582,7 +582,7 @@ XML (`fast-xml-parser`), а не построчный regex — регексов
 ### 6.1 Справочники и заезды
 
 | Метод | Путь | Требование |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/tracks` | список всех трасс |
 | GET | `/api/tracks/:id` | `:id` — положительное целое (Zod), иначе `400`; `404` если не найдена |
 | GET | `/api/drivers` | без явного `limit` — до 5000 записей (не молчаливая обрезка до 500, список пилотов растёт медленнее кругов) |
@@ -597,7 +597,7 @@ XML (`fast-xml-parser`), а не построчный regex — регексов
 ### 6.2 Телеметрия (чтение)
 
 | Метод | Путь | Требование |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/telemetry/sessions` | список записей |
 | GET | `/api/telemetry/sessions/:id` | метаданные + реестр каналов; `404` если нет |
 | GET | `/api/telemetry/sessions/:id/laps` | границы кругов |
@@ -606,7 +606,7 @@ XML (`fast-xml-parser`), а не построчный regex — регексов
 ### 6.3 Импорт логов
 
 | Метод | Путь | Требование |
-|---|---|---|
+| --- | --- | --- |
 | POST | `/api/import` | тело — `{ files: [{ fileName, content }] }`; синхронная обработка каждого файла по очереди в рамках одного HTTP-запроса (транзакции на файл ~5000 строк укладываются в < 500 мс — асинхронная очередь не нужна); пустой файл — `skipped`, не ошибка; ответ — сводка `{ imported, skipped, totalLaps, total, results[] }`, HTTP `200`, если есть хотя бы один успех **или** все неуспехи — только пропуски, иначе `400` |
 | DELETE | `/api/import/all` | требует admin-токен; полная очистка всех импортированных данных (заезды, сессии, пилоты, трассы, задачи импорта, DLQ) одной транзакцией, в порядке, уважающем зависимости (сначала листовые таблицы) |
 | GET | `/api/import/:id/status` | статус задачи по `id` |
@@ -615,7 +615,7 @@ XML (`fast-xml-parser`), а не построчный regex — регексов
 ### 6.4 Импорт телеметрии
 
 | Метод | Путь | Требование |
-|---|---|---|
+| --- | --- | --- |
 | POST | `/api/import/telemetry?fileName=<name>` | тело — сырые байты (`application/octet-stream`), лимит 150 МБ; ответ — `{ ok, fileName, importId, telemetrySessionId, channelCount, sampleCount }` |
 | DELETE | `/api/import/telemetry/all` | требует admin-токен; очищает только таблицы телеметрии, не трогает `sessions`/`lap_times` |
 
@@ -635,7 +635,7 @@ XML (`fast-xml-parser`), а не построчный regex — регексов
 ### 6.6 Special Events
 
 | Метод | Путь | Требование |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/special-events` | кэш в памяти: TTL 6 часов при успешном скрейпе, TTL 5 минут при ошибке (быстрое восстановление после сбоя источника); ответ содержит `source: "live" \| "static"`, чтобы UI мог отличить свежие данные от замороженного фолбэка |
 | POST | `/api/special-events/refresh` | сбрасывает кэш и повторяет скрейп немедленно |
 
@@ -836,7 +836,7 @@ drizzle-zod). Полное описание колонок — `docs/database-sc
 2. Ключевые значения токенов:
 
    | Токен | Светлая тема | Тёмная тема | Назначение |
-   |---|---|---|---|
+   | --- | --- | --- | --- |
    | `--background` | `0 0% 100%` (белый) | `220 15% 7%` (почти чёрный, с синим подтоном) | фон страницы |
    | `--foreground` | `0 0% 9%` | `0 0% 96%` | основной текст |
    | `--card` | `0 0% 98%` | `220 13% 10%` | фон карточек/таблиц |
@@ -886,7 +886,7 @@ drizzle-zod). Полное описание колонок — `docs/database-sc
 Три шрифтовых семейства, подключены как CSS-переменные и Tailwind-утилиты:
 
 | Класс | Шрифт | Где используется |
-|---|---|---|
+| --- | --- | --- |
 | `font-sans` (по умолчанию, `body`) | Inter, sans-serif | весь обычный текст: подписи, названия команд/машин, описания |
 | `.font-display` | Oxanium → Inter (фолбэк) | заголовки страниц (`<h1>`), названия трасс/сессий в шапках карточек — гоночный «дисплейный» шрифт с угловатыми формами букв |
 | `.font-data` (+ `.tabular-nums`) | JetBrains Mono → monospace | **все числовые данные**: время круга/сектора, позиции, счётчики, даты в компактном виде — моноширинный шрифт с `font-variant-numeric: tabular-nums lining-nums`, чтобы цифры не «прыгали» по ширине при обновлении значений в таблице |
@@ -899,7 +899,7 @@ drizzle-zod). Полное описание колонок — `docs/database-sc
 Типографическая шкала (по фактическим классам):
 
 | Класс | Размер | Где |
-|---|---|---|
+| --- | --- | --- |
 | `text-[10px]` | 10px | подписи `StatTile` (`uppercase tracking-wider`), доли секунды в мини-плитках, буквенные лейблы шин FL/FR/RL/RR |
 | `text-[11px]` | 11px | заголовки колонок таблиц (`uppercase tracking-wider text-muted-foreground`), мелкие бейджи классов в таблице сессий |
 | `text-xs` | 12px | тело большинства таблиц (`SessionResultsTable`, `Leaderboards`, `DriverLapTable` заголовки), бейджи |
@@ -920,7 +920,7 @@ drizzle-zod). Полное описание колонок — `docs/database-sc
 ### 11.3 Базовые UI-компоненты (переиспользуемые примитивы)
 
 | Компонент | Файл | Визуальная спецификация |
-|---|---|---|
+| --- | --- | --- |
 | `Card` | `ui/card.tsx` | `rounded-xl` (9px), `border` + `bg-card` + `border-card-border`, `shadow-sm`; базовый контейнер для каждого блока страницы |
 | `Badge` (`variant="outline"`) | `ui/badge.tsx` | `rounded-md`, `px-2.5 py-0.5`, `text-xs font-semibold`, `border`; используется для типа сессии, класса машины, статуса финиша, «Соло»/«Команда», компаунда шин |
 | `StatTile` | `StatTile.tsx` | мини-плитка `min-w-[110px]`, `rounded-lg border bg-card`, `px-3.5 py-2.5`; подпись `text-[10px] uppercase text-muted-foreground`, значение `font-data text-xs font-semibold tabular-nums truncate`; варианты цвета значения — `green`/`purple`/`red` |
@@ -946,7 +946,7 @@ tracking-wider text-muted-foreground`, строки `border-t border-border
 hover:bg-muted/40`.
 
 | # | Колонка | Выравнивание | Содержимое | Шрифт/цвет |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 1 | Пилот | left | `DriverName` (иконка + имя), ссылка на `/drivers/:id` | `font-sans`, `hover:underline` |
 | 2 | Трасса | left | иконка `MapPin` (13px, muted) + название трассы | `font-sans` |
 | 3 | Класс | left | `Badge outline`, цвет по `getClassBadgeClass()` | `text-xs` |
@@ -970,7 +970,7 @@ CSS `grid` (не `<table>`), с явной ARIA-разметкой `role="table"
 (`hover:bg-muted/40 active:bg-muted/60`).
 
 | # | Ширина | Колонка | Выравнивание | Содержимое |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 1 | 160px | Тип сессии | left | `SessionTypeBadge` |
 | 2 | 110px | Тип гонки | left | `Badge outline` «Соло»/«Команда» + иконка `User`/`Users` (11px), `text-[11px]` |
 | 3 | `minmax(160px,1fr)` | Трек | left | название трассы, `truncate font-medium` |
@@ -997,7 +997,7 @@ text-muted-foreground`, `text-left` по умолчанию (кроме числ
 ring-primary/40`, иначе `hover:bg-muted/40`.
 
 | # | Колонка | Выравнивание | Брейкпоинт | Содержимое | Стиль |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | 1 | Поз. | left, `w-12` | всегда | позиционный квадрат 7×7, топ-3 — медаль | `font-data font-bold tabular-nums` |
 | 2 | Пилот | left | всегда | `DriverName`; для командной машины — бейдж `Users N` вместо имени | `font-medium` |
 | 3 | Команда | left | ≥ `sm` | название команды, `truncate` | `text-[11px] text-muted-foreground` |
@@ -1015,7 +1015,7 @@ ring-primary/40`, иначе `hover:bg-muted/40`.
 фоном `bg-green-500/5`.
 
 | # | Колонка | Выравнивание | Условие показа | Содержимое | Стиль |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | 1 | Круг | left | всегда | номер круга (с 1) | `font-data tabular-nums text-muted-foreground` |
 | 2 | Пилот | left | только командная гонка со сменой пилота (`showDriverColumn`) | `DriverName`, кто вёл машину на этом круге | `text-xs` |
 | 3 | Время | right | всегда | `formatLap()`; абсолютный лучший сессии — `font-bold text-green-500`; личный лучший — `font-semibold text-green-500/80` | `font-data tabular-nums` |
@@ -1051,7 +1051,7 @@ ring-primary/40`, иначе `hover:bg-muted/40`.
 Заголовок таблицы: `bg-muted/20 text-[11px] uppercase tracking-wider`.
 
 | # | Колонка | Выравнивание | Брейкпоинт | Содержимое | Стиль |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | 1 | Поз. | center, `w-10` | всегда | `RankBadge` (медаль топ-3 / номер) | `font-data font-bold tabular-nums` |
 | 2 | Пилот | left | всегда | `DriverName`, ссылка на `/drivers/:id` | `font-medium hover:underline` |
 | 3 | Команда | left | ≥ `sm` | `max-w-[160px] truncate` | `text-muted-foreground` |
@@ -1071,7 +1071,7 @@ ring-primary/40`, иначе `hover:bg-muted/40`.
 pt-2`, три ячейки:
 
 | Ячейка | Иконка | Значение | Стиль |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Рекорд | `Trophy` (10px) | лучшее время + имя пилота под ним | значение `font-data text-xs sm:text-sm font-bold tabular-nums text-green-500`, имя `text-[10px] text-muted-foreground truncate` |
 | Сессий | `Layers` (10px) | число сессий на трассе | `text-sm font-semibold` |
 | Кругов | `Timer` (10px) | суммарное число кругов | `text-sm font-semibold` |
