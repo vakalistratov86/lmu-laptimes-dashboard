@@ -8,11 +8,8 @@
 ![Database](https://img.shields.io/badge/DB-PostgreSQL-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Deploy](https://img.shields.io/badge/autodeploy-✅_tested-brightgreen)
-[![Live Demo](https://img.shields.io/badge/demo-online-brightgreen)](http://82.202.138.32)
 
 Дашборд для мониторинга и анализа времён прохождения трасс в симуляторе **Le Mans Ultimate (LMU)**. Тёмный геймерский интерфейс в рейсинг-эстетике с поддержкой светлой темы. Данные импортируются из XML-логов rFactor2/LMU через встроенный парсер и сохраняются в PostgreSQL.
-
-🔗 **Демо:** <http://82.202.138.32>
 
 ---
 
