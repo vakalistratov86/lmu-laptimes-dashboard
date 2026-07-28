@@ -12,6 +12,12 @@
 
 ---
 
+## [1.0.3](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.2...v1.0.3) (2026-07-28)
+
+### Fixed
+
+* **docs:** добавить ссылку на демо и нормализовать CHANGELOG.md ([4f8a942](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/4f8a9427629dd6a8578c4731484a389ef1f18558))
+
 ## [1.0.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.1...v1.0.2) (2026-07-28)
 
 ### Fixed
