@@ -1,4 +1,4 @@
-name: Build & Deploy
+name: Release, Build & Deploy
 
 on:
   push:
@@ -9,7 +9,43 @@ env:
   IMAGE_NAME: vakalistratov86/lmu-laptimes-dashboard
 
 jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      published: ${{ steps.semrelease.outputs.new_release_published }}
+      version: ${{ steps.semrelease.outputs.new_release_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Определяет версию по Conventional Commits с последнего тега (см.
+      # .releaserc.json), обновляет package.json/CHANGELOG.md, коммитит,
+      # ставит git-тег vX.Y.Z и публикует GitHub Release. Коммиты без
+      # feat/fix/perf/refactor/revert (например chore/docs) релиз не создают —
+      # тогда published=false и последующие джобы пропускаются.
+      - name: Release
+        id: semrelease
+        uses: cycjimmy/semantic-release-action@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-and-push:
+    needs: release
+    if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,10 +65,12 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ env.IMAGE_NAME }}:latest
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:latest
+            ghcr.io/${{ env.IMAGE_NAME }}:v${{ needs.release.outputs.version }}
 
   deploy:
-    needs: build-and-push
+    needs: [release, build-and-push]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

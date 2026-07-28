@@ -5,9 +5,20 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+Начиная с версии после 1.0.0 версия и этот файл формируются автоматически
+через [semantic-release](https://semantic-release.gitbook.io/) на основе
+[Conventional Commits](https://www.conventionalcommits.org/ru/) — см. раздел
+«Версионирование и релизы» в [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ---
 
 ## [Unreleased]
+
+## [1.0.0] — 2026-07-28
+
+Первый версионированный релиз: фиксирует фактическое состояние проекта на
+момент введения версионирования (semantic-release + git-теги). Ниже —
+всё, что было сделано после `0.1.0` и до сих пор копилось в `Unreleased`.
 
 ### Added
 
