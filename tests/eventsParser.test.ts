@@ -355,7 +355,10 @@ describe("eventsParser", () => {
         expect(jul28?.dateIso).toBe("2026-07-28");
       });
 
-      it("событие раньше в текущем месяце (уже прошло) получает СЛЕДУЮЩИЙ год", async () => {
+      it("событие раньше в текущем месяце (уже прошло) остаётся в ТЕКУЩЕМ году, а не перескакивает на следующий", async () => {
+        // fix: событие, случившееся всего несколько дней назад в этом же
+        // году, раньше ошибочно получало год+1 и отображалось в UI как
+        // "будущее через ~11 мес." вместо корректного "N дней назад".
         const fakeHtml = `
           <html><body>
             <p>w/c 3/7 – 4 Hours Silverstone – Hypercar, LMGT3</p>
@@ -369,7 +372,28 @@ describe("eventsParser", () => {
 
         const result = await getSpecialEvents();
         const jul3 = result.events.find((e) => e.track === "Silverstone");
-        expect(jul3?.dateIso).toBe("2027-07-03");
+        expect(jul3?.dateIso).toBe("2026-07-03");
+      });
+
+      it("событие, прошедшее много месяцев назад (переход через Новый год), получает СЛЕДУЮЩИЙ год", async () => {
+        // Настоящий вариант переноса на год+1: страница в июле уже содержит
+        // событие января — это не "недавно прошедшее", а начало следующего
+        // календарного сезона.
+        vi.setSystemTime(new Date(2026, 6, 10)); // 10 июля 2026
+        const fakeHtml = `
+          <html><body>
+            <p>w/c 5/1 – 4 Hours Silverstone – Hypercar, LMGT3</p>
+            <p>w/c 8/9 – 6 Hours COTA – Hypercar, LMGT3</p>
+            <p>w/c 6/10 – 10 Hours TBA – Hypercar, WEC LMP2, LMGT3</p>
+            <p>w/c 10/11 – 8 Hours Bahrain – Hypercar, LMGT3</p>
+            <p>w/c 20/10 – 24 Hours Le Mans – Hypercar, WEC LMP2, LMGT3</p>
+          </body></html>
+        `;
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => fakeHtml }));
+
+        const result = await getSpecialEvents();
+        const jan5 = result.events.find((e) => e.track === "Silverstone");
+        expect(jan5?.dateIso).toBe("2027-01-05");
       });
 
       it('событие сегодняшним числом остаётся в ТЕКУЩЕМ году (не считается "прошедшим")', async () => {
