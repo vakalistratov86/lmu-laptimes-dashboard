@@ -12,6 +12,12 @@
 
 ---
 
+## [1.0.4](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.3...v1.0.4) (2026-07-28)
+
+### Fixed
+
+* **events:** не переносить недавно прошедшее событие на год вперёд ([afc9264](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/afc9264a01b57ecffd9dfceb9037628249dccb0b))
+
 ## [1.0.3](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.2...v1.0.3) (2026-07-28)
 
 ### Fixed
