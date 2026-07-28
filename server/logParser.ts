@@ -35,6 +35,9 @@ export interface ParsedLap {
 // (обычный случай — один пилот всю сессию), parseDriverBlock() синтезирует
 // ровно один стинт на весь диапазон кругов машины, так что downstream-код
 // (server/importWorker.ts) всегда видит stints.length >= 1 без отдельной ветки.
+// Различать "реальный <Swap> в логе" и "синтезированный стинт" по одному лишь
+// stints.length ненадёжно (единственный реальный <Swap> тоже даёт длину 1) —
+// поэтому это явно выражено отдельным флагом ParsedDriver.hasExplicitSwap.
 export interface ParsedStint {
   driverName: string;
   startLap: number;
@@ -64,6 +67,12 @@ export interface ParsedDriver {
   finishStatus: string | null;
   lapList: ParsedLap[];
   stints: ParsedStint[];
+  // true — в XML был хотя бы один валидный тег <Swap> для этой машины (реальная
+  // смена пилота). false — тегов не было, stints состоит из единственного
+  // синтезированного стинта на "зачётного" пилота (см. parseDriverBlock).
+  // Участник, названный в реальном <Swap>, тем самым доказанно человек (ИИ не
+  // "сменяются" по имени) — на этом основана атрибуция is_player в importWorker.ts.
+  hasExplicitSwap: boolean;
 }
 
 // #49 — инциденты из Stream
@@ -322,6 +331,9 @@ function parseDriverBlock(driverNode: XmlNode): ParsedDriver | null {
     if (!driverName || startLap == null || endLap == null) continue; // битый тег — пропускаем, не создаём фиктивный стинт
     stints.push({ driverName, startLap, endLap, startSec: null, endSec: null });
   }
+  // Фиксируем ДО синтеза fallback-стинта ниже: только валидные реальные <Swap>
+  // тег(и) считаются доказательством смены пилота, независимо от их количества.
+  const hasExplicitSwap = stints.length > 0;
   if (stints.length === 0) {
     const maxLapNum = lapList.reduce((max, l) => Math.max(max, l.num), 0);
     stints.push({ driverName: name, startLap: 1, endLap: maxLapNum, startSec: null, endSec: null });
@@ -350,6 +362,7 @@ function parseDriverBlock(driverNode: XmlNode): ParsedDriver | null {
     finishStatus,
     lapList,
     stints,
+    hasExplicitSwap,
   };
 }
 

@@ -543,9 +543,10 @@ describe("parseRaceResults", () => {
       expect(result.drivers[0].stints).toEqual([
         { driverName: "Solo Driver", startLap: 1, endLap: 2, startSec: null, endSec: null },
       ]);
+      expect(result.drivers[0].hasExplicitSwap).toBe(false);
     });
 
-    it("один <Swap>-тег — тоже единственный стинт (та же форма, что и без свопов)", () => {
+    it("один <Swap>-тег — тоже единственный стинт (та же форма, что и без свопов), но hasExplicitSwap=true", () => {
       const driversXml = `<Driver>
   <Name>Solo Driver</Name>
   <isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>
@@ -558,6 +559,10 @@ describe("parseRaceResults", () => {
       const result = parseRaceResults(makeXml({ drivers: driversXml }))!;
       expect(result.drivers[0].stints).toHaveLength(1);
       expect(result.drivers[0].stints[0]).toMatchObject({ driverName: "Solo Driver", startLap: 1, endLap: 2 });
+      // Ключевое отличие от синтезированного стинта: длина stints одинакова
+      // (1), но здесь был РЕАЛЬНЫЙ тег <Swap> — importWorker.ts различает эти
+      // два случая именно по этому флагу, а не по stints.length.
+      expect(result.drivers[0].hasExplicitSwap).toBe(true);
     });
 
     it("несколько <Swap> — реальная смена пилота, стинты возвращаются по возрастанию startLap", () => {
@@ -577,6 +582,7 @@ describe("parseRaceResults", () => {
         { driverName: "Yuriy Khoroshenkiy", startLap: 1, endLap: 1, startSec: null, endSec: null },
         { driverName: "Vasiliy Kalistratov", startLap: 2, endLap: 3, startSec: null, endSec: null },
       ]);
+      expect(result.drivers[0].hasExplicitSwap).toBe(true);
     });
 
     it("битый <Swap> (без имени) пропускается — не падает, фолбэк на синтетический стинт", () => {
@@ -593,6 +599,9 @@ describe("parseRaceResults", () => {
       expect(result.drivers[0].stints).toEqual([
         { driverName: "Solo Driver", startLap: 1, endLap: 2, startSec: null, endSec: null },
       ]);
+      // Единственный <Swap> был битым и отфильтрован — по факту реальных
+      // тегов не осталось, поэтому это тот же случай, что и без <Swap> вовсе.
+      expect(result.drivers[0].hasExplicitSwap).toBe(false);
     });
 
     it("<DriverChange> сопоставляется с границей стинтов по именам Old/New — startSec/endSec", () => {

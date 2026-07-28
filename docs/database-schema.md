@@ -127,7 +127,7 @@
 | `id` | SERIAL PK | Первичный ключ |
 | `session_id` | INTEGER NOT NULL | FK → `sessions.id` |
 | `driver_id` | INTEGER NOT NULL | FK → `drivers.id` |
-| `is_player` | INTEGER NOT NULL, default 0 | `1` = живой игрок, `0` = ИИ. Для машины со сменой пилота — `1` у ВСЕХ реальных со-пилотов (участие в `<Swap>` само по себе доказательство реального человека), не только у "зачётного" пилота из машинного `<isPlayer>` |
+| `is_player` | INTEGER NOT NULL, default 0 | `1` = живой игрок, `0` = ИИ. Источник — флаг `hasExplicitSwap` из `server/logParser.ts` (был ли у машины хотя бы один ВАЛИДНЫЙ тег `<Swap>` в логе, независимо от их количества), а не длина списка стинтов: `hasExplicitSwap=true` → `1` у ВСЕХ реальных со-пилотов (участие в `<Swap>` само по себе доказательство реального человека — ИИ не "сменяются" по имени); `hasExplicitSwap=false` (обычная сольная машина, стинт синтезирован) → берём машинный `<isPlayer>` как есть. См. `server/importWorker.ts` — для сольной машины с `<isPlayer>=0`, но `control_and_aids`, содержащим `"PlayerControl"`, дополнительно пишется предупреждение в лог (без автоматического переопределения) — это та же нестыковка источников, что и в командной гонке |
 | `position` | INTEGER NOT NULL | Итоговая позиция машины (абсолютная) |
 | `class_position` | INTEGER NOT NULL | Итоговая позиция машины в классе |
 | `lap_rank_including_discos` | INTEGER | `LapRankIncludingDiscos` |
