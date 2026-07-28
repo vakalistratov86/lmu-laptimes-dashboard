@@ -73,8 +73,8 @@ const STATIC_EVENTS_2026: Omit<SpecialEvent, "fetchedAt" | "sourceUrl">[] = [
     weekOf: "w/c 28/7",
     dateIso: "2026-07-28",
     duration: 4,
-    track: "TBA",
-    trackTba: true,
+    track: "WeatherTech Raceway Laguna Seca",
+    trackTba: false,
     classes: ["Hypercar", "WEC LMP2", "LMGT3"],
     isFeatured: false,
   },
@@ -84,8 +84,8 @@ const STATIC_EVENTS_2026: Omit<SpecialEvent, "fetchedAt" | "sourceUrl">[] = [
     weekOf: "w/c 11/8",
     dateIso: "2026-08-11",
     duration: 8,
-    track: "TBA",
-    trackTba: true,
+    track: "Daytona International Speedway",
+    trackTba: false,
     classes: ["Hypercar", "WEC LMP2", "LMGT3"],
     isFeatured: false,
   },
@@ -260,6 +260,58 @@ function resolveYear(month: number, day: number): number {
   return now.getFullYear();
 }
 
+// Именованные HTML-сущности, встречающиеся в разметке календаря
+// (тире, неразрывный пробел и т.п.) — WordPress вставляет их вместо
+// «сырых» символов, из-за чего матчинг по буквальным –/—/пробелам
+// на непреобразованном HTML периодически отваливается при любой правке
+// страницы редактором.
+const HTML_ENTITIES: Record<string, string> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  ndash: "–",
+  mdash: "—",
+  hellip: "…",
+};
+
+// Блочные теги, чьи границы означают конец строки видимого текста (абзац,
+// заголовок, элемент списка/таблицы, явный перенос). Всё остальное (span,
+// strong, a, em и т.п.) — оформление внутри одной логической строки, не
+// граница: если превратить в перенос и такие теги, регэксп события
+// сломается на любом инлайн-выделении внутри трассы/классов.
+const BLOCK_TAG_RE = /<\/?(?:p|div|h[1-6]|li|tr|br|section|article|table|ul|ol)(?:\s[^>]*)?\/?>/gi;
+
+/**
+ * Превращает произвольный HTML в список видимых текстовых строк —
+ * границы строк те же, что видит глазами человек на странице (абзацы,
+ * заголовки, элементы списков), сущности декодированы, лишние пробелы
+ * схлопнуты. Парсинг ниже зависит только от этого текста, а не от
+ * конкретных тегов/атрибутов вокруг него — те меняются при каждой правке
+ * страницы редактором сайта, а видимый текстовый формат «w/c DD/MM –
+ * N Hours Track – Classes», одно событие на строку, до сих пор оставался
+ * стабильным (см. переданный пользователем текст текущей страницы).
+ */
+function htmlToLines(html: string): string[] {
+  const text = html
+    .replace(BLOCK_TAG_RE, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&(\w+);/g, (full, name) => HTML_ENTITIES[name.toLowerCase()] ?? full);
+
+  return text
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+// Паттерн одной строки-события: «w/c DD/MM – N Hours Track – Classes».
+// Тире может быть коротким (–), длинным (—) или обычным дефисом (-).
+const EVENT_RE = /^w\/c\s+(\d{1,2})\/(\d{1,2})\s*[–—-]\s*(\d+)\s*Hours\s+(.+?)\s*[–—-]\s*(.+)$/i;
+
 async function fetchAndParse(): Promise<ParsedRaw> {
   const res = await fetch(SOURCE_URL, {
     headers: { "User-Agent": "LMU-Dashboard/1.0 (special-events-bot)" },
@@ -269,16 +321,16 @@ async function fetchAndParse(): Promise<ParsedRaw> {
   const html = await res.text();
   const fetchedAt = new Date().toISOString();
 
-  // Простой регулярный парсинг структуры страницы
-  // Паттерн: «w/c DD/MM – N Hours Track – Classes»
-  // Тире может быть коротким (–), длинным (—) или обычным дефисом (-) —
-  // WordPress-редакторы нередко подменяют символ при правках страницы.
-  const lineRe = /w\/c\s+(\d+\/(\d+))\s*[–—-]\s*(\d+)\s*Hours\s+([^–—<\n-]+?)\s*[–—-]\s*([^<\n]+)/gi;
+  const lines = htmlToLines(html);
   const events: SpecialEvent[] = [];
-  let match;
 
-  while ((match = lineRe.exec(html)) !== null) {
-    const [, weekOf, monthStr, durationStr, trackRaw, classesRaw] = match;
+  for (const line of lines) {
+    const match = EVENT_RE.exec(line);
+    if (!match) continue;
+
+    const [, dayStr, monthStr, durationStr, trackRaw, classesRaw] = match;
+    const day = parseInt(dayStr, 10);
+    const month = parseInt(monthStr, 10);
     const duration = parseInt(durationStr, 10);
     const track = trackRaw.trim();
     const trackTba = /tba/i.test(track);
@@ -286,18 +338,14 @@ async function fetchAndParse(): Promise<ParsedRaw> {
       .split(",")
       .map((c) => c.trim())
       .filter(Boolean);
-    const month = parseInt(monthStr, 10);
-    const dayStr = weekOf.split("/")[0];
-    const day = parseInt(dayStr, 10);
     // Используем resolveYear() для корректного определения года (#53)
     const year = resolveYear(month, day);
     const dateIso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const id = dateIso;
-    const isFeatured = duration >= 24 || /24\s*h/i.test(trackRaw);
+    const isFeatured = duration >= 24;
 
     events.push({
-      id,
-      weekOf: `w/c ${weekOf}`,
+      id: dateIso,
+      weekOf: `w/c ${day}/${month}`,
       dateIso,
       duration,
       track,
@@ -310,12 +358,13 @@ async function fetchAndParse(): Promise<ParsedRaw> {
   }
 
   // Если парсинг не дал результатов — fallback на статику.
-  // Страница ответила 200, но разметка календаря, судя по всему, изменилась
-  // и наш регэксп больше не находит строки событий — это тоже стоит видеть в логах.
+  // Страница ответила 200, но видимый текст календаря, судя по всему,
+  // сменил формат (не только разметку — htmlToFlatText+EVENT_RE от неё уже
+  // не зависят) — это тоже стоит видеть в логах.
   if (events.length < 5) {
     logger.warn(
       { sourceUrl: SOURCE_URL, matchedEvents: events.length },
-      "Special Events: регэксп нашёл меньше 5 строк — похоже, разметка страницы изменилась; используются статические данные",
+      "Special Events: найдено меньше 5 строк — похоже, изменился текстовый формат календаря на странице; используются статические данные",
     );
     return {
       events: STATIC_EVENTS_2026.map((e) => ({ ...e, fetchedAt, sourceUrl: SOURCE_URL })),
