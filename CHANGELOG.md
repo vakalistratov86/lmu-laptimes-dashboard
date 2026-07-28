@@ -1,5 +1,3 @@
-## [1.0.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.0...v1.0.1) (2026-07-28)
-
 # Changelog
 
 Все значимые изменения в этом проекте документируются в данном файле.
@@ -13,6 +11,12 @@
 «Версионирование и релизы» в [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
+
+## [1.0.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.0...v1.0.1) (2026-07-28)
+
+### Fixed
+
+- **events:** распознавать Special Events по видимому тексту, а не сырому HTML ([#168](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/168)) ([8fa4d33](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/8fa4d33301abff2a16d4415f78d03690af28cd61))
 
 ## [Unreleased]
 
