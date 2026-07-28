@@ -104,6 +104,12 @@ export default {
       { prepareCmd: "npm version ${nextRelease.version} --no-git-tag-version --allow-same-version" },
     ],
     ["@semantic-release/changelog", { changelogFile: "CHANGELOG.md", changelogTitle }],
+    // markdownlint (MD004/MD012 и т.п.) проверяет CHANGELOG.md в CI —
+    // прогоняем автофикс сразу после генерации секции релиза, чтобы
+    // артефакты форматирования writer-шаблона (стиль списков, лишние
+    // пустые строки) не долетали до коммита и не валили Markdown Lint
+    // в следующем PR.
+    ["@semantic-release/exec", { prepareCmd: "npm run docs:fix" }],
     [
       "@semantic-release/git",
       {
