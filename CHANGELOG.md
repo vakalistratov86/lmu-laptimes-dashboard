@@ -12,6 +12,13 @@
 
 ---
 
+## [1.0.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.1...v1.0.2) (2026-07-28)
+
+
+### Fixed
+
+* **release:** починить содержимое release notes и позицию секции в CHANGELOG ([#169](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/169)) ([3cb4dca](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/3cb4dcab7c00bae94776e585a7ea9dbab867444d))
+
 ## [1.0.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.0...v1.0.1) (2026-07-28)
 
 ### Fixed
