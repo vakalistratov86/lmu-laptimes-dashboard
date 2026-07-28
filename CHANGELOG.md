@@ -1,3 +1,5 @@
+## [1.0.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.0...v1.0.1) (2026-07-28)
+
 # Changelog
 
 Все значимые изменения в этом проекте документируются в данном файле.
