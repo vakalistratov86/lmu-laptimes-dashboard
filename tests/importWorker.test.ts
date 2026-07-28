@@ -392,6 +392,7 @@ describe("runImport — командная гонка: несколько реа
           pitstops: 1,
           bestLapMs: 100000,
           finishStatus: "Finished",
+          hasExplicitSwap: true,
           stints: [
             { driverName: "Yuriy Khoroshenkiy", startLap: 1, endLap: 2, startSec: null, endSec: 500 },
             { driverName: "Vasiliy Kalistratov", startLap: 3, endLap: 4, startSec: 500, endSec: null },
@@ -454,6 +455,53 @@ describe("runImport — командная гонка: несколько реа
     expect(result.driverCount).toBe(2);
   });
 
+  it("единственный реальный <Swap> с именем, отличным от «зачётного» <Name> машины — тоже isPlayer=1 (регресс)", async () => {
+    // Пограничный случай: ровно один тег <Swap>, а не два+, и его имя не
+    // совпадает с "зачётным" пилотом машины. stints.length здесь === 1 — так
+    // же, как и у обычной сольной машины без <Swap> вообще — поэтому определять
+    // "сольность" по длине stints нельзя: единственный источник истины,
+    // отличающий эти два случая, это hasExplicitSwap из парсера.
+    parseRaceResults.mockReturnValueOnce({
+      ...makeParsedSession(),
+      drivers: [
+        {
+          name: "Vasiliy Kalistratov", // "зачётный" пилот по машинному <Name>
+          isPlayer: false, // машинный флаг ошибочно относит его к ИИ
+          position: 5,
+          classPosition: 3,
+          lapRankIncludingDiscos: null,
+          carClass: "GT3",
+          carType: "Porsche 911 GT3 R",
+          teamName: "Manthey",
+          carNumber: "90",
+          vehFile: null,
+          vehName: null,
+          category: null,
+          controlAndAids: null,
+          connected: 1,
+          laps: 2,
+          pitstops: 0,
+          bestLapMs: 100000,
+          finishStatus: "Finished",
+          hasExplicitSwap: true,
+          stints: [{ driverName: "Yuriy Khoroshenkiy", startLap: 1, endLap: 2, startSec: null, endSec: null }],
+          lapList: [
+            { num: 1, lapMs: 100000 },
+            { num: 2, lapMs: 105000 },
+          ],
+        },
+      ],
+    });
+
+    const { tx, capturedSessionResults } = makeTeamRaceTx();
+    db.transaction.mockImplementationOnce(async (fn: any) => fn(tx));
+
+    await runImport({ id: "job-23", fileHash: "hash-23", fileName: "team-race-3.xml", content: "<x/>" });
+
+    expect(capturedSessionResults).toHaveLength(1);
+    expect(capturedSessionResults[0]).toMatchObject({ isPlayer: 1 });
+  });
+
   it("сольная машина без <Swap> — одна строка session_results на пилота, stint-поля пустые (регресс)", async () => {
     parseRaceResults.mockReturnValueOnce(makeParsedSession());
     const { tx, capturedSessionResults } = makeTeamRaceTx();
@@ -495,6 +543,7 @@ describe("runImport — командная гонка: несколько реа
           pitstops: 0,
           bestLapMs: 115000,
           finishStatus: "Finished",
+          hasExplicitSwap: true,
           stints: [
             { driverName: "Yuriy Khoroshenkiy", startLap: 1, endLap: 1, startSec: null, endSec: 500 },
             { driverName: "Vasiliy Kalistratov", startLap: 2, endLap: 2, startSec: 500, endSec: null },
@@ -551,6 +600,7 @@ describe("runImport — командная гонка: несколько реа
           pitstops: 0,
           bestLapMs: 100000,
           finishStatus: "Finished",
+          hasExplicitSwap: true,
           stints: [
             { driverName: "Yuriy Khoroshenkiy", startLap: 1, endLap: 1, startSec: null, endSec: 500 },
             { driverName: "Vasiliy Kalistratov", startLap: 2, endLap: 2, startSec: 500, endSec: null },

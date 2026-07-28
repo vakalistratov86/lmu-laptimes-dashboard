@@ -374,7 +374,6 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
 
     for (const d of parsed!.drivers) {
       const cls = normalizeClass(d.carClass);
-      const primaryKey = normalizeDriverNameForStorage(d.name).toLowerCase();
 
       // Группируем стинты машины по реальному пилоту — один человек может
       // появиться в 2+ несмежных стинтах (свап туда-обратно), объединяем их
@@ -389,7 +388,11 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
       // Один синтетический стинт на всю машину = обычный сольный заезд (нет
       // реального <Swap>) — диапазон стинта в этом случае не показываем
       // (stint*Lap/Sec остаются null), это не срез командной гонки.
-      const isSoloCar = d.stints.length === 1 && stintsByDriver.size === 1;
+      // Источник истины — hasExplicitSwap из парсера (был ли в XML хотя бы один
+      // валидный <Swap>), а НЕ stints.length: у машины с ровно одним реальным
+      // <Swap>-тегом stints.length тоже равен 1, что при подсчёте по длине массива
+      // неотличимо от синтезированного "сольного" стинта.
+      const isSoloCar = !d.hasExplicitSwap;
 
       const sortedStints = [...d.stints].sort((a, b) => a.startLap - b.startLap);
       const resolveStintKey = (lapNum: number): string => {
@@ -418,20 +421,35 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
         const startSecs = stints.map((s) => s.startSec).filter((v): v is number => v != null);
         const endSecs = stints.map((s) => s.endSec).filter((v): v is number => v != null);
 
+        // Машинный <isPlayer> — единственный флаг на всю машину, привязанный к
+        // "зачётному" (последнему за рулём) пилоту. Для реального свапа
+        // (hasExplicitSwap) этого недостаточно: со-пилот, названный в <Swap>,
+        // сам по себе такое же доказательство реального человека, как и сам
+        // факт смены (ИИ не "сменяют" по имени) — подтверждено на живом логе:
+        // у обоих пилотов машины #7 в <ControlAndAids> стоит "PlayerControl"
+        // на весь диапазон кругов, включая стинт со-пилота, которого машинный
+        // <isPlayer> прежде ошибочно превращал в ИИ. isSoloCar подразумевает
+        // ровно одного реального пилота (синтезированный стинт всегда получает
+        // имя из d.name) — сравнивать имя пилота стинта не с чем.
+        const isPlayerValue = isSoloCar ? (d.isPlayer ? 1 : 0) : 1;
+        if (isSoloCar && !d.isPlayer && d.controlAndAids?.includes("PlayerControl")) {
+          // <isPlayer> уже доказанно ошибался на командных гонках (см. выше) —
+          // если для сольной машины он говорит "ИИ", а ControlAndAids говорит
+          // "PlayerControl", это та же подозрительная нестыковка. Не
+          // переопределяем автоматически (не проверено на достаточном числе
+          // реальных логов), но фиксируем для последующего разбора.
+          console.warn(
+            "[importWorker] isPlayer=0 из <isPlayer>, но ControlAndAids содержит PlayerControl — возможная ошибка атрибуции в логе",
+            { driverName: d.name, controlAndAids: d.controlAndAids },
+          );
+        }
+
         const srRows = await tx
           .insert(sessionResults)
           .values({
             sessionId: session.id,
             driverId: driver.id,
-            // Машинный <isPlayer> — единственный флаг на всю машину, привязанный
-            // к "зачётному" (последнему за рулём) пилоту. Для реального свапа
-            // (isSoloCar=false) этого недостаточно: со-пилот, названный в <Swap>,
-            // сам по себе такое же доказательство реального человека, как и
-            // сам факт смены (ИИ не "сменяют" по имени) — подтверждено на живом
-            // логе: у обоих пилотов машины #7 в <ControlAndAids> стоит
-            // "PlayerControl" на весь диапазон кругов, включая стинт со-пилота,
-            // которого машинный <isPlayer> прежде ошибочно превращал в ИИ.
-            isPlayer: isSoloCar ? (key === primaryKey && d.isPlayer ? 1 : 0) : 1,
+            isPlayer: isPlayerValue,
             position: d.position,
             classPosition: d.classPosition,
             lapRankIncludingDiscos: d.lapRankIncludingDiscos ?? null,
