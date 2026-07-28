@@ -467,7 +467,7 @@ export default function Sessions() {
                 </div>
 
                 {/* Configuration */}
-                <div className="min-w-0 truncate text-muted-foreground" role="cell">
+                <div className="min-w-0 truncate text-xs text-muted-foreground/70" role="cell">
                   {configLabel(session.trackName, session.course)}
                 </div>
 
