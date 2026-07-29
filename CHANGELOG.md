@@ -12,6 +12,16 @@
 
 ---
 
+## [1.1.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.4...v1.1.0) (2026-07-29)
+
+### Added
+
+* добавить трассу Daytona International Speedway ([#174](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/174)) ([2eed6cb](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/2eed6cb84c51bd3bfbf3e4e1b60a9335d591d2d8))
+
+### Fixed
+
+* **release:** не давать angular-пресету рендерить H1 для minor/major-релизов ([#175](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/175)) ([c296290](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/c29629052b1c7bab4abf07be361d9aa379d649c4)), closes [#174](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/174)
+
 ## [1.0.4](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.3...v1.0.4) (2026-07-28)
 
 ### Fixed
