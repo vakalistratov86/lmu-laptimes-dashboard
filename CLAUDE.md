@@ -31,5 +31,5 @@
 
 ## Ссылки
 
-@docs/architecture.md
-@docs/db-schema.md
+@docs/REQUIREMENTS.md
+@docs/database-schema.md
