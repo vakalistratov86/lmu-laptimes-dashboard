@@ -12,6 +12,12 @@
 
 ---
 
+## [1.1.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.1.1...v1.1.2) (2026-07-29)
+
+### Fixed
+
+* применить форматирование Prettier к DriverFilterBar ([0d13798](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/0d137984330daac64e4152dfd03bd0af4496c388)), closes [#176](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/176)
+
 ## [1.1.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.1.0...v1.1.1) (2026-07-29)
 
 ### Fixed
