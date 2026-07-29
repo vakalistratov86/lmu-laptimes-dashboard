@@ -852,6 +852,7 @@ function canonicalTrackName(venue: string): { name: string; country: string; tur
   if (v.includes("portim") || v.includes("algarve")) return { name: "Portimão", country: "Португалия", turns: 15 };
   if (v.includes("cota") || v.includes("americas")) return { name: "COTA", country: "США", turns: 20 };
   if (v.includes("qatar") || v.includes("losail")) return { name: "Losail", country: "Катар", turns: 16 };
+  if (v.includes("daytona")) return { name: "Daytona International Speedway", country: "США", turns: 12 };
   return { name: venue, country: "—", turns: 0 };
 }
 
