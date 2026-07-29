@@ -473,6 +473,10 @@ const CATALOG_TRACKS: InsertTrack[] = [
   { name: "Barcelona", country: "Испания", lengthKm: 4.657, turns: 14, layout: "GP" },
   { name: "Paul Ricard", country: "Франция", lengthKm: 5.842, turns: 15, layout: "GP" },
   { name: "Lusail", country: "Катар", lengthKm: 5.38, turns: 16, layout: "GP" },
+  // В LMU (US Track Pack 1) представлена единственная конфигурация Дайтоны —
+  // "Road Course" (используется в Rolex 24): комбинация внутренней трассы
+  // с овальным бэнкингом, а не отдельная овальная трасса.
+  { name: "Daytona International Speedway", country: "США", lengthKm: 5.729, turns: 12, layout: "Road Course" },
 ];
 
 // Тот же допуск, что и TRACK_LENGTH_MATCH_TOLERANCE_KM в importWorker.ts —

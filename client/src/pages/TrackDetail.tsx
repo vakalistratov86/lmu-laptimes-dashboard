@@ -28,6 +28,8 @@ const TRACK_FACTS: Record<Locale, Record<string, string>> = {
     "Le Mans": "24-часовая гонка с 1923 г.; победители преодолевают до 5800 км за сутки.",
     "Fuji Speedway": "Проектирован в 1966 г. с уклоном для стока воды — трасса «наклонена» на 3°.",
     Sebring: "Гонки проводятся с 1950 г. на бывшей авиабазе — асфальт на бетоне взлётной полосы.",
+    "Daytona International Speedway":
+      "Овальные виражи подняты на 31° — самый крутой бэнкинг в NASCAR; гоночная конфигурация Rolex 24 объединяет их с внутренней трассой.",
   },
   en: {
     "Spa-Francorchamps": "Raidillon at Spa is the fastest corner in world motorsport — 8G at 300+ km/h.",
@@ -44,6 +46,8 @@ const TRACK_FACTS: Record<Locale, Record<string, string>> = {
     "Le Mans": "The 24-hour race has run since 1923; winners can cover up to 5,800 km in a day.",
     "Fuji Speedway": "Designed in 1966 with a drainage gradient — the track is tilted 3°.",
     Sebring: "Racing since 1950 on a former airbase — asphalt laid over the old runway concrete.",
+    "Daytona International Speedway":
+      "Its oval turns are banked at 31° — the steepest in NASCAR; the Rolex 24 road course combines them with the infield.",
   },
 };
 
@@ -138,6 +142,11 @@ const TRACK_HISTORY: Record<Locale, Record<string, TrackHistoryEntry>> = {
       openedNote: "Гонки проходят на бывшей авиабазе времён Второй мировой",
       renovations: [],
     },
+    "Daytona International Speedway": {
+      builtYear: 1959,
+      openedNote: "Открыта Биллом Франсом-старшим как дом Daytona 500 и Rolex 24 часов Дайтоны",
+      renovations: [{ year: 2020, note: "Добавлена шикана на выезде из 4-го овального поворота" }],
+    },
   },
   en: {
     "Le Mans": {
@@ -222,6 +231,11 @@ const TRACK_HISTORY: Record<Locale, Record<string, TrackHistoryEntry>> = {
       builtYear: 1950,
       openedNote: "Racing takes place on a former WWII-era airbase",
       renovations: [],
+    },
+    "Daytona International Speedway": {
+      builtYear: 1959,
+      openedNote: "Opened by Bill France Sr. as the home of the Daytona 500 and the Rolex 24 at Daytona",
+      renovations: [{ year: 2020, note: "Chicane added at the exit of oval Turn 4" }],
     },
   },
 };

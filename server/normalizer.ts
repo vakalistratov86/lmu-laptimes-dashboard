@@ -60,6 +60,10 @@ const TRACK_ALIASES: Record<string, string> = {
   // Losail / Qatar
   losail: "Losail International Circuit",
   qatar: "Losail International Circuit",
+  // Daytona
+  daytona: "Daytona International Speedway",
+  "daytona international speedway": "Daytona International Speedway",
+  "daytona road course": "Daytona International Speedway",
 };
 
 /**
