@@ -10,7 +10,8 @@
 import { Medal, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DriverName } from "@/components/DriverName";
-import { getMedalColorClass, getClassBadgeClass } from "@/lib/classStyles";
+import { getMedalColorClass } from "@/lib/classStyles";
+import { CarClassBadge } from "@/components/CarClassBadge";
 import { useLanguage } from "@/lib/i18n";
 import type { SessionResultRowView } from "./types";
 
@@ -63,9 +64,7 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
       {/* Класс машины */}
       <td className="px-4 py-2.5">
         {row.carClass ? (
-          <Badge variant="outline" className={`text-xs ${getClassBadgeClass(row.carClass)}`}>
-            {row.carClass}
-          </Badge>
+          <CarClassBadge carClass={row.carClass} className="text-xs" />
         ) : (
           <span className="text-muted-foreground">—</span>
         )}

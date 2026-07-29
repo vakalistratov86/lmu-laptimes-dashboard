@@ -13,7 +13,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DriverName } from "@/components/DriverName";
 import { StatTile } from "@/components/StatTile";
-import { getClassBadgeClass, getMedalColorClass } from "@/lib/classStyles";
+import { CarClassBadge } from "@/components/CarClassBadge";
+import { getMedalColorClass } from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
 import type { SessionResultRowView, DriverLapsGroupView, DriverSectorSummary } from "./types";
 
@@ -43,11 +44,7 @@ export function SessionDriverDetailCard({ row, lapGroup, sectorSummary }: Sessio
         ) : (
           <DriverName name={row.driverName} isPlayer={row.isPlayer} className="font-semibold text-sm" />
         )}
-        {row.carClass && (
-          <Badge variant="outline" className={getClassBadgeClass(row.carClass)}>
-            {row.carClass}
-          </Badge>
-        )}
+        {row.carClass && <CarClassBadge carClass={row.carClass} />}
         {row.finishStatus && (
           <Badge variant="outline" className="text-xs text-muted-foreground">
             {row.finishStatus}

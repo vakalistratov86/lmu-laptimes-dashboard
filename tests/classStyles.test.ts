@@ -5,6 +5,7 @@ import {
   compareCarClass,
   getClassBadgeClass,
   getClassAccentClass,
+  getClassDisplayLabel,
 } from "../client/src/lib/classStyles";
 
 describe("normalizeCarClass", () => {
@@ -63,6 +64,32 @@ describe("getClassBadgeClass / getClassAccentClass", () => {
   it("неизвестный класс (GT4) получает нейтральный фолбэк, а не отдельный цвет", () => {
     expect(getClassBadgeClass("GT4")).toBe("bg-muted/40 text-muted-foreground border-border");
     expect(getClassAccentClass("GT4")).toBe("border-border");
+  });
+});
+
+describe("getClassDisplayLabel", () => {
+  it("алиасы и устаревшие имена показываются под канонической меткой", () => {
+    expect(getClassDisplayLabel("Hyper")).toBe("Hypercar");
+    expect(getClassDisplayLabel("LMH")).toBe("Hypercar");
+    expect(getClassDisplayLabel("GTE")).toBe("LMGT3");
+    expect(getClassDisplayLabel("GT3")).toBe("LMGT3");
+    expect(getClassDisplayLabel("WEC LMP2")).toBe("LMP2");
+  });
+
+  it("уже канонические значения не меняются", () => {
+    expect(getClassDisplayLabel("Hypercar")).toBe("Hypercar");
+    expect(getClassDisplayLabel("LMGT3")).toBe("LMGT3");
+  });
+
+  it("неизвестный класс (GT4) остаётся как есть — это не алиас, а другой класс", () => {
+    expect(getClassDisplayLabel("GT4")).toBe("GT4");
+    expect(getClassDisplayLabel("TCR")).toBe("TCR");
+  });
+
+  it("пустое/отсутствующее значение -> пустая строка", () => {
+    expect(getClassDisplayLabel("")).toBe("");
+    expect(getClassDisplayLabel(undefined)).toBe("");
+    expect(getClassDisplayLabel(null)).toBe("");
   });
 });
 

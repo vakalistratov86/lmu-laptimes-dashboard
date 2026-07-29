@@ -2,12 +2,13 @@ import { useMemo } from "react";
 import { Link } from "wouter";
 import { useDrivers, useLaps, useBestLaps, useSessions, useDriverIncidents } from "@/lib/api";
 import { formatLap, formatDelta, countryFlag, normalizeCourse } from "@/lib/format";
-import { getClassBadgeClass, getMedalColorClass } from "@/lib/classStyles";
+import { getMedalColorClass } from "@/lib/classStyles";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DriverName } from "@/components/DriverName";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
+import { CarClassBadge } from "@/components/CarClassBadge";
 import {
   Timer,
   Trophy,
@@ -360,9 +361,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                           {r.courseLabel && <span className="text-xs text-muted-foreground">· {r.courseLabel}</span>}
                         </td>
                         <td className="px-4 py-2.5">
-                          <Badge variant="outline" className={getClassBadgeClass(r.carClass)}>
-                            {r.carClass}
-                          </Badge>
+                          <CarClassBadge carClass={r.carClass} />
                         </td>
                         <td
                           className={`px-4 py-2.5 text-right font-data tabular-nums ${r.isRecord ? "font-bold text-primary" : ""}`}
@@ -422,9 +421,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                       )}
                     </div>
                     <div className="w-[70px] shrink-0">
-                      <Badge variant="outline" className={`text-xs ${getClassBadgeClass(s.carClass)}`}>
-                        {s.carClass}
-                      </Badge>
+                      <CarClassBadge carClass={s.carClass} className="text-xs" />
                     </div>
                     <div className="w-[70px] shrink-0 text-right">
                       <span className="inline-flex items-center gap-1 font-data text-sm font-bold tabular-nums">

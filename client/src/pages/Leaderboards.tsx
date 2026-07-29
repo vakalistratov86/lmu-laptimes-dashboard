@@ -3,13 +3,13 @@ import { Link } from "wouter";
 import { useBestLaps, useTracks } from "@/lib/api";
 import { formatLap, formatDelta, normalizeCourse } from "@/lib/format";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trophy, Medal, Upload } from "lucide-react";
-import { compareCarClass, getClassBadgeClass, getClassAccentClass } from "@/lib/classStyles";
+import { compareCarClass, getClassAccentClass, getClassDisplayLabel } from "@/lib/classStyles";
 import { DriverName } from "@/components/DriverName";
 import { DriverFilterBar } from "@/components/DriverFilterBar";
+import { CarClassBadge } from "@/components/CarClassBadge";
 import { useLanguage } from "@/lib/i18n";
 
 type LapRow = {
@@ -65,10 +65,14 @@ function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
 
   return Array.from(byBoard.entries())
     .map(([boardKey, { displayName, laps: ls }]) => {
+      // Группируем по канонической метке класса (getClassDisplayLabel), а не по
+      // сырому car_class — иначе GT3/GTE/LMGT3 сформировали бы три отдельных
+      // раздела с одинаковым заголовком "LMGT3" вместо одной объединённой доски.
       const byClass = new Map<string, Map<number, LapRow>>();
       for (const l of ls) {
-        if (!byClass.has(l.carClass)) byClass.set(l.carClass, new Map());
-        const classMap = byClass.get(l.carClass)!;
+        const carClass = getClassDisplayLabel(l.carClass);
+        if (!byClass.has(carClass)) byClass.set(carClass, new Map());
+        const classMap = byClass.get(carClass)!;
         const cur = classMap.get(l.driverId);
         if (!cur || l.lapMs < cur.lapMs) classMap.set(l.driverId, l);
       }
@@ -122,9 +126,11 @@ export default function Leaderboards() {
   };
   const clearDrivers = () => setSelectedDriverIds(new Set());
 
+  // Канонические метки (GT3/GTE схлопываются в LMGT3) — тот же ключ, по которому
+  // buildBoards() группирует доски, иначе фильтр и заголовки досок разойдутся.
   const availableClasses = useMemo(() => {
     if (!laps) return [];
-    const set = new Set<string>(laps.map((l: LapRow) => l.carClass).filter(Boolean));
+    const set = new Set<string>(laps.map((l: LapRow) => getClassDisplayLabel(l.carClass)).filter(Boolean));
     return Array.from(set).sort(compareCarClass);
   }, [laps]);
 
@@ -144,7 +150,7 @@ export default function Leaderboards() {
     let filtered: LapRow[] = trackId === "all" ? laps : laps.filter((l: LapRow) => l.trackId === Number(trackId));
 
     if (classFilter !== "all") {
-      filtered = filtered.filter((l: LapRow) => l.carClass === classFilter);
+      filtered = filtered.filter((l: LapRow) => getClassDisplayLabel(l.carClass) === classFilter);
     }
 
     if (courseFilter !== "all") {
@@ -265,9 +271,7 @@ export default function Leaderboards() {
                 <div
                   className={`flex items-center gap-2 border-l-4 bg-muted/30 px-4 py-1.5 ${getClassAccentClass(cls.carClass)}`}
                 >
-                  <Badge variant="outline" className={`text-[11px] ${getClassBadgeClass(cls.carClass)}`}>
-                    {cls.carClass}
-                  </Badge>
+                  <CarClassBadge carClass={cls.carClass} className="text-[11px]" />
                   <span className="ml-auto text-[11px] text-muted-foreground">{tn(cls.rows.length, "pilots")}</span>
                 </div>
 

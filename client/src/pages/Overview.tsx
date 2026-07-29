@@ -1,12 +1,12 @@
 import { useBestLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
-import { normalizeSessionCategory, getClassBadgeClass, type SessionCategory } from "@/lib/classStyles";
+import { normalizeSessionCategory, type SessionCategory } from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DriverName } from "@/components/DriverName";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
+import { CarClassBadge } from "@/components/CarClassBadge";
 import { ActivityTile } from "@/components/ActivityTile";
 import { Link } from "wouter";
 import {
@@ -260,9 +260,7 @@ export default function Overview() {
                 <Flag size={14} />
                 {bestLap.trackName}
               </span>
-              <Badge variant="outline" className={`text-[11px] ${getClassBadgeClass(bestLap.carClass)}`}>
-                {bestLap.carClass}
-              </Badge>
+              <CarClassBadge carClass={bestLap.carClass} className="text-[11px]" />
             </div>
           </div>
         </div>
@@ -386,9 +384,7 @@ export default function Overview() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5">
-                    <Badge variant="outline" className={getClassBadgeClass(row.carClass)}>
-                      {row.carClass}
-                    </Badge>
+                    <CarClassBadge carClass={row.carClass} />
                   </td>
                   <td className="px-4 py-2.5 text-right font-data font-bold tabular-nums">{formatLap(row.ms)}</td>
                 </tr>
