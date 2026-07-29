@@ -246,6 +246,11 @@ Tracks → Sessions → Telemetry → Events**. Импорт логов и те�
    или изменении вёрстки страницы (см. §5.7). **[ОГРАНИЧЕНИЕ]** LMU не
    предоставляет публичного API для Daily Races — ротация добавлена статически
    в коде (`DAILY_RACES_STATIC`), требует ручного обновления при смене сезона.
+4. Бейджи классов машин на карточках событий красятся и подписываются той
+   же единой схемой, что и весь остальной проект (§11.1, п.3) — отдельной
+   палитры/меток для Events больше нет. Серийные варианты `WEC LMP2`/
+   `ELMS LMP2` сводятся к «LMP2» (и по цвету, и по подписи), дедуплицируются
+   по канонической метке, если у события оба варианта разом.
 
 ### 3.10 Общие UI-требования
 
@@ -275,8 +280,13 @@ Tracks → Sessions → Telemetry → Events**. Импорт логов и те�
    теряют данные при сужении экрана (проверено на 390px).
 7. Единый источник стилей/цветов для типов сессии, классов машин и медалей —
    `client/src/lib/classStyles.ts` (`normalizeSessionCategory`,
-   `SESSION_TYPE_BADGE`, `getMedalColorClass`, `getClassBadgeClass`).
-   Дублирующие локальные реализации в отдельных страницах недопустимы.
+   `SESSION_TYPE_BADGE`, `getMedalColorClass`, `normalizeCarClass`,
+   `getClassBadgeClass`, `getClassDisplayLabel`, `getClassAccentClass`,
+   `compareCarClass`). Само отображение бейджа класса машины
+   инкапсулировано в единственный компонент — `CarClassBadge.tsx`; все
+   страницы используют его, а не собирают `<Badge>` вручную. Дублирующие
+   локальные реализации (в т.ч. отдельная цветовая схема, которая раньше
+   была на вкладке Events) в отдельных страницах недопустимы.
 8. Единый источник форматирования времени круга/сектора — `client/src/lib/
    format.ts` (`formatLap`, `formatSector`, `formatDelta`) — должен сам
    проверять невалидные значения (`NaN`/`Infinity`/`<=0`) и рисовать «—»,
@@ -843,7 +853,7 @@ drizzle-zod). Полное описание колонок — `docs/database-sc
    | `--border` | `0 0% 91%` | `220 10% 16%` | границы, разделители строк |
    | `--primary` | `8 88% 52%` (красно-оранжевый, гоночный акцент) | `8 92% 56%` | акцентный цвет (логотип, активная вкладка, CTA-кнопки, активная сегментированная кнопка «Все») |
    | `--muted-foreground` | `0 0% 40%` | `220 8% 62%` | второстепенный текст, подписи колонок |
-   | `--chart-1..5` | 8°/38°/172°/199°/262° (hue), ~50-60% lightness | те же hue, ярче на 4-8% | графики Recharts + фолбэк-цвета классов машин |
+   | `--chart-1..5` | 8°/38°/172°/199°/262° (hue), ~50-60% lightness | те же hue, ярче на 4-8% | графики Recharts (bar chart личных лучших кругов и т.п.) |
    | `--radius` | `0.5rem` | — | базовый радиус скругления (карточки — `rounded-xl`, кнопки/бейджи — `rounded-md`) |
 
 3. Специальные семантические цвета (заданы напрямую Tailwind-палитрой, не
@@ -864,11 +874,20 @@ drizzle-zod). Полное описание колонок — `docs/database-sc
      `text-amber-700`) — медали позиций 1/2/3 (`getMedalColorClass()`),
      единственное место, где для медалей 1/2/3 используются три разных цвета
      (раньше все три места красились одинаково — исправленный баг).
-   - Классы машин — фиксированная палитра на базе `--chart-1..6`:
-     Hypercar/Hyper → chart-1 (красно-оранжевый), LMP2 → chart-4 (голубой),
-     LMP3 → chart-5 (фиолетовый), GTE → chart-3 (бирюзовый), GT3 → chart-2
-     (жёлто-оранжевый), GT4 → chart-6. Неизвестный класс — нейтральный
-     `bg-muted/40 text-muted-foreground`.
+   - Классы машин — унифицировано по стандарту FIA WEC (фиксированная
+     Tailwind-палитра, не `--chart-*` токены): **Hypercar** — `red-500`,
+     **LMP2** — `blue-500`, **LMGT3** — `green-500`, **LMP3** (вне
+     основного чемпионата WEC) — `yellow-500`. Алиасы и устаревшие имена
+     сырого `car_class` сводятся к этим четырём через
+     `normalizeCarClass()`: `Hyper`/`LMH` → Hypercar; `GTE` (прежнее имя
+     до переименования FIA) и `GT3` (в т.ч. фолбэк парсера для пустого
+     `car_class`) → LMGT3; серийные варианты с вкладки Events (`WEC LMP2`,
+     `ELMS LMP2`) → LMP2 по подстроке. И цвет, и подпись бейджа берутся из
+     канонического класса — `GT3`/`GTE`/`WEC LMP2` отображаются как
+     `LMGT3`/`LMGT3`/`LMP2`, а не сырой строкой. Неизвестный класс (`GT4`
+     и т.п., намеренно не входит в схему) — нейтральный
+     `bg-muted/40 text-muted-foreground`, подпись — как есть, без
+     переименования.
 4. Скругления: `--radius-lg` = 9px (карточки, кнопки), `--radius-md` = 6px
    (инпуты, мелкие бейджи-круги компаунда шин), `--radius-sm` = 3px.
 5. Интерактивная «elevate»-система (`.hover-elevate`/`.active-elevate-2`,
@@ -926,6 +945,7 @@ drizzle-zod). Полное описание колонок — `docs/database-sc
 | `StatTile` | `StatTile.tsx` | мини-плитка `min-w-[110px]`, `rounded-lg border bg-card`, `px-3.5 py-2.5`; подпись `text-[10px] uppercase text-muted-foreground`, значение `font-data text-xs font-semibold tabular-nums truncate`; варианты цвета значения — `green`/`purple`/`red` |
 | `ActivityTile` | `ActivityTile.tsx` | плитка типа сессии с залитым цветным фоном (`bg-{color}-500/10`), иконка + подпись `text-xs font-semibold`, счётчик `font-data text-2xl font-bold tabular-nums`, суммарное время `font-data text-[11px] tabular-nums opacity-80` |
 | `SessionTypeBadge` | `SessionTypeBadge.tsx` | бейдж **фиксированной ширины `w-[124px]`** (под самое длинное слово «Квалификация») — гарантирует одинаковый визуальный размер плашки практики/квалификации/гонки везде; иконка (гантель/секундомер/кубок) + текст, цвет из `SESSION_TYPE_BADGE` |
+| `CarClassBadge` | `CarClassBadge.tsx` | единственное место, формирующее бейдж класса машины — цвет (`getClassBadgeClass()`) и подпись (`getClassDisplayLabel()`) берутся из канонического класса, а не сырого `car_class`; используется в Sessions, Tracks, TrackDetail, Overview, Leaderboards, DriverProfile, `SessionResultsTable`, `SessionDriverDetailCard`. Вкладка Events не использует компонент (свой markup чипов, а не `Badge`), но красит через ту же `getClassBadgeClass()` и приводит подпись через `getClassDisplayLabel()` — единая цветовая/текстовая схема, просто другая обёртка |
 | `DriverName` | `DriverName.tsx` | `inline-flex items-center gap-1.5`; иконка 13px — `User` зелёный (`text-green-500`) для реального игрока, `Bot` жёлтый (`text-amber-400`) для ИИ; само имя — обычный цвет текста, только иконка кодирует тип |
 | `RankBadge` (Leaderboards) | локальный | квадрат `h-7 w-7 rounded-md`, `font-data text-sm font-bold tabular-nums`; 1 место — `bg-chart-2/20 text-chart-2` (жёлтый), 2 место — `bg-muted-foreground/15`, 3 место — `bg-chart-1/20 text-chart-1`; места 1-3 показывают иконку медали (15px) вместо цифры |
 | Позиционный квадрат (`SessionResultsRow`, `SessionDriverDetailCard`) | локальный | `h-7 w-7 rounded-md bg-muted/50`, `font-data text-sm font-bold tabular-nums`; топ-3 — иконка `Medal` (14px) цвета `getMedalColorClass()`, иначе — число |
@@ -949,7 +969,7 @@ hover:bg-muted/40`.
 | --- | --- | --- | --- | --- |
 | 1 | Пилот | left | `DriverName` (иконка + имя), ссылка на `/drivers/:id` | `font-sans`, `hover:underline` |
 | 2 | Трасса | left | иконка `MapPin` (13px, muted) + название трассы | `font-sans` |
-| 3 | Класс | left | `Badge outline`, цвет по `getClassBadgeClass()` | `text-xs` |
+| 3 | Класс | left | `CarClassBadge` | `text-xs` |
 | 4 | Время | right | лучший круг, `formatLap()` | `font-data font-bold tabular-nums` |
 
 Ниже — отдельный не-табличный список «Последние сессии» (5 строк): CSS
@@ -975,7 +995,7 @@ CSS `grid` (не `<table>`), с явной ARIA-разметкой `role="table"
 | 2 | 110px | Тип гонки | left | `Badge outline` «Соло»/«Команда» + иконка `User`/`Users` (11px), `text-[11px]` |
 | 3 | `minmax(160px,1fr)` | Трек | left | название трассы, `truncate font-medium` |
 | 4 | 140px | Конфигурация | left | `course`, `text-xs text-muted-foreground`, «—» если совпадает с названием трассы |
-| 5 | 170px | Классы | left | несколько `Badge` (10px текст, `px-1.5 py-0`), по одному на каждый класс, участвовавший в сессии, в порядке `CLASS_ORDER` |
+| 5 | 170px | Классы | left | несколько `CarClassBadge` (10px текст, `px-1.5 py-0`), по одному на каждый **канонический** класс, участвовавший в сессии — дедуплицировано по канонической метке (`getClassDisplayLabel`), не по сырому `car_class` (иначе GT3+GTE дали бы два одинаковых бейджа «LMGT3»), в порядке `compareCarClass()` |
 | 6 | 140px | Лучший круг | right | `formatLap()`, `font-data tabular-nums text-sm text-muted-foreground` |
 | 7 | 80px | Кругов | right | целое число, `font-data tabular-nums text-sm` |
 | 8 | 110px | Дата | right | две строки: дата (`text-sm`) + время начала сессии `HH:MM` мельче (`text-xs text-muted-foreground/70`) |
@@ -1001,7 +1021,7 @@ ring-primary/40`, иначе `hover:bg-muted/40`.
 | 1 | Поз. | left, `w-12` | всегда | позиционный квадрат 7×7, топ-3 — медаль | `font-data font-bold tabular-nums` |
 | 2 | Пилот | left | всегда | `DriverName`; для командной машины — бейдж `Users N` вместо имени | `font-medium` |
 | 3 | Команда | left | ≥ `sm` | название команды, `truncate` | `text-[11px] text-muted-foreground` |
-| 4 | Класс | left | всегда | `Badge` цвета класса | `text-xs` |
+| 4 | Класс | left | всегда | `CarClassBadge` | `text-xs` |
 | 5 | Авто | left | ≥ `sm` | модель + `#номер` | `text-[11px] text-muted-foreground` |
 | 6 | Статус | left | всегда | `Badge` статуса финиша (если есть) | `text-xs text-muted-foreground` |
 | 7 | Кругов | right | всегда | число кругов | `font-data tabular-nums` |
@@ -1047,8 +1067,13 @@ ring-primary/40`, иначе `hover:bg-muted/40`.
 
 Одна `Card` на трассу+конфигурацию (полноширинная, вертикальный стек),
 внутри — заголовок класса (цветная левая рамка `border-l-4` по
-`getClassAccentClass()`, `Badge` класса) и `<table>` на каждый класс.
-Заголовок таблицы: `bg-muted/20 text-[11px] uppercase tracking-wider`.
+`getClassAccentClass()`, `CarClassBadge`) и `<table>` на каждый
+**канонический** класс. Группировка (какие круги попадают в одну таблицу)
+и фильтр по классу работают по канонической метке
+(`getClassDisplayLabel`), а не по сырому `car_class` — иначе GT3/GTE/LMGT3
+на одной трассе дали бы три раздела подряд с одинаковым заголовком
+«LMGT3» вместо одной таблицы с общим зачётом. Заголовок таблицы:
+`bg-muted/20 text-[11px] uppercase tracking-wider`.
 
 | # | Колонка | Выравнивание | Брейкпоинт | Содержимое | Стиль |
 | --- | --- | --- | --- | --- | --- |
@@ -1076,8 +1101,9 @@ pt-2`, три ячейки:
 | Сессий | `Layers` (10px) | число сессий на трассе | `text-sm font-semibold` |
 | Кругов | `Timer` (10px) | суммарное число кругов | `text-sm font-semibold` |
 
-Над сеткой — бейджи классов машин, участвовавших на трассе (те же стили,
-что и в Sessions/Leaderboards).
+Над сеткой — `CarClassBadge` по каждому **каноническому** классу машин,
+участвовавших на трассе (те же стили, что и в Sessions/Leaderboards),
+дедуплицировано по канонической метке так же, как в Sessions.
 
 #### 11.4.8 Track Detail — «Рейтинг по трассе»
 
@@ -1093,7 +1119,7 @@ pt-2`, три ячейки:
 #### 11.4.9 Профиль пилота — три таблицы + список сессий
 
 1. **Личные рекорды по трассам** (`<table>`): Трасса+конфигурация (left,
-   иконка `MapPin`) → Класс (`Badge`) → Круг (right, `font-data
+   иконка `MapPin`) → Класс (`CarClassBadge`) → Круг (right, `font-data
    tabular-nums`, `font-bold text-primary` если это личный рекорд равен
    абсолютному) → Отставание от рекорда (right, `formatDelta()` либо бейдж
    «Рекорд трассы» если сам держит) → Дата (right, скрыта `< sm`).
@@ -1101,7 +1127,7 @@ pt-2`, три ячейки:
    `w-[Npx] shrink-0` колонками (мин. ширина строки 760px, горизонтальный
    скролл на мобильном): Тип (`SessionTypeBadge`, 110px) → Дата (130px) →
    Трасса + при наличии диапазон стинта строкой ниже (`flex-1 min-w-0`) →
-   Класс (`Badge`, 70px) → Позиция в классе (70px, right, медаль топ-3) →
+   Класс (`CarClassBadge`, 70px) → Позиция в классе (70px, right, медаль топ-3) →
    Лучший круг (90px, right, скрыт `< md`) → Статус (70px, right, скрыт
    `< lg`) → шеврон.
 3. **Инциденты** (`<table>`): Дата → Трасса → Роль (`Badge` красный
