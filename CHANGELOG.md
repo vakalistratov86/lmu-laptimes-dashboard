@@ -12,6 +12,16 @@
 
 ---
 
+## [1.2.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.1.2...v1.2.0) (2026-07-29)
+
+### Added
+
+* **classStyles:** унифицировать бейджи классов авто по стандарту FIA WEC ([745fc1e](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/745fc1e34d98c16cc6a7336130b79de88a0b9b29))
+
+### Docs
+
+* закрепить в CLAUDE.md обязательное форматирование Prettier перед коммитом ([d8f4050](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/d8f405081d8e1ae4ecc86bb7a9e7fb960ebfce9b))
+
 ## [1.1.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.1.1...v1.1.2) (2026-07-29)
 
 ### Fixed
