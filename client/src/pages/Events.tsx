@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Clock, Flag, RefreshCw, ExternalLink, Star, AlertCircle, AlertTriangle, Trophy, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TrackMap, hasTrackMap } from "@/components/TrackMap";
-import { getClassBadgeClass } from "@/lib/classStyles";
+import { getClassBadgeClass, getClassDisplayLabel } from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -237,7 +237,7 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
           <Clock size={10} /> {ev.duration}
           {t("events.hoursSuffix")}
         </span>
-        {ev.classes.map((cls) => (
+        {Array.from(new Set(ev.classes.map(getClassDisplayLabel))).map((cls) => (
           <span
             key={cls}
             className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", getClassBadgeClass(cls))}
@@ -277,7 +277,7 @@ function DailyRaceCard({ race }: { race: DailyRace }) {
         <span className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
           <Clock size={10} /> {race.durationMinutes} {t("events.minSuffix")}
         </span>
-        {race.classes.map((cls) => (
+        {Array.from(new Set(race.classes.map(getClassDisplayLabel))).map((cls) => (
           <span
             key={cls}
             className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", getClassBadgeClass(cls))}
