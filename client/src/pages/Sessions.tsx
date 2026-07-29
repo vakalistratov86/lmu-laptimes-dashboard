@@ -271,7 +271,7 @@ export default function Sessions() {
           Та же плитка ActivityTile, что и на Обзоре. */}
       {hasSessions && (
         <Card className="p-4">
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
             <ActivityTile
               category="practice"
               label={t("sessionType.practice")}
