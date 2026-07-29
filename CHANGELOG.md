@@ -12,6 +12,16 @@
 
 ---
 
+## [1.2.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.2.0...v1.2.1) (2026-07-29)
+
+### Changed
+
+* **classStyles:** вынести бейдж класса машины в один компонент CarClassBadge ([8760084](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/8760084c84e40a02738a188b72f00049d436806c))
+
+### Fixed
+
+* **classStyles:** унифицировать и текст бейджей классов, не только цвет ([5e06b48](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/5e06b4831c298386677e749d769549c66ef11644))
+
 ## [1.2.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.1.2...v1.2.0) (2026-07-29)
 
 ### Added
