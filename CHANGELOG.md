@@ -12,6 +12,12 @@
 
 ---
 
+## [1.2.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.2.1...v1.2.2) (2026-07-29)
+
+### Fixed
+
+* **events:** унифицировать текст LMP2-бейджей на Events, как и везде ([653f25b](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/653f25b1dbb3a5a96f6aafec2f5ca39d9df5f02d))
+
 ## [1.2.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.2.0...v1.2.1) (2026-07-29)
 
 ### Changed
