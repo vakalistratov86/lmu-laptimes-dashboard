@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Clock, Flag, RefreshCw, ExternalLink, Star, AlertCircle, AlertTriangle, Trophy, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TrackMap, hasTrackMap } from "@/components/TrackMap";
+import { getClassBadgeClass } from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -71,16 +72,6 @@ const DAILY_RACES_STATIC: DailyRace[] = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// Та же адаптивная схема (bg .../15 + dark:text-...-400), что и в classStyles.ts —
-// одинаково хорошо читается в тёмной и светлой теме.
-const CLASS_COLORS: Record<string, string> = {
-  Hypercar: "bg-red-500/15    text-red-600    dark:text-red-400    border-red-500/30",
-  "WEC LMP2": "bg-blue-500/15   text-blue-600   dark:text-blue-400   border-blue-500/30",
-  "ELMS LMP2": "bg-cyan-500/15   text-cyan-600   dark:text-cyan-400   border-cyan-500/30",
-  LMP3: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
-  LMGT3: "bg-green-500/15  text-green-600  dark:text-green-400  border-green-500/30",
-};
-
 function capitalize(s: string): string {
   return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
 }
@@ -98,10 +89,6 @@ function resolveTrackMapName(raw: string): string | null {
   const alias = TRACK_MAP_ALIASES[raw];
   if (alias && hasTrackMap(alias)) return alias;
   return null;
-}
-
-function classColor(cls: string): string {
-  return CLASS_COLORS[cls] ?? "bg-muted/40 text-muted-foreground border-border";
 }
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
@@ -251,7 +238,10 @@ function EventCard({ ev }: { ev: SpecialEvent }) {
           {t("events.hoursSuffix")}
         </span>
         {ev.classes.map((cls) => (
-          <span key={cls} className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", classColor(cls))}>
+          <span
+            key={cls}
+            className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", getClassBadgeClass(cls))}
+          >
             {cls}
           </span>
         ))}
@@ -288,7 +278,10 @@ function DailyRaceCard({ race }: { race: DailyRace }) {
           <Clock size={10} /> {race.durationMinutes} {t("events.minSuffix")}
         </span>
         {race.classes.map((cls) => (
-          <span key={cls} className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", classColor(cls))}>
+          <span
+            key={cls}
+            className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", getClassBadgeClass(cls))}
+          >
             {cls}
           </span>
         ))}

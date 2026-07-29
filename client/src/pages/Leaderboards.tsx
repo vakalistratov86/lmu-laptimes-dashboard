@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trophy, Medal, Upload } from "lucide-react";
-import { CLASS_ORDER, getClassBadgeClass, getClassAccentClass } from "@/lib/classStyles";
+import { compareCarClass, getClassBadgeClass, getClassAccentClass } from "@/lib/classStyles";
 import { DriverName } from "@/components/DriverName";
 import { DriverFilterBar } from "@/components/DriverFilterBar";
 import { useLanguage } from "@/lib/i18n";
@@ -73,14 +73,7 @@ function buildBoards(laps: LapRow[], maxPerClass: number): TrackBoard[] {
         if (!cur || l.lapMs < cur.lapMs) classMap.set(l.driverId, l);
       }
 
-      const sortedClasses = Array.from(byClass.keys()).sort((a, b) => {
-        const ai = CLASS_ORDER.indexOf(a as (typeof CLASS_ORDER)[number]);
-        const bi = CLASS_ORDER.indexOf(b as (typeof CLASS_ORDER)[number]);
-        if (ai === -1 && bi === -1) return a.localeCompare(b);
-        if (ai === -1) return 1;
-        if (bi === -1) return -1;
-        return ai - bi;
-      });
+      const sortedClasses = Array.from(byClass.keys()).sort(compareCarClass);
 
       const classes: ClassBoard[] = sortedClasses.map((carClass) => {
         const rows = Array.from(byClass.get(carClass)!.values())
@@ -132,14 +125,7 @@ export default function Leaderboards() {
   const availableClasses = useMemo(() => {
     if (!laps) return [];
     const set = new Set<string>(laps.map((l: LapRow) => l.carClass).filter(Boolean));
-    return Array.from(set).sort((a, b) => {
-      const ai = CLASS_ORDER.indexOf(a as (typeof CLASS_ORDER)[number]);
-      const bi = CLASS_ORDER.indexOf(b as (typeof CLASS_ORDER)[number]);
-      if (ai === -1 && bi === -1) return a.localeCompare(b);
-      if (ai === -1) return 1;
-      if (bi === -1) return -1;
-      return ai - bi;
-    });
+    return Array.from(set).sort(compareCarClass);
   }, [laps]);
 
   const availableCourses = useMemo(() => {
