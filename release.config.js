@@ -30,6 +30,19 @@ const changelogTitle = `# Changelog
 const COMMIT_HASH_LENGTH = 7;
 
 function transform(commit, context) {
+  // Пресет "angular" (см. комментарий выше — почему он взят за основу) рендерит
+  // заголовок версии как `#` (H1) для minor/major-релизов и только `##` (H2) для
+  // patch (node_modules/conventional-changelog-angular/src/templates.js:
+  // headerPartial = `{{#if isPatch}}##{{else}}#{{/if}} ...`). Проект хочет
+  // единообразный H2 для всех версий CHANGELOG.md (как оформлены все прошлые
+  // релизы) — до сих пор это не проявлялось, т.к. все релизы после введения
+  // semantic-release были patch (только fix:-коммиты). context — тот же
+  // объект, что используется дальше при рендере заголовка (conventional-
+  // changelog-writer/dist/context.js: `templateContext.isPatch =
+  // templateContext.isPatch || semver.patch(...) !== 0`, т.е. заранее
+  // выставленный true остаётся true независимо от типа релиза).
+  context.isPatch = true;
+
   let discard = true;
   const notes = commit.notes.map((note) => {
     discard = false;
