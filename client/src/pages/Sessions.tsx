@@ -11,7 +11,7 @@ import {
   normalizeSessionCategory,
   getSessionTypeBadgeClass,
   SESSION_TYPE_ORDER,
-  CLASS_ORDER,
+  compareCarClass,
   getClassBadgeClass,
   type SessionCategory,
 } from "@/lib/classStyles";
@@ -86,15 +86,10 @@ function getBestLapForSession(session: SessionItem): number | null {
   }, null);
 }
 
-/** Уникальные классы машин, участвовавшие в сессии, в порядке CLASS_ORDER. */
+/** Уникальные классы машин, участвовавшие в сессии, в порядке compareCarClass. */
 function getSessionClasses(session: SessionItem): string[] {
   const present = new Set(session.results.map((r) => r.carClass).filter((c): c is string => !!c));
-  const ordered = CLASS_ORDER.filter((c) => present.has(c));
-  // Классы вне известного порядка (на всякий случай) — в конец, по алфавиту.
-  const rest = Array.from(present)
-    .filter((c) => !(CLASS_ORDER as readonly string[]).includes(c))
-    .sort();
-  return [...ordered, ...rest];
+  return Array.from(present).sort(compareCarClass);
 }
 
 type SessionsSummary = Record<SessionCategory, { count: number; minutes: number }>;

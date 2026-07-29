@@ -11,38 +11,80 @@ export function getMedalColorClass(position: number): string {
   return MEDAL_COLOR[position] ?? "text-chart-2";
 }
 
-// "Hyper" — реальные импортированные данные сокращают "Hypercar" до "Hyper",
-// поэтому это отдельный ключ (с теми же цветами), а не опечатка.
-export const CLASS_ORDER = ["Hypercar", "Hyper", "LMP2", "LMP3", "GTE", "GT3", "GT4"] as const;
+// ─── Car class badges (унифицировано под FIA WEC) ──────────────────────────────
+// Официальная цветовая маркировка чемпионата: Hypercar — красный, LMP2 — синий,
+// LMGT3 — зелёный. LMP3 вне основного чемпионата WEC (кастомные/сторонние серии
+// в LMU) — жёлтый, чтобы не путать с тройкой основных классов. Единый источник
+// цвета для всего проекта, включая вкладку Events (там раньше была своя копия
+// схемы с другими цветами и другим набором меток классов).
+export type CanonicalCarClass = "Hypercar" | "LMP2" | "LMP3" | "LMGT3";
 
-export const CLASS_BADGE: Record<string, string> = {
-  Hypercar: "bg-chart-1/15 text-chart-1 border-chart-1/30",
-  Hyper: "bg-chart-1/15 text-chart-1 border-chart-1/30",
-  LMP2: "bg-chart-4/15 text-chart-4 border-chart-4/30",
-  LMP3: "bg-chart-5/15 text-chart-5 border-chart-5/30",
-  GTE: "bg-chart-3/15 text-chart-3 border-chart-3/30",
-  GT3: "bg-chart-2/15 text-chart-2 border-chart-2/30",
-  GT4: "bg-chart-6/15 text-chart-6 border-chart-6/30",
+export const CANONICAL_CLASS_ORDER: readonly CanonicalCarClass[] = ["Hypercar", "LMP2", "LMP3", "LMGT3"];
+
+// Алиасы сырых значений car_class (из лога игры и с вкладки Events, напр. "WEC LMP2",
+// "ELMS LMP2") → канонический класс. GTE — прежнее имя LMGT3 до переименования FIA,
+// GT3 — синоним того же GT-класса (в т.ч. фолбэк парсера для нераспознанного
+// car_class, см. server/importWorker.ts normalizeClass) — маппится туда же.
+// GT4 (кастомные лиги вне чемпионата) сознательно не входит в список: получает
+// нейтральный fallback-бейдж, а не отдельный цвет.
+const CLASS_ALIASES: Record<string, CanonicalCarClass> = {
+  hypercar: "Hypercar",
+  hyper: "Hypercar",
+  lmh: "Hypercar",
+  lmp2: "LMP2",
+  lmp3: "LMP3",
+  lmgt3: "LMGT3",
+  gte: "LMGT3",
+  gt3: "LMGT3",
 };
 
-export const CLASS_ACCENT: Record<string, string> = {
-  Hypercar: "border-chart-1",
-  Hyper: "border-chart-1",
-  LMP2: "border-chart-4",
-  LMP3: "border-chart-5",
-  GTE: "border-chart-3",
-  GT3: "border-chart-2",
-  GT4: "border-chart-6",
-};
-
-export function getClassBadgeClass(carClass?: string): string {
-  return carClass
-    ? (CLASS_BADGE[carClass] ?? "bg-muted/40 text-muted-foreground border-border")
-    : "bg-muted/40 text-muted-foreground border-border";
+/** Сводит сырую строку car_class (в т.ч. "WEC LMP2", "ELMS LMP2", "GTE"…) к одному из 4 канонических классов WEC. */
+export function normalizeCarClass(carClass?: string | null): CanonicalCarClass | null {
+  const key = (carClass ?? "").trim().toLowerCase();
+  if (!key) return null;
+  if (CLASS_ALIASES[key]) return CLASS_ALIASES[key];
+  for (const [alias, canonical] of Object.entries(CLASS_ALIASES)) {
+    if (key.includes(alias)) return canonical;
+  }
+  return null;
 }
 
-export function getClassAccentClass(carClass?: string): string {
-  return carClass ? (CLASS_ACCENT[carClass] ?? "border-border") : "border-border";
+/** Ранг для сортировки: канонический класс по CANONICAL_CLASS_ORDER, нераспознанный — в конец. */
+export function getClassSortRank(carClass?: string | null): number {
+  const canonical = normalizeCarClass(carClass);
+  return canonical ? CANONICAL_CLASS_ORDER.indexOf(canonical) : CANONICAL_CLASS_ORDER.length;
+}
+
+/** Сравнивает сырые car_class-строки: сначала по канонической категории, затем по алфавиту. */
+export function compareCarClass(a: string, b: string): number {
+  const diff = getClassSortRank(a) - getClassSortRank(b);
+  return diff !== 0 ? diff : a.localeCompare(b);
+}
+
+export const CLASS_BADGE: Record<CanonicalCarClass, string> = {
+  Hypercar: "bg-red-500/15    text-red-600    dark:text-red-400    border-red-500/30",
+  LMP2: "bg-blue-500/15   text-blue-600   dark:text-blue-400   border-blue-500/30",
+  LMP3: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30",
+  LMGT3: "bg-green-500/15  text-green-600  dark:text-green-400  border-green-500/30",
+};
+
+export const CLASS_ACCENT: Record<CanonicalCarClass, string> = {
+  Hypercar: "border-red-500",
+  LMP2: "border-blue-500",
+  LMP3: "border-yellow-500",
+  LMGT3: "border-green-500",
+};
+
+const CLASS_BADGE_FALLBACK = "bg-muted/40 text-muted-foreground border-border";
+
+export function getClassBadgeClass(carClass?: string | null): string {
+  const canonical = normalizeCarClass(carClass);
+  return canonical ? CLASS_BADGE[canonical] : CLASS_BADGE_FALLBACK;
+}
+
+export function getClassAccentClass(carClass?: string | null): string {
+  const canonical = normalizeCarClass(carClass);
+  return canonical ? CLASS_ACCENT[canonical] : "border-border";
 }
 
 // ─── Session-type badge styles ─────────────────────────────────────────────────
