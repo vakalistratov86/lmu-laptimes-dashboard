@@ -7,7 +7,7 @@ import { Link } from "wouter";
 import { MapPin, RotateCw, Ruler, ArrowRight, CalendarClock, Timer, Layers, Trophy } from "lucide-react";
 import { TrackMap, hasTrackMap, resolveTrackMapName } from "@/components/TrackMap";
 import { useMemo } from "react";
-import { getClassBadgeClass } from "@/lib/classStyles";
+import { getClassBadgeClass, getClassDisplayLabel } from "@/lib/classStyles";
 import { useLanguage, translateCountry } from "@/lib/i18n";
 
 function formatDate(iso: string, intlLocale: string): string {
@@ -61,7 +61,8 @@ export default function Tracks() {
         s.bestMs = l.lapMs;
         s.bestDriver = l.driverName;
       }
-      if (l.carClass) s.carClasses.add(l.carClass);
+      // Дедуплицируем по канонической метке — иначе GT3/GTE дали бы два бейджа "LMGT3".
+      if (l.carClass) s.carClasses.add(getClassDisplayLabel(l.carClass));
     }
 
     for (const sess of sessions ?? []) {

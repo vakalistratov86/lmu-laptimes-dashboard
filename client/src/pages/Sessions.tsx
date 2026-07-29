@@ -13,6 +13,7 @@ import {
   SESSION_TYPE_ORDER,
   compareCarClass,
   getClassBadgeClass,
+  getClassDisplayLabel,
   type SessionCategory,
 } from "@/lib/classStyles";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
@@ -86,10 +87,16 @@ function getBestLapForSession(session: SessionItem): number | null {
   }, null);
 }
 
-/** Уникальные классы машин, участвовавшие в сессии, в порядке compareCarClass. */
+/**
+ * Уникальные классы машин, участвовавшие в сессии, в порядке compareCarClass.
+ * Дедуплицируем по канонической метке (getClassDisplayLabel), а не по сырому
+ * car_class — иначе GT3 и GTE в одной сессии дали бы два визуально одинаковых
+ * бейджа "LMGT3" вместо одного.
+ */
 function getSessionClasses(session: SessionItem): string[] {
-  const present = new Set(session.results.map((r) => r.carClass).filter((c): c is string => !!c));
-  return Array.from(present).sort(compareCarClass);
+  const present = session.results.map((r) => r.carClass).filter((c): c is string => !!c);
+  const labels = new Set(present.map(getClassDisplayLabel));
+  return Array.from(labels).sort(compareCarClass);
 }
 
 type SessionsSummary = Record<SessionCategory, { count: number; minutes: number }>;

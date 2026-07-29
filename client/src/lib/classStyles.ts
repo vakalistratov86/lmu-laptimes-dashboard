@@ -87,6 +87,18 @@ export function getClassAccentClass(carClass?: string | null): string {
   return canonical ? CLASS_ACCENT[canonical] : "border-border";
 }
 
+/**
+ * Текст бейджа: алиасы и устаревшие имена (Hyper, LMH, GTE, GT3) показываются под
+ * канонической меткой класса (Hypercar / LMGT3…), а не сырым значением из БД —
+ * иначе цвет унифицирован, а подпись всё ещё выглядит как отдельный класс.
+ * Нераспознанный класс (GT4 и т.п.) остаётся как есть — переименовывать в
+ * канонический нечего, это не алиас, а просто другой класс.
+ */
+export function getClassDisplayLabel(carClass?: string | null): string {
+  const canonical = normalizeCarClass(carClass);
+  return canonical ?? carClass ?? "";
+}
+
 // ─── Session-type badge styles ─────────────────────────────────────────────────
 //
 // Единая (единственная) точка нормализации типа сессии для всего фронтенда.

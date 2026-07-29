@@ -1,6 +1,11 @@
 import { useBestLaps, useTracks, useDrivers, useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
-import { normalizeSessionCategory, getClassBadgeClass, type SessionCategory } from "@/lib/classStyles";
+import {
+  normalizeSessionCategory,
+  getClassBadgeClass,
+  getClassDisplayLabel,
+  type SessionCategory,
+} from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -261,7 +266,7 @@ export default function Overview() {
                 {bestLap.trackName}
               </span>
               <Badge variant="outline" className={`text-[11px] ${getClassBadgeClass(bestLap.carClass)}`}>
-                {bestLap.carClass}
+                {getClassDisplayLabel(bestLap.carClass)}
               </Badge>
             </div>
           </div>
@@ -387,7 +392,7 @@ export default function Overview() {
                   </td>
                   <td className="px-4 py-2.5">
                     <Badge variant="outline" className={getClassBadgeClass(row.carClass)}>
-                      {row.carClass}
+                      {getClassDisplayLabel(row.carClass)}
                     </Badge>
                   </td>
                   <td className="px-4 py-2.5 text-right font-data font-bold tabular-nums">{formatLap(row.ms)}</td>

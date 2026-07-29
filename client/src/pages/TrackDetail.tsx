@@ -9,7 +9,7 @@ import { TrackMap, hasTrackMap, resolveTrackMapName } from "@/components/TrackMa
 import { DriverName } from "@/components/DriverName";
 import { useMemo } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from "recharts";
-import { getClassBadgeClass } from "@/lib/classStyles";
+import { getClassBadgeClass, getClassDisplayLabel } from "@/lib/classStyles";
 import { useLanguage, translateCountry, type Locale } from "@/lib/i18n";
 
 const TRACK_FACTS: Record<Locale, Record<string, string>> = {
@@ -463,7 +463,7 @@ export default function TrackDetail() {
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge variant="outline" className={getClassBadgeClass(l.carClass)}>
-                        {l.carClass}
+                        {getClassDisplayLabel(l.carClass)}
                       </Badge>
                     </td>
                     <td

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link } from "wouter";
 import { useDrivers, useLaps, useBestLaps, useSessions, useDriverIncidents } from "@/lib/api";
 import { formatLap, formatDelta, countryFlag, normalizeCourse } from "@/lib/format";
-import { getClassBadgeClass, getMedalColorClass } from "@/lib/classStyles";
+import { getClassBadgeClass, getClassDisplayLabel, getMedalColorClass } from "@/lib/classStyles";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -361,7 +361,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                         </td>
                         <td className="px-4 py-2.5">
                           <Badge variant="outline" className={getClassBadgeClass(r.carClass)}>
-                            {r.carClass}
+                            {getClassDisplayLabel(r.carClass)}
                           </Badge>
                         </td>
                         <td
@@ -423,7 +423,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                     </div>
                     <div className="w-[70px] shrink-0">
                       <Badge variant="outline" className={`text-xs ${getClassBadgeClass(s.carClass)}`}>
-                        {s.carClass}
+                        {getClassDisplayLabel(s.carClass)}
                       </Badge>
                     </div>
                     <div className="w-[70px] shrink-0 text-right">
