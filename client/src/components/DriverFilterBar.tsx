@@ -88,7 +88,11 @@ export function DriverFilterBar({
               <ChevronsUpDown size={13} className="ml-2 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-64 p-0" align="start">
+          <PopoverContent
+            className="w-64 p-0"
+            align="start"
+            onOpenAutoFocus={(e) => e.preventDefault()}
+          >
             <Command>
               <CommandInput placeholder={t("driverFilter.searchPlaceholder")} className="h-8 text-xs" />
 
