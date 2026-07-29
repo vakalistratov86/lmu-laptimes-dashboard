@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "./queryClient";
 import type {
   Track,
@@ -216,6 +216,47 @@ export function useTelemetryLapSeries(id: number | undefined, lapNumber: number 
       const res = await apiRequest("GET", `/api/telemetry/sessions/${id}/laps/${lapNumber}/series`);
       return res.json();
     },
+  });
+}
+
+// ── Events (Special Events) ──────────────────────────────────────
+
+export interface SpecialEvent {
+  id: string;
+  weekOf: string;
+  dateIso: string;
+  duration: number;
+  track: string;
+  trackTba: boolean;
+  classes: string[];
+  isFeatured: boolean;
+  sourceUrl: string;
+  fetchedAt: string;
+}
+
+export interface EventsResponse {
+  events: SpecialEvent[];
+  fetchedAt: string;
+  sourceUrl: string;
+  source: "live" | "static";
+}
+
+export function useSpecialEvents() {
+  return useQuery<EventsResponse>({
+    queryKey: ["/api/special-events"],
+    staleTime: 1000 * 60 * 30,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useRefreshSpecialEvents() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/special-events/refresh");
+      return res.json() as Promise<EventsResponse>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/special-events"] }),
   });
 }
 
