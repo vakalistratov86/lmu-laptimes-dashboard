@@ -27,6 +27,7 @@
 
 - Формат: Conventional Commits (feat:, fix:, refactor:, chore:)
 - Один логический коммит — одна задача
+- Обязательное форматирование кода по Prettier перед коммитом (`npm run format`)
 
 ## Ссылки
 
