@@ -8,11 +8,11 @@
 ![Database](https://img.shields.io/badge/DB-PostgreSQL-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Deploy](https://img.shields.io/badge/autodeploy-✅_tested-brightgreen)
-[![Live Demo](https://img.shields.io/badge/demo-online-brightgreen)](http://82.202.138.32)
+[![Live Instance](https://img.shields.io/badge/live-online-brightgreen)](http://82.202.138.32)
 
 Дашборд для мониторинга и анализа времён прохождения трасс в симуляторе **Le Mans Ultimate (LMU)**. Тёмный геймерский интерфейс в рейсинг-эстетике с поддержкой светлой темы. Данные импортируются из XML-логов rFactor2/LMU через встроенный парсер и сохраняются в PostgreSQL.
 
-🔗 **Демо:** <http://82.202.138.32>
+🔗 **Рабочий инстанс:** <http://82.202.138.32>
 
 ---
 
@@ -245,5 +245,3 @@ DATABASE_URL=postgres://lmu:lmu_password@localhost:5432/lmu_laptimes
 ---
 
 > ⚠️ **Примечание:** LMU не предоставляет публичный API для Daily Races, поэтому данные о текущей ротации добавлены статически. Рекомендую проверить актуальную ротацию на [lemansultimate.com](https://www.lemansultimate.com) и при необходимости обновить массив `DAILY_RACES_STATIC` в коде.
->
-> Демо‑данные носят иллюстративный характер и не связаны с официальной статистикой игры Le Mans Ultimate.
