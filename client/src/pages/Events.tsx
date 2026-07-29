@@ -1,32 +1,12 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Clock, Flag, RefreshCw, ExternalLink, Star, AlertCircle, AlertTriangle, Trophy, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TrackMap, hasTrackMap } from "@/components/TrackMap";
 import { getClassBadgeClass, getClassDisplayLabel } from "@/lib/classStyles";
 import { useLanguage } from "@/lib/i18n";
+import { useSpecialEvents, useRefreshSpecialEvents, type SpecialEvent } from "@/lib/api";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-
-interface SpecialEvent {
-  id: string;
-  weekOf: string;
-  dateIso: string;
-  duration: number;
-  track: string;
-  trackTba: boolean;
-  classes: string[];
-  isFeatured: boolean;
-  sourceUrl: string;
-  fetchedAt: string;
-}
-
-interface EventsResponse {
-  events: SpecialEvent[];
-  fetchedAt: string;
-  sourceUrl: string;
-  source: "live" | "static";
-}
 
 interface DailyRace {
   id: string;
@@ -297,21 +277,11 @@ type EventFilter = "all" | "upcoming" | "past";
 
 export default function Events() {
   const { t, tn, intlLocale } = useLanguage();
-  const queryClient = useQueryClient();
   const [mainTab, setMainTab] = useState<MainTab>("special");
   const [filter, setFilter] = useState<EventFilter>("upcoming");
 
-  const { data, isLoading, isError } = useQuery<EventsResponse>({
-    queryKey: ["special-events"],
-    queryFn: () => fetch("/api/special-events").then((r) => r.json()),
-    staleTime: 1000 * 60 * 30,
-    refetchOnWindowFocus: false,
-  });
-
-  const refresh = useMutation({
-    mutationFn: () => fetch("/api/special-events/refresh", { method: "POST" }).then((r) => r.json()),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["special-events"] }),
-  });
+  const { data, isLoading, isError } = useSpecialEvents();
+  const refresh = useRefreshSpecialEvents();
 
   const events = data?.events ?? [];
   const filtered =
