@@ -12,6 +12,13 @@
 
 ---
 
+## [1.1.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.1.0...v1.1.1) (2026-07-29)
+
+### Fixed
+
+* **activity-tile:** не давать плиткам активности сливаться на мобильных ([67916fc](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/67916fc49fd770c3ed72dc60e357d251dca233a3))
+* **driver-filter:** не давать выпадашке выбора пилота улетать за экран на мобильных ([369511c](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/369511c9cece7245091502e3a153cd2cfe04a5bc))
+
 ## [1.1.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.0.4...v1.1.0) (2026-07-29)
 
 ### Added
