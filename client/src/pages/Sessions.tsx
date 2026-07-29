@@ -12,11 +12,11 @@ import {
   getSessionTypeBadgeClass,
   SESSION_TYPE_ORDER,
   compareCarClass,
-  getClassBadgeClass,
   getClassDisplayLabel,
   type SessionCategory,
 } from "@/lib/classStyles";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
+import { CarClassBadge } from "@/components/CarClassBadge";
 import { ActivityTile } from "@/components/ActivityTile";
 import { useLanguage } from "@/lib/i18n";
 
@@ -476,15 +476,7 @@ export default function Sessions() {
                 {/* Classes */}
                 <div className="flex flex-wrap gap-1" role="cell">
                   {classes.length > 0 ? (
-                    classes.map((cls) => (
-                      <Badge
-                        key={cls}
-                        variant="outline"
-                        className={`px-1.5 py-0 text-[10px] ${getClassBadgeClass(cls)}`}
-                      >
-                        {cls}
-                      </Badge>
-                    ))
+                    classes.map((cls) => <CarClassBadge key={cls} carClass={cls} className="px-1.5 py-0 text-[10px]" />)
                   ) : (
                     <span className="text-sm text-muted-foreground">—</span>
                   )}

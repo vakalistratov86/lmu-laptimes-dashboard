@@ -3,13 +3,13 @@ import { Link } from "wouter";
 import { useBestLaps, useTracks } from "@/lib/api";
 import { formatLap, formatDelta, normalizeCourse } from "@/lib/format";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trophy, Medal, Upload } from "lucide-react";
-import { compareCarClass, getClassBadgeClass, getClassAccentClass, getClassDisplayLabel } from "@/lib/classStyles";
+import { compareCarClass, getClassAccentClass, getClassDisplayLabel } from "@/lib/classStyles";
 import { DriverName } from "@/components/DriverName";
 import { DriverFilterBar } from "@/components/DriverFilterBar";
+import { CarClassBadge } from "@/components/CarClassBadge";
 import { useLanguage } from "@/lib/i18n";
 
 type LapRow = {
@@ -271,9 +271,7 @@ export default function Leaderboards() {
                 <div
                   className={`flex items-center gap-2 border-l-4 bg-muted/30 px-4 py-1.5 ${getClassAccentClass(cls.carClass)}`}
                 >
-                  <Badge variant="outline" className={`text-[11px] ${getClassBadgeClass(cls.carClass)}`}>
-                    {getClassDisplayLabel(cls.carClass)}
-                  </Badge>
+                  <CarClassBadge carClass={cls.carClass} className="text-[11px]" />
                   <span className="ml-auto text-[11px] text-muted-foreground">{tn(cls.rows.length, "pilots")}</span>
                 </div>
 

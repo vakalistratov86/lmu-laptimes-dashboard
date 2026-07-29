@@ -1,13 +1,13 @@
 import { useBestLaps, useTracks, useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { MapPin, RotateCw, Ruler, ArrowRight, CalendarClock, Timer, Layers, Trophy } from "lucide-react";
 import { TrackMap, hasTrackMap, resolveTrackMapName } from "@/components/TrackMap";
+import { CarClassBadge } from "@/components/CarClassBadge";
 import { useMemo } from "react";
-import { getClassBadgeClass, getClassDisplayLabel } from "@/lib/classStyles";
+import { getClassDisplayLabel } from "@/lib/classStyles";
 import { useLanguage, translateCountry } from "@/lib/i18n";
 
 function formatDate(iso: string, intlLocale: string): string {
@@ -142,13 +142,7 @@ export default function Tracks() {
                     {st && st.carClasses.size > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-1">
                         {Array.from(st.carClasses).map((cls) => (
-                          <Badge
-                            key={cls}
-                            variant="outline"
-                            className={`px-1.5 py-0 text-[10px] ${getClassBadgeClass(cls)}`}
-                          >
-                            {cls}
-                          </Badge>
+                          <CarClassBadge key={cls} carClass={cls} className="px-1.5 py-0 text-[10px]" />
                         ))}
                       </div>
                     )}
