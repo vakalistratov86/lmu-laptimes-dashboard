@@ -42,8 +42,12 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
       </td>
 
       {/* Пилот — командная гонка со сменой пилота показывает здесь только
-          признак "несколько пилотов", а не состав (см. вкладку "Круги"). */}
-      <td className="px-4 py-2.5">
+          признак "несколько пилотов", а не состав (см. вкладку "Круги").
+          max-w ограничивает рост колонки от аномально длинных имён — без
+          него table-layout: auto давал колонке расти вплоть до переноса
+          имени на вторую строку внутри flex-строки (нет white-space: nowrap
+          без max-width, задающего границу для переноса/усечения). */}
+      <td className="max-w-[165px] px-4 py-2.5">
         <div className="flex items-center gap-2">
           {row.driverCount > 1 ? (
             <Badge variant="outline" className="gap-1 text-xs">
@@ -56,9 +60,11 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
         </div>
       </td>
 
-      {/* Команда */}
-      <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
-        <div className="truncate text-[11px]">{row.teamName ?? "—"}</div>
+      {/* Команда — max-w+truncate прямо на td (не на вложенном div без
+          ширины — иначе truncate не усекает ничего, т.к. не от чего
+          отталкиваться), как в Leaderboards.tsx. */}
+      <td className="hidden max-w-[128px] truncate px-4 py-2.5 text-[11px] text-muted-foreground sm:table-cell">
+        {row.teamName ?? "—"}
       </td>
 
       {/* Класс машины */}
@@ -71,17 +77,15 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
       </td>
 
       {/* Авто */}
-      <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
-        <div className="truncate text-[11px]">
-          {row.carModel}
-          {row.carNumber ? ` · #${row.carNumber}` : ""}
-        </div>
+      <td className="hidden max-w-[128px] truncate px-4 py-2.5 text-[11px] text-muted-foreground sm:table-cell">
+        {row.carModel}
+        {row.carNumber ? ` · #${row.carNumber}` : ""}
       </td>
 
       {/* Статус финиша */}
-      <td className="px-4 py-2.5">
+      <td className="max-w-[110px] px-4 py-2.5">
         {row.finishStatus ? (
-          <Badge variant="outline" className="text-xs text-muted-foreground">
+          <Badge variant="outline" className="max-w-full truncate text-xs text-muted-foreground">
             {row.finishStatus}
           </Badge>
         ) : null}
@@ -106,7 +110,9 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
       </td>
 
       {/* Время на треке */}
-      <td className="px-4 py-2.5 text-right font-data tabular-nums text-muted-foreground">{row.timeOnTrack}</td>
+      <td className="whitespace-nowrap px-4 py-2.5 text-right font-data tabular-nums text-muted-foreground">
+        {row.timeOnTrack}
+      </td>
     </tr>
   );
 }
@@ -131,11 +137,11 @@ export function SessionResultsTable({ rows, fastestLapTime, selectedCarKey, onSe
         <thead>
           <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
             <th className="px-4 py-2.5 w-12">{t("sessionDetail.colPos")}</th>
-            <th className="px-4 py-2.5">{t("sessionDetail.colDriver")}</th>
-            <th className="hidden px-4 py-2.5 sm:table-cell">{t("sessionDetail.colTeam")}</th>
+            <th className="max-w-[165px] px-4 py-2.5">{t("sessionDetail.colDriver")}</th>
+            <th className="hidden max-w-[128px] px-4 py-2.5 sm:table-cell">{t("sessionDetail.colTeam")}</th>
             <th className="px-4 py-2.5">{t("sessionDetail.colClass")}</th>
-            <th className="hidden px-4 py-2.5 sm:table-cell">{t("sessionDetail.colCar")}</th>
-            <th className="px-4 py-2.5">{t("sessionDetail.colStatus")}</th>
+            <th className="hidden max-w-[128px] px-4 py-2.5 sm:table-cell">{t("sessionDetail.colCar")}</th>
+            <th className="max-w-[110px] px-4 py-2.5">{t("sessionDetail.colStatus")}</th>
             <th className="px-4 py-2.5 text-right">{t("sessionDetail.colLaps")}</th>
             <th className="hidden px-4 py-2.5 text-right md:table-cell">{t("sessionDetail.colPit")}</th>
             <th className="px-4 py-2.5 text-right">{t("sessionDetail.bestLap")}</th>

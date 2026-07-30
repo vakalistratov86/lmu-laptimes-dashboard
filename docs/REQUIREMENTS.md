@@ -1017,16 +1017,26 @@ CSS `grid` (не `<table>`), с явной ARIA-разметкой `role="table"
 text-muted-foreground`, `text-left` по умолчанию (кроме числовых колонок).
 Строки: `px-4 py-2.5`, `border-b border-border/60`, кликабельны (выбор
 пилота/машины), выбранная строка — `bg-primary/15 ring-1 ring-inset
-ring-primary/40`, иначе `hover:bg-muted/40`.
+ring-primary/40`, иначе `hover:bg-muted/40`. Колонки с переменной длиной
+контента (Пилот/Команда/Авто/Статус) обязаны иметь `max-w-[Npx]` +
+`truncate` прямо на `<td>`/`<th>` (не на вложенном `<div>` без ширины —
+без собственной ширины `truncate` не усекает ничего, не от чего
+отталкиваться), иначе `table-layout: auto` даёт колонке расти вплоть до
+переноса длинного значения на вторую строку внутри её flex-разметки —
+ломает высоту строки и выравнивание с соседними ячейками. `DriverName`
+поддерживает усечение по умолчанию (`min-w-0` + внутренний `<span
+className="truncate">` вокруг имени) — этого достаточно, чтобы пилот с
+аномально длинным именем не разъезжался на две строки при использовании
+компонента в узкой колонке.
 
 | # | Колонка | Выравнивание | Брейкпоинт | Содержимое | Стиль |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Поз. | left, `w-12` | всегда | позиционный квадрат 7×7, топ-3 — медаль | `font-data font-bold tabular-nums` |
-| 2 | Пилот | left | всегда | `DriverName`; для командной машины — бейдж `Users N` вместо имени | `font-medium` |
-| 3 | Команда | left | ≥ `sm` | название команды, `truncate` | `text-[11px] text-muted-foreground` |
+| 2 | Пилот | left, `max-w-[165px]` | всегда | `DriverName` (усекается через `truncate`); для командной машины — бейдж `Users N` вместо имени | `font-medium` |
+| 3 | Команда | left, `max-w-[128px]` | ≥ `sm` | название команды, `truncate` | `text-[11px] text-muted-foreground` |
 | 4 | Класс | left | всегда | `CarClassBadge` | `text-xs` |
-| 5 | Авто | left | ≥ `sm` | модель + `#номер` | `text-[11px] text-muted-foreground` |
-| 6 | Статус | left | всегда | `Badge` статуса финиша (если есть) | `text-xs text-muted-foreground` |
+| 5 | Авто | left, `max-w-[128px]` | ≥ `sm` | модель + `#номер`, `truncate` | `text-[11px] text-muted-foreground` |
+| 6 | Статус | left, `max-w-[110px]` | всегда | `Badge` статуса финиша (если есть), `truncate` внутри бейджа | `text-xs text-muted-foreground` |
 | 7 | Кругов | right | всегда | число кругов | `font-data tabular-nums` |
 | 8 | Пит | right | ≥ `md` | число пит-стопов | `font-data tabular-nums` |
 | 9 | Лучший круг | right | всегда | `formatLap()`; **лидер сессии** — `font-bold text-green-500` | `font-data tabular-nums` |
