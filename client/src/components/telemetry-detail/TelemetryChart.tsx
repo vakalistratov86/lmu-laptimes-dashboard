@@ -1,32 +1,49 @@
 import { useEffect, useMemo, useState } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  ReferenceLine,
+} from "recharts";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import type { TelemetryLapPoint } from "@/lib/api";
+import { interpolateAtDistance, buildDeltaSeries, formatSignedDeltaMs } from "@/lib/telemetryReference";
 import { useLanguage } from "@/lib/i18n";
 
 interface TelemetryChartProps {
   points: TelemetryLapPoint[];
   onHoverIndexChange: (index: number | null) => void;
+  /** Эталонный круг (см. `TelemetryLapPicker`) — если задан, поверх скорости
+   * рисуется штриховая линия эталона, а под графиком — полоса отставания/
+   * выигрыша по дистанции круга. */
+  referencePoints?: TelemetryLapPoint[];
 }
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 20;
 const ONE_SECOND_TICKS_ZOOM = 10;
 
-type SeriesKey = "throttle" | "brake" | "speed";
+type SeriesKey = "throttle" | "brake" | "speed" | "reference";
 
 /** Секунды с сотыми, например 12.34. */
 function formatLapTime(sec: number): string {
   return sec.toFixed(2);
 }
 
-export function TelemetryChart({ points, onHoverIndexChange }: TelemetryChartProps) {
+export function TelemetryChart({ points, onHoverIndexChange, referencePoints }: TelemetryChartProps) {
   const { t } = useLanguage();
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [visible, setVisible] = useState<Record<SeriesKey, boolean>>({
     throttle: true,
     brake: true,
     speed: true,
+    reference: true,
   });
 
   // Новый круг открывается в обзорном масштабе.
@@ -37,24 +54,57 @@ export function TelemetryChart({ points, onHoverIndexChange }: TelemetryChartPro
   const seriesThrottle = t("telemetryPage.seriesThrottle");
   const seriesBrake = t("telemetryPage.seriesBrake");
   const seriesSpeed = t("telemetryPage.seriesSpeed");
+  const seriesReference = t("telemetryPage.seriesReference");
 
-  const legendItems: { key: SeriesKey; label: string; color: string }[] = [
+  const hasReference = !!referencePoints && referencePoints.length > 0;
+
+  const legendItems: { key: SeriesKey; label: string; color: string; dashed?: boolean }[] = [
     { key: "throttle", label: seriesThrottle, color: "#16a34a" },
     { key: "brake", label: seriesBrake, color: "#dc2626" },
     { key: "speed", label: seriesSpeed, color: "#2563eb" },
+    ...(hasReference ? [{ key: "reference" as const, label: seriesReference, color: "#71717a", dashed: true }] : []),
   ];
 
   // Время круга (с) с начала выбранного круга — первая точка принимается за 0.
+  // Эталон подтягивается на ТУ ЖЕ временную ось текущего круга: для каждой точки
+  // текущего круга берётся скорость эталона на ТОЙ ЖЕ дистанции (не в тот же
+  // момент времени — круги разной длительности), см. `interpolateAtDistance`.
   const data = useMemo(() => {
     const t0 = points[0]?.t ?? 0;
-    return points.map((p, i) => ({
-      idx: i,
-      lapTimeSec: (p.t ?? t0) - t0,
-      [seriesThrottle]: p.throttle,
-      [seriesBrake]: p.brake,
-      [seriesSpeed]: p.speedKph,
-    }));
-  }, [points, seriesThrottle, seriesBrake, seriesSpeed]);
+    return points.map((p, i) => {
+      const referenceAtDist =
+        hasReference && p.lapDist != null ? interpolateAtDistance(referencePoints!, p.lapDist) : null;
+      return {
+        idx: i,
+        lapTimeSec: (p.t ?? t0) - t0,
+        [seriesThrottle]: p.throttle,
+        [seriesBrake]: p.brake,
+        [seriesSpeed]: p.speedKph,
+        [seriesReference]: referenceAtDist?.speedKph ?? null,
+      };
+    });
+  }, [points, seriesThrottle, seriesBrake, seriesSpeed, seriesReference, hasReference, referencePoints]);
+
+  const deltaSeries = useMemo(
+    () => (hasReference ? buildDeltaSeries(points, referencePoints!) : []),
+    [points, referencePoints, hasReference],
+  );
+  const deltaData = useMemo(
+    () => deltaSeries.map((d) => ({ distM: Math.round(d.distM), deltaMs: d.deltaMs })),
+    [deltaSeries],
+  );
+  const finalDeltaMs = deltaSeries.length > 0 ? deltaSeries[deltaSeries.length - 1].deltaMs : null;
+  // Гладкий вертикальный градиент green->red, разделённый ровно на уровне y=0
+  // (доля "положительной" части домена) — так, независимо от того, СКОЛЬКО
+  // раз кривая пересекает ноль по X, заливка остаётся зелёной строго выше нуля
+  // и красной строго ниже, без ручной нарезки на сегменты по X.
+  const deltaGradientOffset = useMemo(() => {
+    if (deltaData.length === 0) return 0.5;
+    const max = Math.max(...deltaData.map((d) => d.deltaMs), 0);
+    const min = Math.min(...deltaData.map((d) => d.deltaMs), 0);
+    if (max === min) return 0.5;
+    return max / (max - min);
+  }, [deltaData]);
 
   const lapDurationSec = data.length > 0 ? data[data.length - 1].lapTimeSec : 0;
 
@@ -128,7 +178,9 @@ export function TelemetryChart({ points, onHoverIndexChange }: TelemetryChartPro
                 <YAxis yAxisId="speed" orientation="right" domain={[0, "dataMax"]} tick={{ fontSize: 11 }} width={44} />
                 <Tooltip
                   formatter={(value: number, name: string) => [
-                    name === seriesSpeed ? `${Math.round(value)} km/h` : `${Math.round(value)}%`,
+                    name === seriesSpeed || name === seriesReference
+                      ? `${Math.round(value)} km/h`
+                      : `${Math.round(value)}%`,
                     name,
                   ]}
                   labelFormatter={(label: number) => `${formatLapTime(label)} s`}
@@ -167,6 +219,20 @@ export function TelemetryChart({ points, onHoverIndexChange }: TelemetryChartPro
                   isAnimationActive={false}
                   hide={!visible.speed}
                 />
+                {hasReference && (
+                  <Line
+                    yAxisId="speed"
+                    type="monotone"
+                    dataKey={seriesReference}
+                    stroke="#71717a"
+                    strokeDasharray="4 3"
+                    dot={false}
+                    strokeWidth={1.5}
+                    connectNulls
+                    isAnimationActive={false}
+                    hide={!visible.reference}
+                  />
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -187,11 +253,83 @@ export function TelemetryChart({ points, onHoverIndexChange }: TelemetryChartPro
               className="h-3.5 w-3.5 rounded border-border"
               style={{ accentColor: item.color }}
             />
-            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: item.color }} />
+            {item.dashed ? (
+              <span
+                className="inline-block h-0 w-3 shrink-0 border-t-2 border-dashed"
+                style={{ borderColor: item.color }}
+              />
+            ) : (
+              <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: item.color }} />
+            )}
             <span className={visible[item.key] ? "text-card-foreground" : ""}>{item.label}</span>
           </label>
         ))}
       </div>
+
+      {hasReference && deltaData.length > 0 && (
+        <div className="mt-4 border-t border-border/60 pt-3">
+          <div className="mb-1 flex items-baseline justify-between text-xs text-muted-foreground">
+            <span>{t("telemetryPage.deltaChartTitle")}</span>
+            {finalDeltaMs != null && (
+              <span
+                className={
+                  "font-data font-semibold tabular-nums " +
+                  (finalDeltaMs > 0 ? "text-red-500" : finalDeltaMs < 0 ? "text-green-500" : "")
+                }
+              >
+                {t("telemetryPage.deltaAtFinish", { delta: formatSignedDeltaMs(finalDeltaMs) })}
+              </span>
+            )}
+          </div>
+          <ResponsiveContainer width="100%" height={70}>
+            <AreaChart data={deltaData} margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+              <defs>
+                <linearGradient id="telemetryDeltaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset={0} stopColor="#22c55e" stopOpacity={0.35} />
+                  <stop offset={deltaGradientOffset} stopColor="#22c55e" stopOpacity={0.35} />
+                  <stop offset={deltaGradientOffset} stopColor="#ef4444" stopOpacity={0.35} />
+                  <stop offset={1} stopColor="#ef4444" stopOpacity={0.35} />
+                </linearGradient>
+                <linearGradient id="telemetryDeltaStroke" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset={0} stopColor="#22c55e" />
+                  <stop offset={deltaGradientOffset} stopColor="#22c55e" />
+                  <stop offset={deltaGradientOffset} stopColor="#ef4444" />
+                  <stop offset={1} stopColor="#ef4444" />
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="distM"
+                type="number"
+                domain={["dataMin", "dataMax"]}
+                tick={{ fontSize: 10 }}
+                tickFormatter={(v: number) => `${v}`}
+                label={{
+                  value: t("telemetryPage.axisDeltaDistance"),
+                  position: "insideBottomRight",
+                  offset: -4,
+                  fontSize: 10,
+                }}
+              />
+              <YAxis tick={{ fontSize: 10 }} width={36} tickFormatter={(v: number) => (v / 1000).toFixed(1)} />
+              <ReferenceLine y={0} stroke="var(--color-border, #e2e8f0)" strokeDasharray="3 3" />
+              <Tooltip
+                formatter={(value: number) => [formatSignedDeltaMs(value) + " s", t("telemetryPage.deltaChartTitle")]}
+                labelFormatter={(label: number) => `${label} m`}
+                contentStyle={{ fontSize: 12 }}
+              />
+              <Area
+                type="monotone"
+                dataKey="deltaMs"
+                stroke="url(#telemetryDeltaStroke)"
+                strokeWidth={1.5}
+                fill="url(#telemetryDeltaGradient)"
+                isAnimationActive={false}
+                dot={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }

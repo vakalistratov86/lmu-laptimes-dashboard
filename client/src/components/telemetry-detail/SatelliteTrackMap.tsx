@@ -3,6 +3,7 @@ import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { geoToImagePixel, getSatelliteMapCalibration, type ImagePoint } from "@/lib/trackMapCalibration";
 import { headingAt, arrowPolygonPoints, perpendicularSegment, offsetPerpendicular } from "@/lib/telemetryGeo";
 import { buildColoredSegments, detectCornerSpeedMarkers, type SpeedSample } from "@/lib/telemetrySpeed";
+import { interpolateAtDistance } from "@/lib/telemetryReference";
 import type { TelemetryLapPoint } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 
@@ -10,6 +11,8 @@ interface SatelliteTrackMapProps {
   points: TelemetryLapPoint[];
   hoverIndex: number | null;
   trackName: string;
+  /** См. `TelemetryTrackMapProps.referencePoints` — эталонный круг для призрака. */
+  referencePoints?: TelemetryLapPoint[];
 }
 
 interface View {
@@ -21,7 +24,7 @@ interface View {
 const ZOOM_STEP = 1.4;
 const MAX_ZOOM_MULT = 24;
 
-export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTrackMapProps) {
+export function SatelliteTrackMap({ points, hoverIndex, trackName, referencePoints }: SatelliteTrackMapProps) {
   const { t } = useLanguage();
   const calibration = getSatelliteMapCalibration(trackName);
 
@@ -155,6 +158,50 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
   );
   const cursorHeading = cursorCompactIndex >= 0 ? headingAt(validPoints, cursorCompactIndex) : 0;
 
+  // Проекция эталонного круга — та же калибровка "трасса -> пиксель снимка",
+  // абсолютная для трассы (не авто-фит по bounding box одного круга), поэтому,
+  // в отличие от схематичной SVG-проекции, два круга здесь совпадают без
+  // дополнительных общих bounds. Сэмплы с известными distM и пикселем идут
+  // рядом в одном массиве — иначе индекс "ближайшего по дистанции" разъехался
+  // бы с индексом в отфильтрованном (без null) массиве пикселей.
+  const referenceSamples = useMemo(() => {
+    if (!referencePoints || referencePoints.length === 0) return [];
+    const samples: { distM: number; point: ImagePoint }[] = [];
+    for (const p of referencePoints) {
+      if (p.lapDist == null || p.lat == null || p.lon == null) continue;
+      const point = geoToImagePixel(trackName, { lat: p.lat, lon: p.lon });
+      if (point) samples.push({ distM: p.lapDist, point });
+    }
+    return samples;
+  }, [referencePoints, trackName]);
+
+  const ghost = useMemo(() => {
+    if (!referencePoints || referencePoints.length === 0 || hoverIndex == null || referenceSamples.length === 0) {
+      return null;
+    }
+    const currentDist = points[hoverIndex]?.lapDist;
+    if (currentDist == null) return null;
+    const interp = interpolateAtDistance(referencePoints, currentDist);
+    if (!interp || interp.lat == null || interp.lon == null) return null;
+    const projected = geoToImagePixel(trackName, { lat: interp.lat, lon: interp.lon });
+    if (!projected) return null;
+
+    let nearestIdx = 0;
+    let nearestDiff = Infinity;
+    for (let i = 0; i < referenceSamples.length; i++) {
+      const diff = Math.abs(referenceSamples[i].distM - currentDist);
+      if (diff < nearestDiff) {
+        nearestDiff = diff;
+        nearestIdx = i;
+      }
+    }
+    const heading = headingAt(
+      referenceSamples.map((s) => s.point),
+      nearestIdx,
+    );
+    return { x: projected.x, y: projected.y, heading };
+  }, [referencePoints, hoverIndex, points, trackName, referenceSamples]);
+
   const speedSamples = useMemo(() => {
     const result: SpeedSample[] = [];
     for (let i = 0; i < points.length; i++) {
@@ -175,7 +222,7 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
   return (
     <div
       ref={containerRef}
-      className="relative h-[420px] w-full touch-none overflow-hidden rounded-md bg-muted/40"
+      className="relative h-[420px] w-full touch-none overflow-hidden rounded-md bg-muted/40 md:h-[640px]"
       onWheel={onWheel}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -297,6 +344,16 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName }: SatelliteTr
                 fill="var(--color-chart-2, #16a34a)"
                 stroke="white"
                 strokeWidth={3}
+                strokeLinejoin="round"
+              />
+            )}
+            {ghost && (
+              <polygon
+                points={arrowPolygonPoints(ghost.x, ghost.y, ghost.heading, 34, 22)}
+                fill="none"
+                stroke="white"
+                strokeWidth={4}
+                strokeDasharray="5 4"
                 strokeLinejoin="round"
               />
             )}
