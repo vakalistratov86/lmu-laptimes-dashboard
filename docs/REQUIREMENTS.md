@@ -948,7 +948,7 @@ drizzle-zod). Полное описание колонок — `docs/database-sc
 | `StatTile` | `StatTile.tsx` | мини-плитка `min-w-[110px]`, `rounded-lg border bg-card`, `px-3.5 py-2.5`; подпись `text-[10px] uppercase text-muted-foreground`, значение `font-data text-xs font-semibold tabular-nums truncate`; варианты цвета значения — `green`/`purple`/`red` |
 | `ActivityTile` | `ActivityTile.tsx` | плитка типа сессии с залитым цветным фоном (`bg-{color}-500/10`), иконка + подпись `text-xs font-semibold`, счётчик `font-data text-2xl font-bold tabular-nums`, суммарное время `font-data text-[11px] tabular-nums opacity-80` |
 | `SessionTypeBadge` | `SessionTypeBadge.tsx` | бейдж **фиксированной ширины `w-[124px]`** (под самое длинное слово «Квалификация») — гарантирует одинаковый визуальный размер плашки практики/квалификации/гонки везде; иконка (гантель/секундомер/кубок) + текст, цвет из `SESSION_TYPE_BADGE` |
-| `CarClassBadge` | `CarClassBadge.tsx` | единственное место, формирующее бейдж класса машины — цвет (`getClassBadgeClass()`) и подпись (`getClassDisplayLabel()`) берутся из канонического класса, а не сырого `car_class`; используется в Sessions, Tracks, TrackDetail, Overview, Leaderboards, DriverProfile, `SessionResultsTable`, `SessionDriverDetailCard`. Вкладка Events не использует компонент (свой markup чипов, а не `Badge`), но красит через ту же `getClassBadgeClass()` и приводит подпись через `getClassDisplayLabel()` — единая цветовая/текстовая схема, просто другая обёртка |
+| `CarClassBadge` | `CarClassBadge.tsx` | единственное место, формирующее бейдж класса машины — цвет (`getClassBadgeClass()`) и подпись (`getClassDisplayLabel()`) берутся из канонического класса, а не сырого `car_class`; используется в Sessions, Tracks, TrackDetail, Overview, Leaderboards, DriverProfile, `SessionResultsTable`, `SessionDriverDetailCard`. Вкладка Events не использует компонент (свой markup чипов, а не `Badge`), но красит через ту же `getClassBadgeClass()` и приводит подпись через `getClassDisplayLabel()` — единая цветовая/текстовая схема, просто другая обёртка. Подпись обёрнута во вложенный `<span className="truncate">` (не `truncate` прямо на самом `Badge`) — `text-overflow: ellipsis` не рендерит многоточие на flex-контейнере (`Badge` — `inline-flex`) в Chromium/большинстве браузеров, поэтому усечение всегда вешается на вложенный обычный inline-элемент (тот же приём — в `DriverName.tsx`) |
 | `DriverName` | `DriverName.tsx` | `inline-flex items-center gap-1.5`; иконка 13px — `User` зелёный (`text-green-500`) для реального игрока, `Bot` жёлтый (`text-amber-400`) для ИИ; само имя — обычный цвет текста, только иконка кодирует тип |
 | `RankBadge` (Leaderboards) | локальный | квадрат `h-7 w-7 rounded-md`, `font-data text-sm font-bold tabular-nums`; 1 место — `bg-chart-2/20 text-chart-2` (жёлтый), 2 место — `bg-muted-foreground/15`, 3 место — `bg-chart-1/20 text-chart-1`; места 1-3 показывают иконку медали (15px) вместо цифры |
 | Позиционный квадрат (`SessionResultsRow`, `SessionDriverDetailCard`) | локальный | `h-7 w-7 rounded-md bg-muted/50`, `font-data text-sm font-bold tabular-nums`; топ-3 — иконка `Medal` (14px) цвета `getMedalColorClass()`, иначе — число |
@@ -985,12 +985,27 @@ hover:bg-muted/40`.
 
 CSS `grid` (не `<table>`), с явной ARIA-разметкой `role="table"/"row"/
 "cell"/"columnheader"`. Сетка колонок фиксирована инлайн-стилем:
-`160px 110px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px`
+`160px 110px minmax(160px,1fr) 140px {classesColWidth}px 140px 80px 110px 24px`
 (мин. ширина строки `1068px` — на мобильном контейнер скроллится
 горизонтально, ни одна колонка не обрезается). Заголовок —
 `text-xs font-semibold uppercase tracking-wider text-muted-foreground`,
 фон `bg-secondary/30`. Строки — целиком кликабельная ссылка `<Link>`
 (`hover:bg-muted/40 active:bg-muted/60`).
+
+`{classesColWidth}` — единая для всех строк ширина колонки «Классы»,
+вычисляемая `useLayoutEffect`'ом по скрытому (`invisible`, не
+`display:none` — так браузер всё равно кладёт его в layout) слепку тех же
+`CarClassBadge` без ограничения ширины: `min(max(натуральная ширина
+самой широкой строки, включая подпись заголовка), CLASSES_COL_MAX_WIDTH=
+170px)`. Раз каждая строка — независимый CSS grid (а не общий
+`table-layout: auto`), только единое JS-вычисленное число даёт
+одинаковую ширину колонки во всех строках сразу. Колонка подстраивается
+под контент (не шире одной короткой метки класса, если во всех
+отфильтрованных сессиях он один; шире — если хотя бы в одной сессии
+несколько классов), но никогда не превышает 170px — аномально длинный
+нераспознанный `car_class` (см. `getClassDisplayLabel()`) упирается в
+этот кап и переносится/усекается многоточием внутри самих бейджей
+(`max-w-full truncate`), а не раздувает колонку.
 
 | # | Ширина | Колонка | Выравнивание | Содержимое |
 | --- | --- | --- | --- | --- |
@@ -998,7 +1013,7 @@ CSS `grid` (не `<table>`), с явной ARIA-разметкой `role="table"
 | 2 | 110px | Тип гонки | left | `Badge outline` «Соло»/«Команда» + иконка `User`/`Users` (11px), `text-[11px]` |
 | 3 | `minmax(160px,1fr)` | Трек | left | название трассы, `truncate font-medium` |
 | 4 | 140px | Конфигурация | left | `course`, `text-xs text-muted-foreground`, «—» если совпадает с названием трассы |
-| 5 | 170px | Классы | left | несколько `CarClassBadge` (10px текст, `px-1.5 py-0`), по одному на каждый **канонический** класс, участвовавший в сессии — дедуплицировано по канонической метке (`getClassDisplayLabel`), не по сырому `car_class` (иначе GT3+GTE дали бы два одинаковых бейджа «LMGT3»), в порядке `compareCarClass()` |
+| 5 | `{classesColWidth}px`, до 170px | Классы | left | несколько `CarClassBadge` (10px текст, `px-1.5 py-0`, `max-w-full truncate`), по одному на каждый **канонический** класс, участвовавший в сессии — дедуплицировано по канонической метке (`getClassDisplayLabel`), не по сырому `car_class` (иначе GT3+GTE дали бы два одинаковых бейджа «LMGT3»), в порядке `compareCarClass()` |
 | 6 | 140px | Лучший круг | right | `formatLap()`, `font-data tabular-nums text-sm text-muted-foreground` |
 | 7 | 80px | Кругов | right | целое число, `font-data tabular-nums text-sm` |
 | 8 | 110px | Дата | right | две строки: дата (`text-sm`) + время начала сессии `HH:MM` мельче (`text-xs text-muted-foreground/70`) |
@@ -1034,7 +1049,7 @@ className="truncate">` вокруг имени) — этого достаточ�
 | 1 | Поз. | left, `w-12` | всегда | позиционный квадрат 7×7, топ-3 — медаль | `font-data font-bold tabular-nums` |
 | 2 | Пилот | left, `max-w-[165px]` | всегда | `DriverName` (усекается через `truncate`); для командной машины — бейдж `Users N` вместо имени | `font-medium` |
 | 3 | Команда | left, `max-w-[128px]` | ≥ `sm` | название команды, `truncate` | `text-[11px] text-muted-foreground` |
-| 4 | Класс | left | всегда | `CarClassBadge` | `text-xs` |
+| 4 | Класс | left, `max-w-[92px]` | всегда | `CarClassBadge` — компактный вариант (уже, чем стандартный `text-xs` бейдж на других страницах), т.к. в строке ровно один бейдж, а не список; `truncate` на бейдже — нераспознанный `car_class` рисуется как есть (см. `classStyles.ts`, `getClassDisplayLabel()`) и без гарантии на длину раздвинул бы узкую колонку | `px-1.5 py-0.5 text-[11px]` |
 | 5 | Авто | left, `max-w-[128px]` | ≥ `sm` | модель + `#номер`, `truncate` | `text-[11px] text-muted-foreground` |
 | 6 | Статус | left, `max-w-[110px]` | всегда | `Badge` статуса финиша (если есть), `truncate` внутри бейджа | `text-xs text-muted-foreground` |
 | 7 | Кругов | right | всегда | число кругов | `font-data tabular-nums` |
