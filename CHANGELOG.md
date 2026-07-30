@@ -12,6 +12,24 @@
 
 ---
 
+## [1.3.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.2.2...v1.3.0) (2026-07-30)
+
+### Added
+
+* **session-detail:** добавить колонку «Время на треке» в таблицу результатов ([#185](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/185)) ([f9bb34b](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/f9bb34b14648479b6cf9f5c75b04dd23d6af1821))
+
+### Changed
+
+* **events:** вынести запросы Special Events в lib/api.ts ([004e0f6](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/004e0f64cc58b9c67697347118fb7bb27f6f026b))
+
+### Docs
+
+* fix stale demo-data note and broken doc links ([eedd212](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/eedd2129ebda64a79352a7c269f2aa3d66848e65))
+* fix stale demo-data note and remove superseded docs ([889a157](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/889a1571e63218d5db2f3db4afe5132f12a01eef))
+* remove demo-data explanatory line from README ([d80c0f3](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/d80c0f317ca778fce3507ecc4951fec1b403643a))
+* rename demo link to live instance in README ([bb43de3](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/bb43de39dc01f8088c00e375fd646909ad92d0c0))
+* обновить REQUIREMENTS.md — устаревшая информация о бейджах классов ([0a5f3c9](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/0a5f3c9b2860b9e0c367d331b42531cd68584740)), closes [#179](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/179) [-#181](https://github.com/-/issues/181)
+
 ## [1.2.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.2.1...v1.2.2) (2026-07-29)
 
 ### Fixed
