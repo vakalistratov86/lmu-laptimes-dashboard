@@ -14,6 +14,7 @@ import {
   User,
 } from "lucide-react";
 import { Logo } from "./Logo";
+import { AppVersion } from "./AppVersion";
 import { useState, useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useLanguage, type Locale } from "@/lib/i18n";
@@ -84,6 +85,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           );
         })}
       </nav>
+      <AppVersion />
     </>
   );
 }
