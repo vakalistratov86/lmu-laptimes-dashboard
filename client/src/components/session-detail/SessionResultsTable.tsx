@@ -85,11 +85,13 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
         {row.carNumber ? ` · #${row.carNumber}` : ""}
       </td>
 
-      {/* Статус финиша */}
+      {/* Статус финиша — усечение вешаем на вложенный span, не на сам Badge:
+          text-overflow: ellipsis не рендерит многоточие на flex-контейнере
+          (Badge — inline-flex), см. CarClassBadge.tsx/DriverName.tsx. */}
       <td className="max-w-[110px] px-4 py-2.5">
         {row.finishStatus ? (
           <Badge variant="outline" className="max-w-full truncate text-xs text-muted-foreground">
-            {row.finishStatus}
+            <span className="min-w-0 truncate">{row.finishStatus}</span>
           </Badge>
         ) : null}
       </td>

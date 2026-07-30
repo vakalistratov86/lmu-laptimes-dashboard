@@ -473,10 +473,16 @@ export default function Sessions() {
                   {configLabel(session.trackName, session.course)}
                 </div>
 
-                {/* Classes */}
+                {/* Classes — max-w-full truncate обязателен на каждом бейдже: getClassDisplayLabel()
+                    рисует нераспознанный car_class как есть (см. classStyles.ts), без гарантии на
+                    длину. Без truncate такой бейдж (whitespace-nowrap по умолчанию, см. ui/badge.tsx)
+                    не сжимался бы во flex-wrap ячейке и вылезал за пределы фиксированной колонки
+                    170px, наезжая на соседние колонки. */}
                 <div className="flex flex-wrap gap-1" role="cell">
                   {classes.length > 0 ? (
-                    classes.map((cls) => <CarClassBadge key={cls} carClass={cls} className="px-1.5 py-0 text-[10px]" />)
+                    classes.map((cls) => (
+                      <CarClassBadge key={cls} carClass={cls} className="max-w-full truncate px-1.5 py-0 text-[10px]" />
+                    ))
                   ) : (
                     <span className="text-sm text-muted-foreground">—</span>
                   )}

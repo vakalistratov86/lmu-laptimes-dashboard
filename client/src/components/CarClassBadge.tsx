@@ -17,8 +17,12 @@ interface CarClassBadgeProps {
  */
 export function CarClassBadge({ carClass, className }: CarClassBadgeProps) {
   return (
-    <Badge variant="outline" className={cn(getClassBadgeClass(carClass), className)}>
-      {getClassDisplayLabel(carClass)}
+    <Badge variant="outline" className={cn("min-w-0", getClassBadgeClass(carClass), className)}>
+      {/* text-overflow: ellipsis не рендерит многоточие на flex-контейнере (Badge —
+          inline-flex) в Chromium/большинстве браузеров — усечение нужно вешать на
+          вложенный обычный inline-элемент, а не на сам Badge (см. DriverName.tsx —
+          тот же паттерн). */}
+      <span className="min-w-0 truncate">{getClassDisplayLabel(carClass)}</span>
     </Badge>
   );
 }
