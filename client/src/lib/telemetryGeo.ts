@@ -14,8 +14,30 @@ export interface SvgPoint {
   y: number;
 }
 
-export function projectTrackPoints(points: GeoPoint[], width: number, height: number, padding = 16): SvgPoint[] {
-  if (points.length === 0) return [];
+export interface ProjectionBounds {
+  cosLat: number;
+  minX: number;
+  minY: number;
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+/**
+ * Считает масштаб/смещение проекции по переданным точкам — вынесено из
+ * `projectTrackPoints`, чтобы одни и те же bounds можно было переиспользовать
+ * для ДВУХ кругов сразу (текущий + эталонный призрак, см. `TelemetryTrackMap`).
+ * Если проецировать каждый круг отдельным вызовом `projectTrackPoints`, у
+ * каждого будет свой авто-фит масштаб/смещение под собственный bounding box —
+ * два круга физически по одной трассе перестанут совпадать на холсте.
+ */
+export function computeProjectionBounds(
+  points: GeoPoint[],
+  width: number,
+  height: number,
+  padding = 16,
+): ProjectionBounds | null {
+  if (points.length === 0) return null;
 
   const meanLat = points.reduce((sum, p) => sum + p.lat, 0) / points.length;
   const cosLat = Math.cos((meanLat * Math.PI) / 180);
@@ -37,13 +59,29 @@ export function projectTrackPoints(points: GeoPoint[], width: number, height: nu
 
   const drawnW = spanX * scale;
   const drawnH = spanY * scale;
-  const offsetX = padding + (availW - drawnW) / 2;
-  const offsetY = padding + (availH - drawnH) / 2;
 
-  return projected.map((p) => ({
-    x: offsetX + (p.x - minX) * scale,
-    y: offsetY + (p.y - minY) * scale,
+  return {
+    cosLat,
+    minX,
+    minY,
+    scale,
+    offsetX: padding + (availW - drawnW) / 2,
+    offsetY: padding + (availH - drawnH) / 2,
+  };
+}
+
+/** Проецирует точки по уже посчитанным `bounds` (см. `computeProjectionBounds`). */
+export function projectWithBounds(points: GeoPoint[], bounds: ProjectionBounds): SvgPoint[] {
+  return points.map((p) => ({
+    x: bounds.offsetX + (p.lon * bounds.cosLat - bounds.minX) * bounds.scale,
+    y: bounds.offsetY + (-p.lat - bounds.minY) * bounds.scale,
   }));
+}
+
+export function projectTrackPoints(points: GeoPoint[], width: number, height: number, padding = 16): SvgPoint[] {
+  const bounds = computeProjectionBounds(points, width, height, padding);
+  if (!bounds) return [];
+  return projectWithBounds(points, bounds);
 }
 
 export function pointsToPath(points: SvgPoint[]): string {

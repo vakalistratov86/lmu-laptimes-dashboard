@@ -1,13 +1,16 @@
 import { useMemo } from "react";
 import {
-  projectTrackPoints,
+  computeProjectionBounds,
+  projectWithBounds,
   pointsToPath,
   headingAt,
   arrowPolygonPoints,
   perpendicularSegment,
   offsetPerpendicular,
+  type SvgPoint,
 } from "@/lib/telemetryGeo";
 import { buildColoredSegments, detectCornerSpeedMarkers, type SpeedSample } from "@/lib/telemetrySpeed";
+import { interpolateAtDistance } from "@/lib/telemetryReference";
 import { hasSatelliteMap } from "@/lib/trackMapCalibration";
 import { SatelliteTrackMap } from "@/components/telemetry-detail/SatelliteTrackMap";
 import type { TelemetryLapPoint } from "@/lib/api";
@@ -17,21 +20,54 @@ interface TelemetryTrackMapProps {
   points: TelemetryLapPoint[];
   hoverIndex: number | null;
   trackName: string | null;
+  /** Круг, выбранный эталоном для сравнения (см. `TelemetryLapPicker`) — если задан
+   * (и в нём есть GPS), поверх карты рисуется второй, штриховой маркер-«призрак» на
+   * той же дистанции круга, что и текущий курсор. */
+  referencePoints?: TelemetryLapPoint[];
+  /** Принудительно показать схематичную SVG-карту, даже если для трассы есть
+   * спутниковая калибровка (см. переключатель подложки в `TelemetryDetail`). */
+  forceSchematic?: boolean;
 }
 
-const WIDTH = 420;
-const HEIGHT = 320;
+// Более широкое (не квадратное 420x320) полотно — карта теперь занимает всю
+// ширину страницы, а не карточку max-w-2xl, поэтому пропорции подобраны под
+// широкий, а не узкий контейнер.
+const WIDTH = 780;
+const HEIGHT = 360;
 
-export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTrackMapProps) {
+export function TelemetryTrackMap({
+  points,
+  hoverIndex,
+  trackName,
+  referencePoints,
+  forceSchematic,
+}: TelemetryTrackMapProps) {
   const { t } = useLanguage();
 
   // Хуки должны вызываться безусловно на каждом рендере — поэтому проекция
   // для SVG-фолбэка считается всегда, а выбор ветки рендера (фото или SVG)
   // делается только в JSX ниже.
-  const svgPoints = useMemo(() => {
+  //
+  // Bounds считаются по ОБЪЕДИНЕНИЮ точек текущего и эталонного круга — если бы
+  // каждый круг проецировался отдельно (свой авто-фит масштаб/смещение), два
+  // круга по одной и той же физической трассе перестали бы совпадать на холсте.
+  const bounds = useMemo(() => {
+    const currentGeo = points.map((p) => ({ lat: p.lat ?? 0, lon: p.lon ?? 0 }));
+    const referenceGeo = (referencePoints ?? []).map((p) => ({ lat: p.lat ?? 0, lon: p.lon ?? 0 }));
+    return computeProjectionBounds([...currentGeo, ...referenceGeo], WIDTH, HEIGHT);
+  }, [points, referencePoints]);
+
+  const svgPoints = useMemo((): SvgPoint[] => {
+    if (!bounds) return [];
     const geoPoints = points.map((p) => ({ lat: p.lat ?? 0, lon: p.lon ?? 0 }));
-    return projectTrackPoints(geoPoints, WIDTH, HEIGHT);
-  }, [points]);
+    return projectWithBounds(geoPoints, bounds);
+  }, [points, bounds]);
+
+  const referenceSvgPoints = useMemo((): SvgPoint[] => {
+    if (!bounds || !referencePoints || referencePoints.length === 0) return [];
+    const geoPoints = referencePoints.map((p) => ({ lat: p.lat ?? 0, lon: p.lon ?? 0 }));
+    return projectWithBounds(geoPoints, bounds);
+  }, [referencePoints, bounds]);
 
   const path = useMemo(() => pointsToPath(svgPoints), [svgPoints]);
   const startHeading = useMemo(() => headingAt(svgPoints, 0), [svgPoints]);
@@ -39,6 +75,30 @@ export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTr
     () => (hoverIndex != null ? headingAt(svgPoints, hoverIndex) : 0),
     [svgPoints, hoverIndex],
   );
+
+  // Позиция "призрака" эталонного круга — интерполяция эталона на той же
+  // дистанции круга, на которой сейчас курсор текущего круга.
+  const ghost = useMemo(() => {
+    if (!bounds || !referencePoints || referencePoints.length === 0 || hoverIndex == null) return null;
+    const currentDist = points[hoverIndex]?.lapDist;
+    if (currentDist == null) return null;
+    const interp = interpolateAtDistance(referencePoints, currentDist);
+    if (!interp || interp.lat == null || interp.lon == null) return null;
+    const [projected] = projectWithBounds([{ lat: interp.lat, lon: interp.lon }], bounds);
+
+    let nearestIdx = 0;
+    let nearestDiff = Infinity;
+    for (let i = 0; i < referencePoints.length; i++) {
+      const d = referencePoints[i].lapDist;
+      if (d == null) continue;
+      const diff = Math.abs(d - currentDist);
+      if (diff < nearestDiff) {
+        nearestDiff = diff;
+        nearestIdx = i;
+      }
+    }
+    return { x: projected.x, y: projected.y, heading: headingAt(referenceSvgPoints, nearestIdx) };
+  }, [bounds, referencePoints, hoverIndex, points, referenceSvgPoints]);
 
   const speedSamples = useMemo(() => {
     const result: SpeedSample[] = [];
@@ -56,9 +116,18 @@ export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTr
 
   // Для трасс с калибровкой по спутниковому снимку — фото с зумом/паном и
   // траекторией, привязанной к его пиксельным координатам. Для остальных —
-  // прежняя схематичная SVG-проекция (без привязки к местности).
-  if (hasSatelliteMap(trackName)) {
-    return <SatelliteTrackMap points={points} hoverIndex={hoverIndex} trackName={trackName as string} />;
+  // прежняя схематичная SVG-проекция (без привязки к местности). forceSchematic
+  // (переключатель подложки в TelemetryDetail) может принудительно вернуть к
+  // схеме даже там, где спутник в принципе доступен.
+  if (hasSatelliteMap(trackName) && !forceSchematic) {
+    return (
+      <SatelliteTrackMap
+        points={points}
+        hoverIndex={hoverIndex}
+        trackName={trackName as string}
+        referencePoints={referencePoints}
+      />
+    );
   }
 
   const cursor = hoverIndex != null ? svgPoints[hoverIndex] : null;
@@ -162,6 +231,17 @@ export function TelemetryTrackMap({ points, hoverIndex, trackName }: TelemetryTr
           fill="var(--color-chart-2, #16a34a)"
           stroke="white"
           strokeWidth={1}
+          strokeLinejoin="round"
+        />
+      )}
+      {ghost && (
+        <polygon
+          points={arrowPolygonPoints(ghost.x, ghost.y, ghost.heading, 9, 6)}
+          fill="none"
+          stroke="currentColor"
+          className="text-foreground"
+          strokeWidth={1.25}
+          strokeDasharray="1.5 1.2"
           strokeLinejoin="round"
         />
       )}
