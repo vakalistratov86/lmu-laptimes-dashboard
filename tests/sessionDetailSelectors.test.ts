@@ -3,6 +3,7 @@ import {
   buildSectorSummary,
   buildDriverLapGroups,
   buildLapProgressSeries,
+  buildResultRows,
 } from "../client/src/lib/sessionDetailSelectors";
 
 describe("sessionDetailSelectors — bug-audit regressions", () => {
@@ -94,6 +95,57 @@ describe("sessionDetailSelectors — bug-audit regressions", () => {
       const groups = buildDriverLapGroups(laps);
       expect(groups).toHaveLength(1);
       expect(groups[0].laps).toHaveLength(2);
+    });
+  });
+
+  describe("buildResultRows — «Время на треке»", () => {
+    it("суммирует время всех кругов машины (по carNumber) в timeOnTrack", () => {
+      const session = {
+        results: [{ position: 1, carNumber: "7", driverName: "Alpha", bestLapMs: 100000, laps: 2, pitstops: 0 }],
+      };
+      const laps = [
+        { carNumber: "7", lapNumber: 1, lapTimeMs: 100000 },
+        { carNumber: "7", lapNumber: 2, lapTimeMs: 105000 },
+      ];
+      const rows = buildResultRows(session, laps);
+      // 100000 + 105000 = 205000мс = 205с = 3:25
+      expect(rows[0].timeOnTrack).toBe("3:25");
+    });
+
+    it("учитывает пит-лапы в сумме (время в пит-лейне тоже часть круга)", () => {
+      const session = {
+        results: [{ position: 1, carNumber: "7", driverName: "Alpha", bestLapMs: 100000, laps: 2, pitstops: 1 }],
+      };
+      const laps = [
+        { carNumber: "7", lapNumber: 1, lapTimeMs: 100000, isPitLap: true },
+        { carNumber: "7", lapNumber: 2, lapTimeMs: 105000 },
+      ];
+      const rows = buildResultRows(session, laps);
+      expect(rows[0].timeOnTrack).toBe("3:25");
+    });
+
+    it("отдаёт «—», если данных о кругах для машины нет", () => {
+      const session = {
+        results: [{ position: 1, carNumber: "7", driverName: "Alpha", bestLapMs: 100000, laps: 2, pitstops: 0 }],
+      };
+      const rows = buildResultRows(session);
+      expect(rows[0].timeOnTrack).toBe("—");
+    });
+
+    it("суммирует круги всех со-пилотов одной машины (командная гонка)", () => {
+      const session = {
+        results: [
+          { position: 1, carNumber: "7", driverName: "Alpha", bestLapMs: 100000, laps: 1, pitstops: 0 },
+          { position: 1, carNumber: "7", driverName: "Bravo", bestLapMs: 100000, laps: 1, pitstops: 0 },
+        ],
+      };
+      const laps = [
+        { carNumber: "7", driverName: "Alpha", lapNumber: 1, lapTimeMs: 100000 },
+        { carNumber: "7", driverName: "Bravo", lapNumber: 2, lapTimeMs: 105000 },
+      ];
+      const rows = buildResultRows(session, laps);
+      expect(rows).toHaveLength(1); // схлопнуты в одну строку машины
+      expect(rows[0].timeOnTrack).toBe("3:25");
     });
   });
 

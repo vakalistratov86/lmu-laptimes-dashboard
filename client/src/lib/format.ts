@@ -28,6 +28,21 @@ export function formatSector(ms: number | null): string {
   return `${seconds}.${String(millis).padStart(3, "0")}`;
 }
 
+// Форматирование суммарного времени на треке (сумма кругов пилота за сессию) в H:MM:SS / M:SS.
+// В отличие от formatLap (масштаб одного круга) секунды — предел точности: эндуранс-сессия
+// может уйти за много часов, доли секунды на таком масштабе нечитаемы и не нужны.
+export function formatTrackTime(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "—";
+  const totalSeconds = Math.round(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 // Форматирование суммарной длительности (в минутах) в «Xч Yм» / «Yм» (ru) либо «Xh Ym» / «Ym» (en)
 export function formatDurationMin(totalMinutes: number, locale: "ru" | "en" = "ru"): string {
   if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return "—";

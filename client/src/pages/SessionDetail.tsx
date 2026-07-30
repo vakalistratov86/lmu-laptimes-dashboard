@@ -79,7 +79,7 @@ export default function SessionDetail() {
     [hasLapData, t],
   );
 
-  const resultRows = useMemo(() => (session ? buildResultRows(session) : []), [session]);
+  const resultRows = useMemo(() => (session ? buildResultRows(session, laps ?? []) : []), [session, laps]);
 
   const lapGroups = useMemo(() => buildDriverLapGroups(laps ?? []), [laps]);
 

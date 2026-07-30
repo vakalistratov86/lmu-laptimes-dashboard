@@ -63,6 +63,8 @@ export interface SessionResultRowView {
   isPlayer?: number | null;
   /** Класс машины (Hypercar / LMP2 / GT3…). */
   carClass?: string | null;
+  /** Суммарное время на треке (сумма кругов всех пилотов машины за сессию), отформатированное. */
+  timeOnTrack: string;
 }
 
 // ── Круги по пилотам ─────────────────────────────────────────────────────────

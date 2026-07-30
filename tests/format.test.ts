@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatLap, formatSector, formatDelta, countryFlag } from "../client/src/lib/format";
+import { formatLap, formatSector, formatDelta, countryFlag, formatTrackTime } from "../client/src/lib/format";
 
 describe("formatLap", () => {
   it("форматирует время с минутами (1:41.907)", () => {
@@ -126,5 +126,26 @@ describe("countryFlag", () => {
 
   it("возвращает 🏁 для пустой строки", () => {
     expect(countryFlag("")).toBe("🏁");
+  });
+});
+
+describe("formatTrackTime", () => {
+  it("форматирует без часов (M:SS)", () => {
+    expect(formatTrackTime(125000)).toBe("2:05");
+  });
+
+  it("форматирует с часами (H:MM:SS) для эндуранс-сессии", () => {
+    expect(formatTrackTime(3 * 3600_000 + 7 * 60_000 + 42_000)).toBe("3:07:42");
+  });
+
+  it("дополняет минуты/секунды нулём при наличии часов", () => {
+    expect(formatTrackTime(3600_000 + 5_000)).toBe("1:00:05");
+  });
+
+  it("нулевое/невалидное время -> «—»", () => {
+    expect(formatTrackTime(0)).toBe("—");
+    expect(formatTrackTime(-100)).toBe("—");
+    expect(formatTrackTime(NaN)).toBe("—");
+    expect(formatTrackTime(Infinity)).toBe("—");
   });
 });

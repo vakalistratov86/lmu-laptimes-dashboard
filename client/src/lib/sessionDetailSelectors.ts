@@ -13,7 +13,7 @@ import type {
   LapProgressPoint,
   SessionTabItem,
 } from "@/components/session-detail/types";
-import { formatLap, formatSector } from "./format";
+import { formatLap, formatSector, formatTrackTime } from "./format";
 import type { NormalizedSessionType } from "./sessionDetail.types";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -313,9 +313,29 @@ function resultCarKey(r: AnyLap, idx: number): string {
   return str ? `car:${str}` : `row:${idx}`;
 }
 
-export function buildResultRows(session: unknown): SessionResultRowView[] {
+/**
+ * Суммарное время на треке по машине — сумма времени всех валидных кругов
+ * (включая пит-лапы: их время тоже реально проведено в рамках круга на
+ * треке/в пит-лейне) по всем реальным пилотам этой машины за сессию.
+ * Группировка — carGroupKey(), тот же ключ, что и у buildDriverLapGroups()/
+ * buildLapProgressSeries(), поэтому совпадает с carKey строк buildResultRows().
+ */
+function buildTimeOnTrackByCar(laps: unknown[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const raw of laps) {
+    const lap = raw as AnyLap;
+    const ms = parseLapMs(lap);
+    if (!Number.isFinite(ms) || ms <= 0) continue;
+    const key = carGroupKey(lap);
+    map.set(key, (map.get(key) ?? 0) + ms);
+  }
+  return map;
+}
+
+export function buildResultRows(session: unknown, laps: unknown[] = []): SessionResultRowView[] {
   const s = session as AnySession;
   const rawResults: AnyLap[] = Array.isArray(s?.results) ? s.results : [];
+  const timeOnTrackByCar = buildTimeOnTrackByCar(laps);
 
   // Командная гонка со сменой пилота даёт несколько session_results (по одному
   // на реального пилота) с одинаковым carNumber — схлопываем их в одну строку
@@ -400,6 +420,9 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
     const driverName = driverCount === 1 ? String(primary.driverName ?? primary.driver ?? "—") : (teamName ?? "—");
     const isPlayer = members.some((m) => Number(m.isPlayer) === 1) ? 1 : (primary.isPlayer ?? null);
 
+    const timeOnTrackMs = timeOnTrackByCar.get(key);
+    const timeOnTrack = timeOnTrackMs != null ? formatTrackTime(timeOnTrackMs) : "—";
+
     return {
       position: primary.position ?? idx + 1,
       carKey: key,
@@ -416,6 +439,7 @@ export function buildResultRows(session: unknown): SessionResultRowView[] {
       finishStatus,
       isPlayer,
       carClass,
+      timeOnTrack,
     };
   });
 }
