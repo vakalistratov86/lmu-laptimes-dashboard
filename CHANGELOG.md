@@ -12,6 +12,12 @@
 
 ---
 
+## [1.4.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.4.1...v1.4.2) (2026-07-30)
+
+### Fixed
+
+* исправить некорректный YAML frontmatter в файлах правил ([#191](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/191)) ([2b63e90](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/2b63e901b36b614ad1849cf426652f56de5c5dc9))
+
 ## [1.4.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.4.0...v1.4.1) (2026-07-30)
 
 ### Fixed
