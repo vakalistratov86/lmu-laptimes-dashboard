@@ -68,9 +68,9 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
       </td>
 
       {/* Класс машины */}
-      <td className="px-4 py-2.5">
+      <td className="max-w-[92px] px-4 py-2.5">
         {row.carClass ? (
-          <CarClassBadge carClass={row.carClass} className="text-xs" />
+          <CarClassBadge carClass={row.carClass} className="px-1.5 py-0.5 text-[11px]" />
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
@@ -139,7 +139,7 @@ export function SessionResultsTable({ rows, fastestLapTime, selectedCarKey, onSe
             <th className="px-4 py-2.5 w-12">{t("sessionDetail.colPos")}</th>
             <th className="max-w-[165px] px-4 py-2.5">{t("sessionDetail.colDriver")}</th>
             <th className="hidden max-w-[128px] px-4 py-2.5 sm:table-cell">{t("sessionDetail.colTeam")}</th>
-            <th className="px-4 py-2.5">{t("sessionDetail.colClass")}</th>
+            <th className="max-w-[92px] px-4 py-2.5">{t("sessionDetail.colClass")}</th>
             <th className="hidden max-w-[128px] px-4 py-2.5 sm:table-cell">{t("sessionDetail.colCar")}</th>
             <th className="max-w-[110px] px-4 py-2.5">{t("sessionDetail.colStatus")}</th>
             <th className="px-4 py-2.5 text-right">{t("sessionDetail.colLaps")}</th>
