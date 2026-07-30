@@ -11,7 +11,8 @@ import {
   Area,
   ReferenceLine,
 } from "recharts";
-import { ZoomIn, ZoomOut } from "lucide-react";
+import { ZoomIn, ZoomOut, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { TelemetryLapPoint } from "@/lib/api";
 import { interpolateAtDistance, buildDeltaSeries, formatSignedDeltaMs } from "@/lib/telemetryReference";
 import { useLanguage } from "@/lib/i18n";
@@ -19,6 +20,8 @@ import { useLanguage } from "@/lib/i18n";
 interface TelemetryChartProps {
   points: TelemetryLapPoint[];
   onHoverIndexChange: (index: number | null) => void;
+  /** Круг, чья телеметрия сейчас показана (1-based, для заголовка панели). */
+  activeLapNumber?: number | null;
   /** Эталонный круг (см. `TelemetryLapPicker`) — если задан, поверх скорости
    * рисуется штриховая линия эталона, а под графиком — полоса отставания/
    * выигрыша по дистанции круга. */
@@ -36,9 +39,10 @@ function formatLapTime(sec: number): string {
   return sec.toFixed(2);
 }
 
-export function TelemetryChart({ points, onHoverIndexChange, referencePoints }: TelemetryChartProps) {
+export function TelemetryChart({ points, onHoverIndexChange, activeLapNumber, referencePoints }: TelemetryChartProps) {
   const { t } = useLanguage();
   const [zoom, setZoom] = useState(MIN_ZOOM);
+  const [collapsed, setCollapsed] = useState(false);
   const [visible, setVisible] = useState<Record<SeriesKey, boolean>>({
     throttle: true,
     brake: true,
@@ -123,212 +127,241 @@ export function TelemetryChart({ points, onHoverIndexChange, referencePoints }: 
 
   return (
     <div className="p-4">
-      <div className="relative">
-        {/* Кнопки масштаба — растягивают график по горизонтали (по времени круга).
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("telemetryPage.seriesSpeed")} / {t("telemetryPage.seriesThrottle")}
+          {activeLapNumber != null ? ` — ${t("telemetryPage.lapLabel", { n: activeLapNumber })}` : ""}
+        </span>
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? t("telemetryPage.expandChart") : t("telemetryPage.collapseChart")}
+          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover-elevate"
+        >
+          <ChevronDown size={14} className={cn("transition-transform", collapsed && "-rotate-90")} />
+        </button>
+      </div>
+
+      {!collapsed && (
+        <>
+          <div className="relative">
+            {/* Кнопки масштаба — растягивают график по горизонтали (по времени круга).
             Сам блок графика остаётся в границах карточки, прокрутка — через
             появляющийся снизу скроллбар (overflow-x контейнера). */}
-        <div className="absolute right-1 top-1 z-10 flex flex-col gap-1">
-          <button
-            type="button"
-            onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 1))}
-            disabled={zoom >= MAX_ZOOM}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 text-muted-foreground hover-elevate disabled:opacity-40"
-            aria-label={t("telemetryPage.zoomIn")}
-          >
-            <ZoomIn size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 1))}
-            disabled={zoom <= MIN_ZOOM}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 text-muted-foreground hover-elevate disabled:opacity-40"
-            aria-label={t("telemetryPage.zoomOut")}
-          >
-            <ZoomOut size={14} />
-          </button>
-        </div>
-
-        <div className="overflow-x-auto">
-          <div style={{ width: `${zoom * 100}%` }}>
-            <ResponsiveContainer width="100%" height={380}>
-              <LineChart
-                data={data}
-                margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
-                onMouseMove={(state: { activeTooltipIndex?: number }) => {
-                  if (state?.activeTooltipIndex != null) onHoverIndexChange(state.activeTooltipIndex);
-                }}
-                onMouseLeave={() => onHoverIndexChange(null)}
+            <div className="absolute right-1 top-1 z-10 flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 1))}
+                disabled={zoom >= MAX_ZOOM}
+                className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 text-muted-foreground hover-elevate disabled:opacity-40"
+                aria-label={t("telemetryPage.zoomIn")}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" strokeOpacity={0.5} />
-                <XAxis
-                  dataKey="lapTimeSec"
-                  type="number"
-                  domain={["dataMin", "dataMax"]}
-                  {...(xAxisTicksProp ? { ticks: xAxisTicksProp } : { tickCount: Math.min(40, 8 * zoom) })}
-                  tickFormatter={formatLapTime}
-                  tick={{ fontSize: 11 }}
-                  label={{
-                    value: t("telemetryPage.axisLapTime"),
-                    position: "insideBottomRight",
-                    offset: -4,
-                    fontSize: 11,
-                  }}
+                <ZoomIn size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 1))}
+                disabled={zoom <= MIN_ZOOM}
+                className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 text-muted-foreground hover-elevate disabled:opacity-40"
+                aria-label={t("telemetryPage.zoomOut")}
+              >
+                <ZoomOut size={14} />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <div style={{ width: `${zoom * 100}%` }}>
+                <ResponsiveContainer width="100%" height={380}>
+                  <LineChart
+                    data={data}
+                    margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
+                    onMouseMove={(state: { activeTooltipIndex?: number }) => {
+                      if (state?.activeTooltipIndex != null) onHoverIndexChange(state.activeTooltipIndex);
+                    }}
+                    onMouseLeave={() => onHoverIndexChange(null)}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" strokeOpacity={0.5} />
+                    <XAxis
+                      dataKey="lapTimeSec"
+                      type="number"
+                      domain={["dataMin", "dataMax"]}
+                      {...(xAxisTicksProp ? { ticks: xAxisTicksProp } : { tickCount: Math.min(40, 8 * zoom) })}
+                      tickFormatter={formatLapTime}
+                      tick={{ fontSize: 11 }}
+                      label={{
+                        value: t("telemetryPage.axisLapTime"),
+                        position: "insideBottomRight",
+                        offset: -4,
+                        fontSize: 11,
+                      }}
+                    />
+                    <YAxis yAxisId="pct" domain={[0, 100]} tick={{ fontSize: 11 }} width={36} />
+                    <YAxis
+                      yAxisId="speed"
+                      orientation="right"
+                      domain={[0, "dataMax"]}
+                      tick={{ fontSize: 11 }}
+                      width={44}
+                    />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [
+                        name === seriesSpeed || name === seriesReference
+                          ? `${Math.round(value)} km/h`
+                          : `${Math.round(value)}%`,
+                        name,
+                      ]}
+                      labelFormatter={(label: number) => `${formatLapTime(label)} s`}
+                      contentStyle={{ fontSize: 12 }}
+                    />
+                    <Line
+                      yAxisId="pct"
+                      type="monotone"
+                      dataKey={seriesThrottle}
+                      stroke="#16a34a"
+                      dot={false}
+                      strokeWidth={1.5}
+                      connectNulls
+                      isAnimationActive={false}
+                      hide={!visible.throttle}
+                    />
+                    <Line
+                      yAxisId="pct"
+                      type="monotone"
+                      dataKey={seriesBrake}
+                      stroke="#dc2626"
+                      dot={false}
+                      strokeWidth={1.5}
+                      connectNulls
+                      isAnimationActive={false}
+                      hide={!visible.brake}
+                    />
+                    <Line
+                      yAxisId="speed"
+                      type="monotone"
+                      dataKey={seriesSpeed}
+                      stroke="#2563eb"
+                      dot={false}
+                      strokeWidth={1.5}
+                      connectNulls
+                      isAnimationActive={false}
+                      hide={!visible.speed}
+                    />
+                    {hasReference && (
+                      <Line
+                        yAxisId="speed"
+                        type="monotone"
+                        dataKey={seriesReference}
+                        stroke="#71717a"
+                        strokeDasharray="4 3"
+                        dot={false}
+                        strokeWidth={1.5}
+                        connectNulls
+                        isAnimationActive={false}
+                        hide={!visible.reference}
+                      />
+                    )}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Легенда с чекбоксами — вне области графика, управляет видимостью линий. */}
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            {legendItems.map((item) => (
+              <label
+                key={item.key}
+                className="flex cursor-pointer select-none items-center gap-2 text-sm text-muted-foreground"
+              >
+                <input
+                  type="checkbox"
+                  checked={visible[item.key]}
+                  onChange={(e) => setVisible((v) => ({ ...v, [item.key]: e.target.checked }))}
+                  className="h-3.5 w-3.5 rounded border-border"
+                  style={{ accentColor: item.color }}
                 />
-                <YAxis yAxisId="pct" domain={[0, 100]} tick={{ fontSize: 11 }} width={36} />
-                <YAxis yAxisId="speed" orientation="right" domain={[0, "dataMax"]} tick={{ fontSize: 11 }} width={44} />
-                <Tooltip
-                  formatter={(value: number, name: string) => [
-                    name === seriesSpeed || name === seriesReference
-                      ? `${Math.round(value)} km/h`
-                      : `${Math.round(value)}%`,
-                    name,
-                  ]}
-                  labelFormatter={(label: number) => `${formatLapTime(label)} s`}
-                  contentStyle={{ fontSize: 12 }}
-                />
-                <Line
-                  yAxisId="pct"
-                  type="monotone"
-                  dataKey={seriesThrottle}
-                  stroke="#16a34a"
-                  dot={false}
-                  strokeWidth={1.5}
-                  connectNulls
-                  isAnimationActive={false}
-                  hide={!visible.throttle}
-                />
-                <Line
-                  yAxisId="pct"
-                  type="monotone"
-                  dataKey={seriesBrake}
-                  stroke="#dc2626"
-                  dot={false}
-                  strokeWidth={1.5}
-                  connectNulls
-                  isAnimationActive={false}
-                  hide={!visible.brake}
-                />
-                <Line
-                  yAxisId="speed"
-                  type="monotone"
-                  dataKey={seriesSpeed}
-                  stroke="#2563eb"
-                  dot={false}
-                  strokeWidth={1.5}
-                  connectNulls
-                  isAnimationActive={false}
-                  hide={!visible.speed}
-                />
-                {hasReference && (
-                  <Line
-                    yAxisId="speed"
-                    type="monotone"
-                    dataKey={seriesReference}
-                    stroke="#71717a"
-                    strokeDasharray="4 3"
-                    dot={false}
-                    strokeWidth={1.5}
-                    connectNulls
-                    isAnimationActive={false}
-                    hide={!visible.reference}
+                {item.dashed ? (
+                  <span
+                    className="inline-block h-0 w-3 shrink-0 border-t-2 border-dashed"
+                    style={{ borderColor: item.color }}
                   />
+                ) : (
+                  <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: item.color }} />
                 )}
-              </LineChart>
-            </ResponsiveContainer>
+                <span className={visible[item.key] ? "text-card-foreground" : ""}>{item.label}</span>
+              </label>
+            ))}
           </div>
-        </div>
-      </div>
 
-      {/* Легенда с чекбоксами — вне области графика, управляет видимостью линий. */}
-      <div className="mt-3 flex flex-wrap items-center gap-4">
-        {legendItems.map((item) => (
-          <label
-            key={item.key}
-            className="flex cursor-pointer select-none items-center gap-2 text-sm text-muted-foreground"
-          >
-            <input
-              type="checkbox"
-              checked={visible[item.key]}
-              onChange={(e) => setVisible((v) => ({ ...v, [item.key]: e.target.checked }))}
-              className="h-3.5 w-3.5 rounded border-border"
-              style={{ accentColor: item.color }}
-            />
-            {item.dashed ? (
-              <span
-                className="inline-block h-0 w-3 shrink-0 border-t-2 border-dashed"
-                style={{ borderColor: item.color }}
-              />
-            ) : (
-              <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: item.color }} />
-            )}
-            <span className={visible[item.key] ? "text-card-foreground" : ""}>{item.label}</span>
-          </label>
-        ))}
-      </div>
-
-      {hasReference && deltaData.length > 0 && (
-        <div className="mt-4 border-t border-border/60 pt-3">
-          <div className="mb-1 flex items-baseline justify-between text-xs text-muted-foreground">
-            <span>{t("telemetryPage.deltaChartTitle")}</span>
-            {finalDeltaMs != null && (
-              <span
-                className={
-                  "font-data font-semibold tabular-nums " +
-                  (finalDeltaMs > 0 ? "text-red-500" : finalDeltaMs < 0 ? "text-green-500" : "")
-                }
-              >
-                {t("telemetryPage.deltaAtFinish", { delta: formatSignedDeltaMs(finalDeltaMs) })}
-              </span>
-            )}
-          </div>
-          <ResponsiveContainer width="100%" height={70}>
-            <AreaChart data={deltaData} margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-              <defs>
-                <linearGradient id="telemetryDeltaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset={0} stopColor="#22c55e" stopOpacity={0.35} />
-                  <stop offset={deltaGradientOffset} stopColor="#22c55e" stopOpacity={0.35} />
-                  <stop offset={deltaGradientOffset} stopColor="#ef4444" stopOpacity={0.35} />
-                  <stop offset={1} stopColor="#ef4444" stopOpacity={0.35} />
-                </linearGradient>
-                <linearGradient id="telemetryDeltaStroke" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset={0} stopColor="#22c55e" />
-                  <stop offset={deltaGradientOffset} stopColor="#22c55e" />
-                  <stop offset={deltaGradientOffset} stopColor="#ef4444" />
-                  <stop offset={1} stopColor="#ef4444" />
-                </linearGradient>
-              </defs>
-              <XAxis
-                dataKey="distM"
-                type="number"
-                domain={["dataMin", "dataMax"]}
-                tick={{ fontSize: 10 }}
-                tickFormatter={(v: number) => `${v}`}
-                label={{
-                  value: t("telemetryPage.axisDeltaDistance"),
-                  position: "insideBottomRight",
-                  offset: -4,
-                  fontSize: 10,
-                }}
-              />
-              <YAxis tick={{ fontSize: 10 }} width={36} tickFormatter={(v: number) => (v / 1000).toFixed(1)} />
-              <ReferenceLine y={0} stroke="var(--color-border, #e2e8f0)" strokeDasharray="3 3" />
-              <Tooltip
-                formatter={(value: number) => [formatSignedDeltaMs(value) + " s", t("telemetryPage.deltaChartTitle")]}
-                labelFormatter={(label: number) => `${label} m`}
-                contentStyle={{ fontSize: 12 }}
-              />
-              <Area
-                type="monotone"
-                dataKey="deltaMs"
-                stroke="url(#telemetryDeltaStroke)"
-                strokeWidth={1.5}
-                fill="url(#telemetryDeltaGradient)"
-                isAnimationActive={false}
-                dot={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+          {hasReference && deltaData.length > 0 && (
+            <div className="mt-4 border-t border-border/60 pt-3">
+              <div className="mb-1 flex items-baseline justify-between text-xs text-muted-foreground">
+                <span>{t("telemetryPage.deltaChartTitle")}</span>
+                {finalDeltaMs != null && (
+                  <span
+                    className={
+                      "font-data font-semibold tabular-nums " +
+                      (finalDeltaMs > 0 ? "text-red-500" : finalDeltaMs < 0 ? "text-green-500" : "")
+                    }
+                  >
+                    {t("telemetryPage.deltaAtFinish", { delta: formatSignedDeltaMs(finalDeltaMs) })}
+                  </span>
+                )}
+              </div>
+              <ResponsiveContainer width="100%" height={70}>
+                <AreaChart data={deltaData} margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id="telemetryDeltaGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset={0} stopColor="#22c55e" stopOpacity={0.35} />
+                      <stop offset={deltaGradientOffset} stopColor="#22c55e" stopOpacity={0.35} />
+                      <stop offset={deltaGradientOffset} stopColor="#ef4444" stopOpacity={0.35} />
+                      <stop offset={1} stopColor="#ef4444" stopOpacity={0.35} />
+                    </linearGradient>
+                    <linearGradient id="telemetryDeltaStroke" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset={0} stopColor="#22c55e" />
+                      <stop offset={deltaGradientOffset} stopColor="#22c55e" />
+                      <stop offset={deltaGradientOffset} stopColor="#ef4444" />
+                      <stop offset={1} stopColor="#ef4444" />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="distM"
+                    type="number"
+                    domain={["dataMin", "dataMax"]}
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(v: number) => `${v}`}
+                    label={{
+                      value: t("telemetryPage.axisDeltaDistance"),
+                      position: "insideBottomRight",
+                      offset: -4,
+                      fontSize: 10,
+                    }}
+                  />
+                  <YAxis tick={{ fontSize: 10 }} width={36} tickFormatter={(v: number) => (v / 1000).toFixed(1)} />
+                  <ReferenceLine y={0} stroke="var(--color-border, #e2e8f0)" strokeDasharray="3 3" />
+                  <Tooltip
+                    formatter={(value: number) => [
+                      formatSignedDeltaMs(value) + " s",
+                      t("telemetryPage.deltaChartTitle"),
+                    ]}
+                    labelFormatter={(label: number) => `${label} m`}
+                    contentStyle={{ fontSize: 12 }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="deltaMs"
+                    stroke="url(#telemetryDeltaStroke)"
+                    strokeWidth={1.5}
+                    fill="url(#telemetryDeltaGradient)"
+                    isAnimationActive={false}
+                    dot={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

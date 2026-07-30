@@ -1,9 +1,9 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { useMemo } from "react";
 import { geoToImagePixel, getSatelliteMapCalibration, type ImagePoint } from "@/lib/trackMapCalibration";
 import { headingAt, arrowPolygonPoints, perpendicularSegment, offsetPerpendicular } from "@/lib/telemetryGeo";
 import { buildColoredSegments, detectCornerSpeedMarkers, type SpeedSample } from "@/lib/telemetrySpeed";
 import { interpolateAtDistance } from "@/lib/telemetryReference";
+import type { MapZoomPanControls } from "@/hooks/use-map-zoom-pan";
 import type { TelemetryLapPoint } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 
@@ -13,124 +13,19 @@ interface SatelliteTrackMapProps {
   trackName: string;
   /** См. `TelemetryTrackMapProps.referencePoints` — эталонный круг для призрака. */
   referencePoints?: TelemetryLapPoint[];
+  /** Зум/пан — управляется снаружи (см. `TelemetryTrackMap`), одним хуком на оба
+   * режима карты (схема/спутник), чтобы левый тулбар в `TelemetryDetail` был
+   * единственным источником зума, а не дублировался в углу карты. */
+  zoomPan: MapZoomPanControls;
 }
 
-interface View {
-  scale: number;
-  tx: number;
-  ty: number;
-}
-
-const ZOOM_STEP = 1.4;
-const MAX_ZOOM_MULT = 24;
-
-export function SatelliteTrackMap({ points, hoverIndex, trackName, referencePoints }: SatelliteTrackMapProps) {
+export function SatelliteTrackMap({ points, hoverIndex, trackName, referencePoints, zoomPan }: SatelliteTrackMapProps) {
   const { t } = useLanguage();
   const calibration = getSatelliteMapCalibration(trackName);
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState<View | null>(null);
-  const dragRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
+  const { view, containerRef, onWheel, onPointerDown, onPointerMove, onPointerUp } = zoomPan;
 
   const naturalWidth = calibration?.naturalWidth ?? 0;
   const naturalHeight = calibration?.naturalHeight ?? 0;
-
-  const fitView = useCallback((): View | null => {
-    const el = containerRef.current;
-    if (!el || naturalWidth === 0) return null;
-    const { clientWidth: cw, clientHeight: ch } = el;
-    const fitScale = Math.min(cw / naturalWidth, ch / naturalHeight);
-    return {
-      scale: fitScale,
-      tx: (cw - naturalWidth * fitScale) / 2,
-      ty: (ch - naturalHeight * fitScale) / 2,
-    };
-  }, [naturalWidth, naturalHeight]);
-
-  // Инициализация масштаба «по размеру контейнера» при первом измерении и ресайзе окна.
-  useLayoutEffect(() => {
-    setView(fitView());
-    const onResize = () =>
-      setView((v) => (v ? clampView(v, containerRef.current, naturalWidth, naturalHeight) : fitView()));
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackName]);
-
-  function clampView(v: View, el: HTMLDivElement | null, natW: number, natH: number): View {
-    if (!el) return v;
-    const { clientWidth: cw, clientHeight: ch } = el;
-    const contentW = natW * v.scale;
-    const contentH = natH * v.scale;
-    const tx = contentW <= cw ? (cw - contentW) / 2 : Math.min(0, Math.max(cw - contentW, v.tx));
-    const ty = contentH <= ch ? (ch - contentH) / 2 : Math.min(0, Math.max(ch - contentH, v.ty));
-    return { scale: v.scale, tx, ty };
-  }
-
-  const zoomAt = useCallback(
-    (factor: number, cx: number, cy: number) => {
-      const el = containerRef.current;
-      const fit = fitView();
-      if (!el || !fit) return;
-      setView((prev) => {
-        const cur = prev ?? fit;
-        const minScale = fit.scale;
-        const maxScale = fit.scale * MAX_ZOOM_MULT;
-        const newScale = Math.min(maxScale, Math.max(minScale, cur.scale * factor));
-        const contentX = (cx - cur.tx) / cur.scale;
-        const contentY = (cy - cur.ty) / cur.scale;
-        const next: View = {
-          scale: newScale,
-          tx: cx - contentX * newScale,
-          ty: cy - contentY * newScale,
-        };
-        return clampView(next, el, naturalWidth, naturalHeight);
-      });
-    },
-    [fitView, naturalWidth, naturalHeight],
-  );
-
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const factor = Math.exp(-e.deltaY * 0.0015);
-    zoomAt(factor, e.clientX - rect.left, e.clientY - rect.top);
-  };
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (!view) return;
-    (e.target as Element).setPointerCapture(e.pointerId);
-    dragRef.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const drag = dragRef.current;
-    const el = containerRef.current;
-    if (!drag || !el) return;
-    setView((prev) => {
-      if (!prev) return prev;
-      const next: View = {
-        scale: prev.scale,
-        tx: drag.tx + (e.clientX - drag.x),
-        ty: drag.ty + (e.clientY - drag.y),
-      };
-      return clampView(next, el, naturalWidth, naturalHeight);
-    });
-  };
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    dragRef.current = null;
-    (e.target as Element).releasePointerCapture(e.pointerId);
-  };
-
-  const handleZoomButton = (factor: number) => {
-    const el = containerRef.current;
-    if (!el) return;
-    zoomAt(factor, el.clientWidth / 2, el.clientHeight / 2);
-  };
-
-  const handleReset = () => setView(fitView());
 
   const svgPoints = useMemo(() => {
     return points.map((p) =>
@@ -222,7 +117,7 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName, referencePoin
   return (
     <div
       ref={containerRef}
-      className="relative h-[420px] w-full touch-none overflow-hidden rounded-md bg-muted/40 md:h-[640px]"
+      className="relative h-full w-full touch-none overflow-hidden bg-muted/40"
       onWheel={onWheel}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -360,33 +255,6 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName, referencePoin
           </svg>
         </div>
       )}
-
-      <div className="absolute right-1 top-1 z-10 flex flex-col gap-1">
-        <button
-          type="button"
-          onClick={() => handleZoomButton(ZOOM_STEP)}
-          className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 text-muted-foreground hover-elevate"
-          aria-label={t("telemetryPage.zoomIn")}
-        >
-          <ZoomIn size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => handleZoomButton(1 / ZOOM_STEP)}
-          className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 text-muted-foreground hover-elevate"
-          aria-label={t("telemetryPage.zoomOut")}
-        >
-          <ZoomOut size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 text-muted-foreground hover-elevate"
-          aria-label={t("telemetryPage.resetView")}
-        >
-          <Maximize2 size={14} />
-        </button>
-      </div>
     </div>
   );
 }
