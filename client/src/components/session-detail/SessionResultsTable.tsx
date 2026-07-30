@@ -104,6 +104,9 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
       <td className="hidden px-4 py-2.5 text-right font-data text-xs tabular-nums text-muted-foreground lg:table-cell">
         {row.gap ?? "—"}
       </td>
+
+      {/* Время на треке */}
+      <td className="px-4 py-2.5 text-right font-data tabular-nums text-muted-foreground">{row.timeOnTrack}</td>
     </tr>
   );
 }
@@ -137,6 +140,7 @@ export function SessionResultsTable({ rows, fastestLapTime, selectedCarKey, onSe
             <th className="hidden px-4 py-2.5 text-right md:table-cell">{t("sessionDetail.colPit")}</th>
             <th className="px-4 py-2.5 text-right">{t("sessionDetail.bestLap")}</th>
             <th className="hidden px-4 py-2.5 text-right lg:table-cell">{t("sessionDetail.gap")}</th>
+            <th className="px-4 py-2.5 text-right">{t("sessionDetail.colTimeOnTrack")}</th>
           </tr>
         </thead>
         <tbody>

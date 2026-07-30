@@ -66,7 +66,7 @@ export function buildSessionDetailViewModel(params: BuildSessionDetailViewModelP
     },
 
     heroStats: buildHeroStats(session),
-    results: buildResultRows(session),
+    results: buildResultRows(session, laps),
     tabs: buildTabs(hasLapData, { results: "Результаты", laps: "Круги", lapProgress: "Прогресс" }),
     lapProgress: hasLapData ? buildLapProgressSeries(laps) : [],
     sectors: hasLapData ? buildSectorSummary(laps) : [],
