@@ -1,5 +1,5 @@
 ---
-paths: "server/**/*.ts", "script/**/*.ts"
+paths: ["server/**/*.ts", "script/**/*.ts"]
 ---
 
 # Правила БД
