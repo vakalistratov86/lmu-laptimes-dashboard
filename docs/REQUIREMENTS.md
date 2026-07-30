@@ -1034,7 +1034,7 @@ className="truncate">` вокруг имени) — этого достаточ�
 | 1 | Поз. | left, `w-12` | всегда | позиционный квадрат 7×7, топ-3 — медаль | `font-data font-bold tabular-nums` |
 | 2 | Пилот | left, `max-w-[165px]` | всегда | `DriverName` (усекается через `truncate`); для командной машины — бейдж `Users N` вместо имени | `font-medium` |
 | 3 | Команда | left, `max-w-[128px]` | ≥ `sm` | название команды, `truncate` | `text-[11px] text-muted-foreground` |
-| 4 | Класс | left, `max-w-[92px]` | всегда | `CarClassBadge` — компактный вариант (уже, чем стандартный `text-xs` бейдж на других страницах), т.к. в строке ровно один бейдж, а не список | `px-1.5 py-0.5 text-[11px]` |
+| 4 | Класс | left, `max-w-[92px]` | всегда | `CarClassBadge` — компактный вариант (уже, чем стандартный `text-xs` бейдж на других страницах), т.к. в строке ровно один бейдж, а не список; `truncate` на бейдже — нераспознанный `car_class` рисуется как есть (см. `classStyles.ts`, `getClassDisplayLabel()`) и без гарантии на длину раздвинул бы узкую колонку | `px-1.5 py-0.5 text-[11px]` |
 | 5 | Авто | left, `max-w-[128px]` | ≥ `sm` | модель + `#номер`, `truncate` | `text-[11px] text-muted-foreground` |
 | 6 | Статус | left, `max-w-[110px]` | всегда | `Badge` статуса финиша (если есть), `truncate` внутри бейджа | `text-xs text-muted-foreground` |
 | 7 | Кругов | right | всегда | число кругов | `font-data tabular-nums` |

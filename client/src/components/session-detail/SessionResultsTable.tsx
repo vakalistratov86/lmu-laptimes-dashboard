@@ -67,10 +67,13 @@ export function SessionResultsRow({ row, isFastest, isSelected, onSelect }: Sess
         {row.teamName ?? "—"}
       </td>
 
-      {/* Класс машины */}
+      {/* Класс машины — max-w-full truncate на бейдже обязателен: getClassDisplayLabel()
+          возвращает нераспознанный car_class как есть (см. classStyles.ts), без гарантии
+          на длину — компактная колонка иначе была бы раздвинута аномально длинным
+          сырым значением класса. */}
       <td className="max-w-[92px] px-4 py-2.5">
         {row.carClass ? (
-          <CarClassBadge carClass={row.carClass} className="px-1.5 py-0.5 text-[11px]" />
+          <CarClassBadge carClass={row.carClass} className="max-w-full truncate px-1.5 py-0.5 text-[11px]" />
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
