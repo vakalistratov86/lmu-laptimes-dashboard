@@ -12,6 +12,12 @@
 
 ---
 
+## [1.4.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.3.2...v1.4.0) (2026-07-30)
+
+### Added
+
+* показать версию приложения в подвале бокового меню ([#189](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/189)) ([747a99c](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/747a99c4084b1938b5661f1c34cb3a4bff1c80b3))
+
 ## [1.3.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.3.1...v1.3.2) (2026-07-30)
 
 ### Fixed
