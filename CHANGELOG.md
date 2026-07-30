@@ -12,6 +12,12 @@
 
 ---
 
+## [1.5.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.4.2...v1.5.0) (2026-07-30)
+
+### Added
+
+* переключатель схема/спутник и сравнение с эталонным кругом на телеметрии ([#192](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/192)) ([989cf82](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/989cf820045d6932bab979b88378393d9639e0e6))
+
 ## [1.4.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.4.1...v1.4.2) (2026-07-30)
 
 ### Fixed
