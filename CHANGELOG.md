@@ -12,6 +12,12 @@
 
 ---
 
+## [1.4.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.4.0...v1.4.1) (2026-07-30)
+
+### Fixed
+
+* **ci:** собирать Docker-образ из коммита релиза, а не из pre-release SHA ([#190](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/190)) ([b2e922e](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/b2e922e9a3311adad5b5e1979d37c32a5fee99c1))
+
 ## [1.4.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.3.2...v1.4.0) (2026-07-30)
 
 ### Added
