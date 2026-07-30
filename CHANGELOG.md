@@ -12,6 +12,12 @@
 
 ---
 
+## [1.3.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.3.0...v1.3.1) (2026-07-30)
+
+### Fixed
+
+* **session-detail:** оптимизировать ширину колонок таблицы «Результаты» ([#186](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/186)) ([0620e57](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/0620e5749f9bbd9b6f3e64bb148a767928e4f54d))
+
 ## [1.3.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.2.2...v1.3.0) (2026-07-30)
 
 ### Added
