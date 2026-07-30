@@ -51,7 +51,14 @@ jobs:
       contents: read
       packages: write
     steps:
+      # Без явного ref checkout берёт github.sha — коммит, который запустил
+      # workflow, ДО того как release-джоба выше запушила бамп версии
+      # (chore(release): X.Y.Z) и создала тег. Из-за этого в образ попадал
+      # package.json с предыдущей версией: сборка отставала от тега/деплоя
+      # на один релиз (версия в UI показывала N-1). Чекаутим сам тег релиза.
       - uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.release.outputs.version }}
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
