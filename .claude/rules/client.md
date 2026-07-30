@@ -1,5 +1,5 @@
 ---
-paths: "client/src/**/*.ts", "client/src/**/*.tsx"
+paths: ["client/src/**/*.ts", "client/src/**/*.tsx"]
 ---
 
 # Правила клиента (дашборд)
