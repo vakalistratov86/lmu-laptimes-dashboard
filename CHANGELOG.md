@@ -12,6 +12,12 @@
 
 ---
 
+## [1.3.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.3.1...v1.3.2) (2026-07-30)
+
+### Fixed
+
+* **sessions:** колонка «Классы» подстраивается под контент, не шире 170px ([#187](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/187)) ([f25acf4](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/f25acf41bc0c581ea364f03467721c9980a30486))
+
 ## [1.3.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.3.0...v1.3.1) (2026-07-30)
 
 ### Fixed
