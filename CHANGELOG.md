@@ -12,6 +12,12 @@
 
 ---
 
+## [1.6.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.5.0...v1.6.0) (2026-07-30)
+
+### Added
+
+* полноэкранный макет страницы телеметрии по мокапу вместо стека карточек ([#193](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/193)) ([4139cb4](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/4139cb49d5f23564a77c3fefc6ac7e2d5b98a786))
+
 ## [1.5.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.4.2...v1.5.0) (2026-07-30)
 
 ### Added
