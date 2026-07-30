@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import { useSessions } from "@/lib/api";
 import { formatLap } from "@/lib/format";
@@ -98,6 +98,11 @@ function getSessionClasses(session: SessionItem): string[] {
   const labels = new Set(present.map(getClassDisplayLabel));
   return Array.from(labels).sort(compareCarClass);
 }
+
+// Верхняя граница ширины колонки «Классы» — прежнее фиксированное значение,
+// теперь работает как кап, а не как единственно возможная ширина (см.
+// useLayoutEffect в компоненте, вычисляющий реальную нужную ширину).
+const CLASSES_COL_MAX_WIDTH = 170;
 
 type SessionsSummary = Record<SessionCategory, { count: number; minutes: number }>;
 
@@ -257,6 +262,29 @@ export default function Sessions() {
     [filtered],
   );
 
+  const sessionClassLists = useMemo(() => sorted.map(getSessionClasses), [sorted]);
+
+  // Колонка «Классы» подстраивается под самую широкую фактическую строку (сессию
+  // с несколькими классами или самый длинный одиночный класс), но не шире
+  // CLASSES_COL_MAX_WIDTH — иначе аномально длинный нераспознанный car_class
+  // (см. getClassDisplayLabel()) раздул бы колонку без предела. Единая ширина
+  // для ВСЕХ строк вычисляется из скрытого (invisible, но не display:none —
+  // измеряемого) слепка тех же бейджей без ограничения ширины: раз каждая
+  // строка — независимый CSS grid (не общий table-layout: auto), только так
+  // можно получить одну и ту же ширину колонки во всех строках сразу.
+  const classesMeasureRef = useRef<HTMLDivElement>(null);
+  const [classesColWidth, setClassesColWidth] = useState(CLASSES_COL_MAX_WIDTH);
+
+  useLayoutEffect(() => {
+    const container = classesMeasureRef.current;
+    if (!container) return;
+    const widths = Array.from(container.children).map((el) => el.getBoundingClientRect().width);
+    const naturalMax = widths.length > 0 ? Math.max(...widths) : CLASSES_COL_MAX_WIDTH;
+    setClassesColWidth(Math.min(naturalMax, CLASSES_COL_MAX_WIDTH));
+  }, [sessionClassLists, locale]);
+
+  const gridTemplateColumns = `160px 110px minmax(160px,1fr) 140px ${classesColWidth}px 140px 80px 110px 24px`;
+
   const hasSessions = sessions && sessions.length > 0;
   const hasFiltered = sorted.length > 0;
 
@@ -395,11 +423,12 @@ export default function Sessions() {
         </div>
       )}
 
-      {/* Sessions table. Колонки фиксированной ширины (160+110+140+170+140+80+110+24 = 934px)
-          плюс gap-x-3 между 9 колонками (96px) = 1030px, шире, чем мобильный экран — раньше
-          внешний контейнер был overflow-hidden и просто обрезал Трек/Лучший круг/Кругов/Дату
-          без возможности их увидеть. Теперь контейнер overflow-x-auto, а строки
-          min-w-[1068px] (с запасом под "Трек" minmax(160px,…)) — на мобильном таблица целиком
+      {/* Sessions table. Колонки фиксированной ширины (160+110+140+CLASSES+140+80+110+24, где
+          CLASSES — до CLASSES_COL_MAX_WIDTH=170px, см. classesColWidth выше) плюс gap-x-3 между
+          9 колонками (96px) — шире, чем мобильный экран — раньше внешний контейнер был
+          overflow-hidden и просто обрезал Трек/Лучший круг/Кругов/Дату без возможности их
+          увидеть. Теперь контейнер overflow-x-auto, а строки min-w-[1068px] (с запасом под
+          "Трек" minmax(160px,…) и максимumом колонки "Классы") — на мобильном таблица целиком
           листается горизонтально свайпом, ни одна колонка не пропадает. Между колонками
           обязателен gap — без него длинная конфигурация трассы (напр. "Circuit de la Sarthe")
           вплотную примыкает к соседней колонке, т.к. у ячеек нет собственных отступов. */}
@@ -409,10 +438,30 @@ export default function Sessions() {
           role="table"
           aria-label={t("sessions.tableAria")}
         >
+          {/* Скрытый (invisible, не display:none — так сохраняется layout для измерения),
+              но неинтерактивный слепок тех же бейджей БЕЗ ограничения ширины — по нему
+              useLayoutEffect выше считает единую для всех строк ширину колонки «Классы». */}
+          <div
+            ref={classesMeasureRef}
+            aria-hidden="true"
+            className="invisible absolute left-0 top-0 flex flex-col items-start"
+          >
+            <div className="text-xs font-semibold uppercase tracking-wider">{t("sessions.colClasses")}</div>
+            {sessionClassLists.map((classes, i) => (
+              <div key={i} className="flex gap-1">
+                {classes.length > 0 ? (
+                  classes.map((cls) => <CarClassBadge key={cls} carClass={cls} className="px-1.5 py-0 text-[10px]" />)
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
+              </div>
+            ))}
+          </div>
+
           {/* Table header */}
           <div
             className="grid min-w-[1068px] gap-x-3 border-b border-border bg-secondary/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            style={{ gridTemplateColumns: "160px 110px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px" }}
+            style={{ gridTemplateColumns }}
             role="row"
           >
             <div role="columnheader">{t("sessions.colType")}</div>
@@ -433,10 +482,10 @@ export default function Sessions() {
           </div>
 
           {/* Table rows */}
-          {sorted.map((session) => {
+          {sorted.map((session, index) => {
             const cat = normalizeSessionCategory(session.sessionType);
             const bestLap = getBestLapForSession(session);
-            const classes = getSessionClasses(session);
+            const classes = sessionClassLists[index];
             const filterParam = activeFilter !== "all" ? `?from_filter=${encodeURIComponent(activeFilter)}` : "";
             const href = `/sessions/${session.id}${filterParam}`;
 
@@ -446,7 +495,7 @@ export default function Sessions() {
                 href={href}
                 data-testid={`row-session-${session.id}`}
                 className="grid min-w-[1068px] cursor-pointer items-center gap-x-3 border-b border-border/50 px-4 py-3 last:border-0 hover:bg-muted/40 active:bg-muted/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                style={{ gridTemplateColumns: "160px 110px minmax(160px,1fr) 140px 170px 140px 80px 110px 24px" }}
+                style={{ gridTemplateColumns }}
                 role="row"
                 aria-label={`${t(`sessionType.${cat}`)} — ${trackDisplayLabel(session.trackName, session.course)} — ${formatDate(session.dateTime, intlLocale)}`}
               >
@@ -473,11 +522,12 @@ export default function Sessions() {
                   {configLabel(session.trackName, session.course)}
                 </div>
 
-                {/* Classes — max-w-full truncate обязателен на каждом бейдже: getClassDisplayLabel()
-                    рисует нераспознанный car_class как есть (см. classStyles.ts), без гарантии на
-                    длину. Без truncate такой бейдж (whitespace-nowrap по умолчанию, см. ui/badge.tsx)
-                    не сжимался бы во flex-wrap ячейке и вылезал за пределы фиксированной колонки
-                    170px, наезжая на соседние колонки. */}
+                {/* Classes — ширина колонки теперь variable (см. classesColWidth), но max-w-full
+                    truncate на каждом бейдже всё равно обязателен: getClassDisplayLabel() рисует
+                    нераспознанный car_class как есть (см. classStyles.ts), без гарантии на длину —
+                    именно из-за такого значения natural-ширина строки может упереться в кап
+                    CLASSES_COL_MAX_WIDTH, и тогда бейдж обязан сжаться/усечься, а не вылезти за
+                    пределы колонки, наехав на соседние. */}
                 <div className="flex flex-wrap gap-1" role="cell">
                   {classes.length > 0 ? (
                     classes.map((cls) => (
