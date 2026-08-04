@@ -8,6 +8,7 @@ import type {
   TelemetrySession,
   DriverIncidentsResponse,
 } from "@shared/schema";
+import type { SteamCatalogResponse } from "@shared/steamTypes";
 
 export function useTracks() {
   return useQuery<Track[]>({ queryKey: ["/api/tracks"] });
@@ -257,6 +258,25 @@ export function useRefreshSpecialEvents() {
       return res.json() as Promise<EventsResponse>;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/special-events"] }),
+  });
+}
+
+export function useSteamCatalog() {
+  return useQuery<SteamCatalogResponse>({
+    queryKey: ["/api/steam/catalog"],
+    staleTime: 1000 * 60 * 30,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useRefreshSteamCatalog() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/steam/catalog/refresh");
+      return res.json() as Promise<SteamCatalogResponse>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/steam/catalog"] }),
   });
 }
 

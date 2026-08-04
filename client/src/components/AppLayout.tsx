@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Activity,
   User,
+  Gamepad2,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { AppVersion } from "./AppVersion";
@@ -33,6 +34,7 @@ function useNav() {
     { href: "/sessions", label: t("nav.sessions"), icon: ListChecks, testId: "link-sessions" },
     { href: "/telemetry", label: t("nav.telemetry"), icon: Activity, testId: "link-telemetry" },
     { href: "/events", label: t("nav.events"), icon: CalendarDays, testId: "link-events" },
+    { href: "/steam", label: t("nav.steam"), icon: Gamepad2, testId: "link-steam" },
   ];
 }
 
