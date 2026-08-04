@@ -21,6 +21,7 @@ import {
 } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { getSpecialEvents, invalidateCache } from "./eventsParser";
+import { fetchSteamCatalog, refreshSteamCatalog } from "./steamApi";
 import { computeFileHash, generateId, getJobStatus, getJobErrors, runImport } from "./importWorker";
 import { computeFileHashBinary, runTelemetryImport } from "./telemetryImportWorker";
 import { listTelemetrySessions, getTelemetrySessionWithChannels, getSessionLaps, getLapSeries } from "./telemetryQuery";
@@ -646,6 +647,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       invalidateCache();
       const data = await getSpecialEvents();
       res.json({ ok: true, fetchedAt: data.fetchedAt, count: data.events.length, source: data.source });
+    }),
+  );
+
+  // ── LMU Steam (игра + DLC из Steam Store API) ──────────────────────
+  app.get(
+    "/api/steam/catalog",
+    asyncRoute(async (_req, res) => {
+      res.json(await fetchSteamCatalog());
+    }),
+  );
+
+  app.post(
+    "/api/steam/catalog/refresh",
+    asyncRoute(async (_req, res) => {
+      res.json(await refreshSteamCatalog());
     }),
   );
 

@@ -22,6 +22,7 @@ import DriverDetail from "@/pages/DriverDetail";
 import PilotProfile from "@/pages/PilotProfile";
 import Import from "@/pages/Import";
 import Events from "@/pages/Events";
+import SteamCatalog from "@/pages/SteamCatalog";
 
 function AppRouter() {
   return (
@@ -37,6 +38,7 @@ function AppRouter() {
       <Route path="/drivers/:id" component={DriverDetail} />
       <Route path="/profile" component={PilotProfile} />
       <Route path="/events" component={Events} />
+      <Route path="/steam" component={SteamCatalog} />
       <Route path="/import" component={Import} />
       <Route component={NotFound} />
     </Switch>

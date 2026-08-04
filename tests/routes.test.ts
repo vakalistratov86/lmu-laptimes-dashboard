@@ -74,6 +74,24 @@ vi.mock("../server/eventsParser", () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Мок steamApi
+// ---------------------------------------------------------------------------
+vi.mock("../server/steamApi", () => ({
+  fetchSteamCatalog: vi.fn().mockResolvedValue({
+    fetchedAt: new Date().toISOString(),
+    source: "live",
+    region: "ru",
+    items: [],
+  }),
+  refreshSteamCatalog: vi.fn().mockResolvedValue({
+    fetchedAt: new Date().toISOString(),
+    source: "live",
+    region: "ru",
+    items: [],
+  }),
+}));
+
+// ---------------------------------------------------------------------------
 // Вспомогательные функции
 // ---------------------------------------------------------------------------
 async function buildTestApp(): Promise<{ app: Express; server: http.Server }> {
@@ -856,6 +874,32 @@ describe("API Routes", () => {
       const { invalidateCache } = await import("../server/eventsParser");
       await makeRequest(app, "POST", "/api/special-events/refresh");
       expect(invalidateCache).toHaveBeenCalled();
+    });
+  });
+
+  // ── GET /api/steam/catalog ────────────────────────────────────────────────
+  describe("GET /api/steam/catalog", () => {
+    it("возвращает 200", async () => {
+      const res = await makeRequest(app, "GET", "/api/steam/catalog");
+      expect(res.status).toBe(200);
+    });
+
+    it("тело ответа содержит поля items/source/region", async () => {
+      const res = await makeRequest(app, "GET", "/api/steam/catalog");
+      expect(res.body).toHaveProperty("items");
+      expect(res.body).toHaveProperty("source");
+      expect(res.body).toHaveProperty("region");
+      expect(Array.isArray((res.body as { items: unknown[] }).items)).toBe(true);
+    });
+  });
+
+  // ── POST /api/steam/catalog/refresh ──────────────────────────────────────
+  describe("POST /api/steam/catalog/refresh", () => {
+    it("возвращает 200 и вызывает refreshSteamCatalog()", async () => {
+      const { refreshSteamCatalog } = await import("../server/steamApi");
+      const res = await makeRequest(app, "POST", "/api/steam/catalog/refresh");
+      expect(res.status).toBe(200);
+      expect(refreshSteamCatalog).toHaveBeenCalled();
     });
   });
 });
