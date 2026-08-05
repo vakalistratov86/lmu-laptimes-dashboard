@@ -12,6 +12,16 @@
 
 ---
 
+## [1.10.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.9.1...v1.10.0) (2026-08-05)
+
+### Added
+
+* парсинг тега &lt;Penalty&gt; из Stream (штрафы) ([#201](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/201)) ([85ba1a1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/85ba1a1cc105e4e3e707a2a8a6e34b5192779342))
+
+### Docs
+
+* требовать обновление документации при каждом коммите ([#200](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/200)) ([d6a2292](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/d6a2292ed82ab7721d185b9a9764050fe3e31a97))
+
 ## [1.9.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.9.0...v1.9.1) (2026-08-05)
 
 ### Fixed
