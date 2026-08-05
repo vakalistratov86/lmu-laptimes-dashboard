@@ -4,12 +4,12 @@
 
 Проект использует **PostgreSQL** в качестве СУБД (драйвер `postgres-js`) и **Drizzle ORM** для декларативного описания схемы и выполнения запросов. Файл схемы расположен в `shared/schema.ts` — он является единым источником истины как для сервера, так и для клиента.
 
-База данных содержит **15 таблиц**, объединённых в логические группы:
+База данных содержит **16 таблиц**, объединённых в логические группы:
 
 | Группа | Таблицы | Назначение |
 | -------- | --------- | ------------ |
 | Справочники | `tracks`, `drivers` | Статические данные о трассах и пилотах |
-| Сессии | `sessions`, `session_results`, `session_laps`, `session_incidents`, `session_sector_bests`, `session_track_limits` | Данные, импортированные из XML-логов игры rFactor2 / LMU |
+| Сессии | `sessions`, `session_results`, `session_laps`, `session_incidents`, `session_sector_bests`, `session_track_limits`, `session_penalties` | Данные, импортированные из XML-логов игры rFactor2 / LMU |
 | Ручные замеры | `lap_times` | «Плоские» времена кругов, импортированные из XML-логов |
 | Импорт XML | `import_jobs`, `import_errors` | Журнал импортированных файлов и DLQ невалидных записей |
 | Телеметрия | `telemetry_import_jobs`, `telemetry_sessions`, `telemetry_channels`, `telemetry_samples` | Данные, импортированные из `.duckdb`-файлов записи телеметрии LMU |
@@ -114,7 +114,7 @@
 | `most_laps_completed` | INTEGER | `MostLapsCompleted` — тоже читается из тега сессии, не из корня |
 | `has_co_drivers` | INTEGER NOT NULL, default 0 | `1` — хотя бы у одной машины сессии несколько реальных пилотов (обнаружен `<Swap>` с разными именами, см. `session_results` ниже); `0` — все машины сольные |
 
-**Дедупликация при импорте (реконнект).** Выделенный сервер LMU при разрыве соединения пишет новый файл лога вместо дополнения старого — устойчивого тега-идентификатора сессии в формате нет. При импорте сессия-продолжение определяется по совпадению `event` + точного `session_type` + `track_id` + пересечения состава пилотов (коэффициент Шимкевича — Симпсона ≥ 0.5), в пределах ±24 часов от `date_time` нового файла — см. `server/sessionSupersede.ts`. При обнаружении более полный по суммарному числу кругов дамп заменяет менее полный: старая строка `sessions` и все её данные (`session_results`, `session_laps`, `lap_times`, `session_incidents`, `session_sector_bests`, `session_track_limits`) удаляются, новый дамп вставляется как отдельная сессия. Запись в `import_jobs` от старого (заменённого) импорта не удаляется и остаётся со ссылкой на уже несуществующий `session_id` — не используется ни в одном запросе, кроме статуса самой задачи импорта.
+**Дедупликация при импорте (реконнект).** Выделенный сервер LMU при разрыве соединения пишет новый файл лога вместо дополнения старого — устойчивого тега-идентификатора сессии в формате нет. При импорте сессия-продолжение определяется по совпадению `event` + точного `session_type` + `track_id` + пересечения состава пилотов (коэффициент Шимкевича — Симпсона ≥ 0.5), в пределах ±24 часов от `date_time` нового файла — см. `server/sessionSupersede.ts`. При обнаружении более полный по суммарному числу кругов дамп заменяет менее полный: старая строка `sessions` и все её данные (`session_results`, `session_laps`, `lap_times`, `session_incidents`, `session_sector_bests`, `session_track_limits`, `session_penalties`) удаляются, новый дамп вставляется как отдельная сессия. Запись в `import_jobs` от старого (заменённого) импорта не удаляется и остаётся со ссылкой на уже несуществующий `session_id` — не используется ни в одном запросе, кроме статуса самой задачи импорта.
 
 ---
 
@@ -238,6 +238,23 @@
 
 ---
 
+### `session_penalties` — Штрафы
+
+Штрафы пилотов, зафиксированные в `Stream`-секции XML-лога (тег `<Penalty>`, #173). Данные лежат в атрибутах тега (`Driver`, `Penalty`, `Time`, `Laps`, `Reason`, `et`), как и у `<TrackLimits>`/`<Sector>` — текст тега содержит только человекочитаемое резюме, парсер (`server/logParser.ts`, `parseStream()`) читает атрибуты напрямую, без регэкспа по тексту.
+
+| Колонка | Тип | Описание |
+| --------- | ----- | ---------- |
+| `id` | SERIAL PK | Первичный ключ |
+| `session_id` | INTEGER NOT NULL | FK → `sessions.id` |
+| `driver_id` | INTEGER NOT NULL | FK → `drivers.id` |
+| `elapsed_time_sec` | REAL NOT NULL | Время начисления штрафа от старта сессии, сек (`et=`) |
+| `penalty_type` | TEXT NOT NULL | Тип штрафа из атрибута `Penalty`, напр. `"Time"`, `"Drive Thru"` |
+| `time_sec` | REAL | Штраф временем, сек (атрибут `Time`) — `NULL`, если тип штрафа не временной |
+| `laps` | INTEGER | Штраф кругами (атрибут `Laps`) — `NULL`, если тип штрафа не круговой |
+| `reason` | TEXT | Причина штрафа (атрибут `Reason`), напр. `"Erratic driving"`, `"Speeding"` |
+
+---
+
 ## Таблицы импорта XML-логов
 
 ### `import_jobs` — Журнал импорта
@@ -352,7 +369,8 @@ import_jobs                        ├─→ session_results
                                     │
                                     ├─→ session_incidents       (session_id, driver_id, target_driver_id)
                                     ├─→ session_sector_bests    (session_id, driver_id)
-                                    └─→ session_track_limits    (session_id, driver_id)
+                                    ├─→ session_track_limits    (session_id, driver_id)
+                                    └─→ session_penalties       (session_id, driver_id)
 
 import_jobs ──→ import_errors             (import_job_id, текстовое поле — без FK-соглашения *_id)
 
@@ -382,7 +400,7 @@ telemetry_sessions
 | `DriverEnriched` | `Driver` | `isPlayer: number \| null` — флаг живого игрока |
 | `LapTimeEnriched` | `LapTime` | `trackName`, `driverName`, `team`, `isPlayer`, `sessionCourse` |
 | `SessionEnriched` | `Session` | `trackName`, `results: (SessionResult & { driverName })[]` |
-| `SessionFull` | `SessionEnriched` | `laps`, `incidents`, `sectorBests`, `trackLimits` |
+| `SessionFull` | `SessionEnriched` | `laps`, `incidents`, `sectorBests`, `trackLimits`, `penalties` |
 | `SessionLapEnriched` | `SessionLap` | `lapNumber`, `lapTimeSeconds`, `sector1`/`sector2`/`sector3` (сек., алиасы полей `*Ms`), `isPitLap: boolean`, `driverName`, `carNumber`, `isPlayer` — используется `GET /api/sessions/:id/laps` (`storage.getSessionLapsEnriched()`, один JOIN `session_laps` → `drivers` → `session_results` по `session_result_id`, #126) |
 
 ---

@@ -198,6 +198,18 @@ export const sessionTrackLimits = pgTable("session_track_limits", {
   decision: text("decision"),
 });
 
+// Штрафы из Stream сессии (#173)
+export const sessionPenalties = pgTable("session_penalties", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull(),
+  driverId: integer("driver_id").notNull(),
+  elapsedTimeSec: real("elapsed_time_sec").notNull(),
+  penaltyType: text("penalty_type").notNull(), // "Time" | "Drive Thru" | ...
+  timeSec: real("time_sec"), // штраф временем, сек — null, если тип штрафа не временной
+  laps: integer("laps"), // штраф кругами — null, если тип штрафа не круговой
+  reason: text("reason"),
+});
+
 // Задания импорта телеметрии (.duckdb) — idempotency по SHA-256 сырых байт файла
 export const telemetryImportJobs = pgTable("telemetry_import_jobs", {
   id: text("id").primaryKey(), // nanoid
@@ -276,6 +288,7 @@ export const insertSessionLapSchema = createInsertSchema(sessionLaps).omit({ id:
 export const insertSessionIncidentSchema = createInsertSchema(sessionIncidents).omit({ id: true });
 export const insertSessionSectorBestSchema = createInsertSchema(sessionSectorBests).omit({ id: true });
 export const insertSessionTrackLimitsSchema = createInsertSchema(sessionTrackLimits).omit({ id: true });
+export const insertSessionPenaltySchema = createInsertSchema(sessionPenalties).omit({ id: true });
 export const insertImportJobSchema = createInsertSchema(importJobs).omit({ id: true });
 export const insertImportErrorSchema = createInsertSchema(importErrors).omit({ id: true });
 export const insertTelemetryImportJobSchema = createInsertSchema(telemetryImportJobs).omit({ id: true });
@@ -301,6 +314,8 @@ export type InsertSessionSectorBest = z.infer<typeof insertSessionSectorBestSche
 export type SessionSectorBest = typeof sessionSectorBests.$inferSelect;
 export type InsertSessionTrackLimits = z.infer<typeof insertSessionTrackLimitsSchema>;
 export type SessionTrackLimits = typeof sessionTrackLimits.$inferSelect;
+export type InsertSessionPenalty = z.infer<typeof insertSessionPenaltySchema>;
+export type SessionPenalty = typeof sessionPenalties.$inferSelect;
 export type InsertImportJob = z.infer<typeof insertImportJobSchema>;
 export type ImportJob = typeof importJobs.$inferSelect;
 export type InsertImportError = z.infer<typeof insertImportErrorSchema>;
@@ -336,6 +351,7 @@ export type SessionFull = SessionEnriched & {
   incidents: SessionIncident[];
   sectorBests: SessionSectorBest[];
   trackLimits: SessionTrackLimits[];
+  penalties: SessionPenalty[];
 };
 
 // Инциденты/нарушения одного пилота, обогащённые контекстом сессии — для
@@ -359,6 +375,11 @@ export type SessionTrackLimitsEnriched = SessionTrackLimits & {
   dateTime: string;
 };
 
+export type SessionPenaltyEnriched = SessionPenalty & {
+  trackName: string;
+  dateTime: string;
+};
+
 // Круги сессии, обогащённые данными пилота — для GET /api/sessions/:id/laps
 // (вкладки «Круги»/«Секторы»/«Прогресс» на SessionDetail). lapNumber/lapTimeSeconds/
 // sector1-3 — алиасы полей *Ms в секундах для sessionDetailSelectors на клиенте.
@@ -377,4 +398,5 @@ export type SessionLapEnriched = Omit<SessionLap, "isPitLap"> & {
 export type DriverIncidentsResponse = {
   incidents: SessionIncidentEnriched[];
   trackLimits: SessionTrackLimitsEnriched[];
+  penalties: SessionPenaltyEnriched[];
 };
