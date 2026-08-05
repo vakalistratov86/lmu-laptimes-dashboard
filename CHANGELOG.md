@@ -12,6 +12,12 @@
 
 ---
 
+## [1.7.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.6.0...v1.7.0) (2026-08-04)
+
+### Added
+
+* добавить вкладку LMU Steam с игрой и DLC из Steam Store API ([#194](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/194)) ([4573dc6](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/4573dc64b344ec2292c7343f74c1202f81bdc92c))
+
 ## [1.6.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.5.0...v1.6.0) (2026-07-30)
 
 ### Added
