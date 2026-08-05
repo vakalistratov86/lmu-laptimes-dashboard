@@ -93,6 +93,7 @@ export function normalizeSteamApp(appid: number, kind: "game" | "dlc", data: Ste
     tracks: content?.tracks ?? [],
     cars: content?.cars ?? [],
     isPass,
+    includedDlc: content?.includedDlc ?? [],
     isUnmappedContent: content === null,
   };
 }
@@ -167,6 +168,7 @@ function buildStaticFallback(): SteamCatalogResponse {
     tracks: content?.tracks ?? [],
     cars: content?.cars ?? [],
     isPass: false,
+    includedDlc: [],
     isUnmappedContent: false,
   };
   return {
