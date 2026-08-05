@@ -12,6 +12,12 @@
 
 ---
 
+## [1.10.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.10.0...v1.10.1) (2026-08-05)
+
+### Fixed
+
+* деплой не должен тихо продолжаться при упавшем drizzle-kit push ([#202](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/202)) ([037953e](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/037953ed3ae65116edd592918b8e7728c93705d2)), closes [#173](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/173)
+
 ## [1.10.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.9.1...v1.10.0) (2026-08-05)
 
 ### Added
