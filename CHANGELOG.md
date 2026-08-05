@@ -12,6 +12,12 @@
 
 ---
 
+## [1.8.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.8.0...v1.8.1) (2026-08-05)
+
+### Fixed
+
+* Season Pass/Track Pass — это подписка на DLC сезона, а не отдельный контент ([#196](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/196)) ([c9d66f0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/c9d66f0c492dd062973b294b57fd5e029e66f897))
+
 ## [1.8.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.7.0...v1.8.0) (2026-08-05)
 
 ### Added
