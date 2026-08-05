@@ -116,7 +116,27 @@ jobs:
             # ДО переключения на него — иначе окно между стартом нового
             # контейнера и ручным db:push отдаёт 500 на любой запрос,
             # затрагивающий новые колонки (см. инцидент с has_co_drivers).
-            docker compose run --rm dashboard npx drizzle-kit push --force
+            #
+            # drizzle-kit на неоднозначном изменении схемы (напр. "добавить
+            # UNIQUE constraint, таблица не пустая — truncate?") в non-TTY
+            # окружении CI не может задать интерактивный вопрос, печатает
+            # "Error: Interactive prompts require a TTY..." и завершается —
+            # НО кодом 0, поэтому `set -e` это не ловит (подтверждено на
+            # реальном инциденте — см. #173, сессия миграции session_penalties):
+            # деплой тихо продолжался на образе с рассинхронизированной
+            # схемой, контейнер пересоздавался, CI отчитывался ✅. Поэтому
+            # дополнительно проверяем и код выхода, и текст вывода на
+            # "Error:" — и останавливаем деплой ДО пересоздания контейнера,
+            # оставляя работать старую (согласованную со своей схемой) версию.
+            set +e
+            PUSH_OUTPUT=$(docker compose run --rm dashboard npx drizzle-kit push --force 2>&1)
+            PUSH_EXIT=$?
+            set -e
+            echo "$PUSH_OUTPUT"
+            if [ "$PUSH_EXIT" -ne 0 ] || echo "$PUSH_OUTPUT" | grep -q '^Error:'; then
+              echo "::error::drizzle-kit push завершился с ошибкой — деплой остановлен, старый контейнер продолжает работать без изменений"
+              exit 1
+            fi
 
             docker rm -f lmu-dashboard || true
 
