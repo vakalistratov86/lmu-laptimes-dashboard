@@ -69,4 +69,38 @@ describe("steamCatalog", () => {
       expect(content!.includedDlc).toEqual([]);
     });
   });
+
+  // ── tracks/cars подписки формируются из уже вышедших паков (не хардкодятся отдельно) ──
+  describe("tracks/cars Season Pass — вычисляются из включённых паков", () => {
+    it("2024 Season Pass: cars — объединение машин всех 5 паков сезона", () => {
+      const content = findSteamContent(2997280, "Le Mans Ultimate - 2024 Season Pass");
+      const names = content!.cars.map((c) => c.name).sort();
+      expect(names).toEqual(
+        [
+          "Lamborghini SC63 LMDh",
+          "Alpine A424 LMDh",
+          "Isotta Fraschini Tipo 6 Competizione",
+          "BMW M4 LMGT3",
+          "Chevrolet Corvette Z06 LMGT3.R",
+          "Ferrari 296 LMGT3",
+          "Porsche 911 GT3 R (992) LMGT3",
+          "Aston Martin Vantage AMR LMGT3",
+          "Lexus RC F LMGT3",
+          "Lamborghini Huracán GT3 EVO2",
+        ].sort(),
+      );
+    });
+
+    it("ELMS Season Pass: cars — объединение машин всех 3 ELMS-паков", () => {
+      const content = findSteamContent(3948300, "Le Mans Ultimate - ELMS Season Pass");
+      expect(content!.cars.map((c) => c.name).sort()).toEqual(
+        ["Ligier JS P325", "Ginetta G61-LT-P3 Evo", "Duqueine D09"].sort(),
+      );
+    });
+
+    it("US Track Pass: cars пусты, т.к. у вышедшего Pack 1 нет новых машин (только трассы)", () => {
+      const content = findSteamContent(4906890, "Le Mans Ultimate - US Track Pass");
+      expect(content!.cars).toEqual([]);
+    });
+  });
 });
