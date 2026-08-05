@@ -45,12 +45,17 @@ export function SteamAppCard({ app }: SteamAppCardProps) {
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-display text-base font-bold leading-tight">{app.name}</h2>
             <Badge variant="outline" className="shrink-0 text-[11px]">
-              {app.kind === "game" ? t("steam.badgeGame") : t("steam.badgeDlc")}
+              {app.kind === "game" ? t("steam.badgeGame") : app.isPass ? t("steam.badgePass") : t("steam.badgeDlc")}
             </Badge>
           </div>
           <div className="font-data text-xs tabular-nums text-muted-foreground">
             {t("steam.releaseDate")}: {formatReleaseDate(app.releaseDate)}
           </div>
+          {app.isPass && (
+            <div className="w-fit rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+              {t("steam.passNotice")}
+            </div>
+          )}
           {app.isUnmappedContent && (
             <div className="w-fit rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
               {t("steam.unmappedNotice")}

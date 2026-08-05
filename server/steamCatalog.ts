@@ -138,9 +138,11 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     ],
   },
   {
-    // Le Mans Ultimate - 2024 Season Pass — бандл Pack 1-5. Машины уже
-    // перечислены в отдельных Pack N выше, здесь не дублируются, чтобы не
-    // показывать одну и ту же машину сразу в двух карточках.
+    // Le Mans Ultimate - 2024 Season Pass — не отдельный контент-пак, а
+    // подписка/пропуск, дающая доступ ко всем Pack 1-5 сезона (isPass=true,
+    // см. server/steamApi.ts). Машины уже перечислены в отдельных Pack N
+    // выше, здесь не дублируются, чтобы не показывать одну и ту же машину
+    // сразу в двух карточках.
     appid: 2997280,
     matchNamePatterns: [/2024 season pass/i],
     tracks: ["Imola", "COTA", "Interlagos", "Lusail"],
@@ -168,8 +170,9 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     cars: [{ carClass: "LMP3", name: "Duqueine D09" }],
   },
   {
-    // Le Mans Ultimate - ELMS Season Pass — бандл ELMS Pack 1-3, машины уже
-    // перечислены выше по отдельным пакам, здесь не дублируются.
+    // Le Mans Ultimate - ELMS Season Pass — подписка на ELMS Pack 1-3
+    // (isPass=true), машины уже перечислены выше по отдельным пакам, здесь
+    // не дублируются.
     appid: 3948300,
     matchNamePatterns: [/elms season pass/i],
     tracks: ["Silverstone", "Paul Ricard", "Barcelona"],
@@ -183,10 +186,11 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     cars: [],
   },
   {
-    // Le Mans Ultimate - US Track Pass — бандл на все 3 будущих US Track Pack
-    // (6 трасс анонсировано целиком, паки 2/3 на момент реализации ещё не
-    // вышли и точное распределение оставшихся 4 трасс по ним официально не
-    // раскрыто — см. ограничение в комментарии к DLC_CONTENT_CATALOG выше).
+    // Le Mans Ultimate - US Track Pass — подписка на все 3 будущих US Track
+    // Pack (isPass=true; 6 трасс анонсировано целиком, паки 2/3 на момент
+    // реализации ещё не вышли и точное распределение оставшихся 4 трасс по
+    // ним официально не раскрыто — см. ограничение в комментарии к
+    // DLC_CONTENT_CATALOG выше).
     appid: 4906890,
     matchNamePatterns: [/us track pass/i],
     tracks: [

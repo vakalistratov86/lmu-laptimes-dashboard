@@ -77,6 +77,26 @@ describe("steamApi", () => {
       const card = normalizeSteamApp(123, "dlc", { name: "Some DLC" });
       expect(card.releaseDate).toBeNull();
     });
+
+    it("isPass=true для DLC вида «... Season Pass» — это подписка на DLC сезона, не отдельный контент", () => {
+      const card = normalizeSteamApp(2997280, "dlc", { name: "Le Mans Ultimate - 2024 Season Pass" });
+      expect(card.isPass).toBe(true);
+    });
+
+    it("isPass=true для DLC вида «... Track Pass»", () => {
+      const card = normalizeSteamApp(4906890, "dlc", { name: "Le Mans Ultimate - US Track Pass" });
+      expect(card.isPass).toBe(true);
+    });
+
+    it("isPass=false для обычного контент-пака без слова Pass в названии", () => {
+      const card = normalizeSteamApp(2973290, "dlc", { name: "Le Mans Ultimate - 2024 Pack 1" });
+      expect(card.isPass).toBe(false);
+    });
+
+    it("isPass всегда false для базовой игры (kind=game)", () => {
+      const card = normalizeSteamApp(STEAM_BASE_APPID, "game", { name: "Le Mans Ultimate - Season Pass Edition" });
+      expect(card.isPass).toBe(false);
+    });
   });
 
   // ── fetchSteamCatalog — живой сценарий ───────────────────────────────────

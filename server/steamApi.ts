@@ -74,6 +74,11 @@ export function normalizeSteamApp(appid: number, kind: "game" | "dlc", data: Ste
       }
     : null;
   const content = findSteamContent(appid, name);
+  // "... Season Pass" / "... Track Pass" — не отдельный контент-пак, а
+  // подписка/пропуск на весь DLC-контент сезона/категории (доступ ко всем
+  // паками, включая ещё не вышедшие, по мере релиза), поэтому размечается
+  // отдельно от обычного kind="dlc" (см. shared/steamTypes.ts).
+  const isPass = kind === "dlc" && /\bpass\b/i.test(name);
 
   return {
     appid,
@@ -87,6 +92,7 @@ export function normalizeSteamApp(appid: number, kind: "game" | "dlc", data: Ste
     price,
     tracks: content?.tracks ?? [],
     cars: content?.cars ?? [],
+    isPass,
     isUnmappedContent: content === null,
   };
 }
@@ -160,6 +166,7 @@ function buildStaticFallback(): SteamCatalogResponse {
     price: null,
     tracks: content?.tracks ?? [],
     cars: content?.cars ?? [],
+    isPass: false,
     isUnmappedContent: false,
   };
   return {
