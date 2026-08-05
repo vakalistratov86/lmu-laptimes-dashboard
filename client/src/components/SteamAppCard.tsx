@@ -57,8 +57,15 @@ export function SteamAppCard({ app }: SteamAppCardProps) {
             </div>
           )}
           {app.isPass && app.includedDlc.length > 0 && (
-            <div className="text-[11px] text-muted-foreground">
-              {t("steam.includedDlcLabel")}: {app.includedDlc.join(", ")}
+            <div className="space-y-1">
+              <div className="text-[11px] text-muted-foreground">{t("steam.includedDlcLabel")}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {app.includedDlc.map((dlcName) => (
+                  <Badge key={dlcName} variant="outline" className="text-[11px] font-normal">
+                    {dlcName}
+                  </Badge>
+                ))}
+              </div>
             </div>
           )}
           {app.isUnmappedContent && (
@@ -126,9 +133,9 @@ export function SteamAppCard({ app }: SteamAppCardProps) {
 function PriceBlock({ app, intlLocale, t }: { app: SteamAppCardData; intlLocale: string; t: (key: string) => string }) {
   if (app.price === null) {
     return (
-      <div className="text-sm font-semibold">
-        {app.isFree ? t("steam.free") : <span className="text-muted-foreground">{t("steam.priceUnavailable")}</span>}
-      </div>
+      <Badge variant="outline" className="w-fit text-xs font-semibold">
+        {app.isFree ? t("steam.free") : t("steam.priceUnavailable")}
+      </Badge>
     );
   }
 
@@ -145,9 +152,14 @@ function PriceBlock({ app, intlLocale, t }: { app: SteamAppCardData; intlLocale:
           </span>
         </>
       )}
-      <span className={`font-data text-sm font-bold tabular-nums ${hasDiscount ? "text-green-500" : ""}`}>
+      <Badge
+        variant="outline"
+        className={`font-data text-sm font-bold tabular-nums ${
+          hasDiscount ? "border-green-500/40 bg-green-500/15 text-green-600 dark:text-green-400" : ""
+        }`}
+      >
         {formatSteamPrice(app.price.finalCents, app.price.currency, intlLocale)}
-      </span>
+      </Badge>
     </div>
   );
 }

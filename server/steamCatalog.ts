@@ -31,16 +31,27 @@ interface SteamContentCatalogEntry {
   appid?: number;
   /** Регэкспы для сопоставления с живым SteamAppCard.name, регистронезависимо — запасной вариант без appid */
   matchNamePatterns?: RegExp[];
+  /** Отображаемое имя этого отдельного пака — используется, когда на него ссылается Season/Track Pass через includesAppIds. Для самих Pass-записей не задаётся. */
+  packName?: string;
   tracks: string[];
   cars: SteamContentEntry[];
   /**
    * Только для Season Pass/Track Pass (см. `isPass` в shared/steamTypes.ts):
-   * названия отдельных DLC-паков, УЖЕ вышедших и входящих в подписку на
-   * сегодня (не то, что она когда-либо даст в будущем — паки, которые ещё
-   * не вышли, сюда не входят, даже если уже анонсированы). Для обычных
-   * (не-Pass) записей не задаётся.
+   * названия отдельных DLC-паков, УЖЕ вышедших и входящих в подписку —
+   * заполняется автоматически (см. resolvePassEntry() ниже), вручную не
+   * задаётся.
    */
   includedDlc?: string[];
+  /**
+   * Только для Season Pass/Track Pass: appid'ы отдельных паков, входящих в
+   * подписку. `tracks`/`cars`/`includedDlc` для такой записи ВЫЧИСЛЯЮТСЯ
+   * объединением содержимого этих паков (см. resolvePassEntry()), а не
+   * прописываются вручную — так подписка не может разойтись с фактическим
+   * содержимым паков и никогда не включает ещё не вышедший контент: appid
+   * пака добавляется сюда только после того, как для него самого появилась
+   * отдельная запись в этом каталоге (т.е. он уже вышел).
+   */
+  includesAppIds?: number[];
 }
 
 /**
@@ -96,11 +107,12 @@ const BASE_GAME_CONTENT: SteamContentCatalogEntry = {
  * обложка живые из Steam), но без списка трасс/машин, пока запись не будет
  * добавлена сюда.
  */
-const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
+const DLC_CONTENT_CATALOG_BASE: SteamContentCatalogEntry[] = [
   {
     // Le Mans Ultimate - 2024 Pack 1 ("Tifosi Italia"), июль 2024
     appid: 2973290,
     matchNamePatterns: [/2024\D*pack\D*1\b/i, /season pack ?1\b/i, /tifosi italia/i],
+    packName: "2024 Pack 1",
     tracks: ["Imola"],
     cars: [{ carClass: "Hypercar", name: "Lamborghini SC63 LMDh" }],
   },
@@ -108,6 +120,7 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     // Le Mans Ultimate - 2024 Pack 2, октябрь 2024
     appid: 3151390,
     matchNamePatterns: [/2024\D*pack\D*2\b/i, /season pack ?2\b/i],
+    packName: "2024 Pack 2",
     tracks: ["COTA"],
     cars: [
       { carClass: "Hypercar", name: "Alpine A424 LMDh" },
@@ -118,6 +131,7 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     // Le Mans Ultimate - 2024 Pack 3, декабрь 2024 (первые LMGT3 в игре)
     appid: 3260810,
     matchNamePatterns: [/2024\D*pack\D*3\b/i, /season pack ?3\b/i],
+    packName: "2024 Pack 3",
     tracks: ["Interlagos"],
     cars: [
       { carClass: "LMGT3", name: "BMW M4 LMGT3" },
@@ -129,6 +143,7 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     // Le Mans Ultimate - 2024 Pack 4, начало 2025 — без новой трассы
     appid: 3260820,
     matchNamePatterns: [/2024\D*pack\D*4\b/i, /season pack ?4\b/i],
+    packName: "2024 Pack 4",
     tracks: [],
     cars: [
       { carClass: "LMGT3", name: "Porsche 911 GT3 R (992) LMGT3" },
@@ -139,6 +154,7 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     // Le Mans Ultimate - 2024 Pack 5, июнь 2025 — завершает контент сезона 2024
     appid: 3511300,
     matchNamePatterns: [/2024\D*pack\D*5\b/i, /season pack ?5\b/i],
+    packName: "2024 Pack 5",
     tracks: ["Lusail"],
     cars: [
       { carClass: "LMGT3", name: "Lexus RC F LMGT3" },
@@ -147,21 +163,20 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
   },
   {
     // Le Mans Ultimate - 2024 Season Pass — не отдельный контент-пак, а
-    // подписка/пропуск, дающая доступ ко всем Pack 1-5 сезона (isPass=true,
-    // см. server/steamApi.ts). Машины уже перечислены в отдельных Pack N
-    // выше, здесь не дублируются, чтобы не показывать одну и ту же машину
-    // сразу в двух карточках.
+    // подписка/пропуск на весь сезон 2024 (isPass=true, см. server/steamApi.ts).
+    // tracks/cars/includedDlc вычисляются автоматически из паков ниже —
+    // см. includesAppIds и resolvePassEntry().
     appid: 2997280,
     matchNamePatterns: [/2024 season pass/i],
-    tracks: ["Imola", "COTA", "Interlagos", "Lusail"],
+    tracks: [],
     cars: [],
-    // Сезон 2024 завершён — все 5 паков вышли, подписка полностью "закрыта".
-    includedDlc: ["2024 Pack 1", "2024 Pack 2", "2024 Pack 3", "2024 Pack 4", "2024 Pack 5"],
+    includesAppIds: [2973290, 3151390, 3260810, 3260820, 3511300],
   },
   {
     // Le Mans Ultimate - ELMS Pack 1, 23.09.2025
     appid: 3954000,
     matchNamePatterns: [/elms pack ?1\b/i],
+    packName: "ELMS Pack 1",
     tracks: ["Silverstone"],
     cars: [{ carClass: "LMP3", name: "Ligier JS P325" }],
   },
@@ -169,6 +184,7 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     // Le Mans Ultimate - ELMS Pack 2, 09.12.2025
     appid: 3954010,
     matchNamePatterns: [/elms pack ?2\b/i],
+    packName: "ELMS Pack 2",
     tracks: ["Paul Ricard"],
     cars: [{ carClass: "LMP3", name: "Ginetta G61-LT-P3 Evo" }],
   },
@@ -176,43 +192,78 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     // Le Mans Ultimate - ELMS Pack 3, 31.03.2026 — завершает грид LMP3
     appid: 3954020,
     matchNamePatterns: [/elms pack ?3\b/i],
+    packName: "ELMS Pack 3",
     tracks: ["Barcelona"],
     cars: [{ carClass: "LMP3", name: "Duqueine D09" }],
   },
   {
     // Le Mans Ultimate - ELMS Season Pass — подписка на ELMS Pack 1-3
-    // (isPass=true), машины уже перечислены выше по отдельным пакам, здесь
-    // не дублируются.
+    // (isPass=true). tracks/cars/includedDlc вычисляются автоматически —
+    // см. includesAppIds и resolvePassEntry().
     appid: 3948300,
     matchNamePatterns: [/elms season pass/i],
-    tracks: ["Silverstone", "Paul Ricard", "Barcelona"],
+    tracks: [],
     cars: [],
-    // Все 3 ELMS-пака вышли (последний — 31.03.2026) — подписка полностью "закрыта".
-    includedDlc: ["ELMS Pack 1", "ELMS Pack 2", "ELMS Pack 3"],
+    includesAppIds: [3954000, 3954010, 3954020],
   },
   {
     // Le Mans Ultimate - US Track Pack 1, 28.07.2026 — первый из 3 паков
     appid: 4694190,
     matchNamePatterns: [/us track pack[^0-9]*1\b/i],
+    packName: "US Track Pack 1",
     tracks: ["Daytona International Speedway", "WeatherTech Raceway Laguna Seca"],
     cars: [],
   },
   {
     // Le Mans Ultimate - US Track Pass — подписка на все 3 будущих US Track
-    // Pack (isPass=true). Всего анонсировано 6 трасс (Daytona, Laguna Seca,
-    // Watkins Glen, Road Atlanta, Indianapolis Motor Speedway, Long Beach),
-    // но на сегодня фактически вышел только Pack 1 — Pack 2 (~сентябрь 2026)
-    // и Pack 3 (Q4 2026) ещё не выпущены, а точное распределение оставшихся
-    // 4 трасс по ним официально не раскрыто. Поэтому `tracks` здесь содержит
-    // только уже доступные 2 трассы Pack 1 (не выдумываем недоступный
-    // контент, см. §3.12 REQUIREMENTS.md) — полный план см. в `includedDlc`.
+    // Pack (isPass=true). Всего анонсировано 6 трасс, но на сегодня вышел
+    // только Pack 1 — Pack 2 (~сентябрь 2026) и Pack 3 (Q4 2026) ещё не
+    // выпущены, поэтому их appid здесь отсутствуют: includesAppIds ссылается
+    // только на уже вышедший Pack 1, и tracks/cars/includedDlc вычисляются
+    // из него одного (resolvePassEntry() ниже) — не выдумываем недоступный
+    // контент (см. §3.12 REQUIREMENTS.md). Appid Pack 2/3 нужно добавить
+    // сюда, когда они сами появятся отдельными записями в этом каталоге.
     appid: 4906890,
     matchNamePatterns: [/us track pass/i],
-    tracks: ["Daytona International Speedway", "WeatherTech Raceway Laguna Seca"],
+    tracks: [],
     cars: [],
-    includedDlc: ["US Track Pack 1"],
+    includesAppIds: [4694190],
   },
 ];
+
+/**
+ * Вычисляет tracks/cars/includedDlc записи Season/Track Pass как объединение
+ * содержимого паков из `includesAppIds`. Пак, для которого ещё нет записи в
+ * каталоге (ещё не вышел), просто пропускается — не подставляем то, чего
+ * реально ещё нет в игре. Обычные (не-Pass) записи возвращаются как есть.
+ */
+function resolvePassEntry(entry: SteamContentCatalogEntry): SteamContentCatalogEntry {
+  if (!entry.includesAppIds) return entry;
+
+  const tracks = new Set<string>();
+  const cars: SteamContentEntry[] = [];
+  const seenCarKeys = new Set<string>();
+  const includedDlc: string[] = [];
+
+  for (const appid of entry.includesAppIds) {
+    const source = DLC_CONTENT_CATALOG_BASE.find((e) => e.appid === appid);
+    if (!source) continue; // пак ещё не вышел / не добавлен в каталог
+
+    for (const track of source.tracks) tracks.add(track);
+    for (const car of source.cars) {
+      const key = `${car.carClass}|${car.name}`;
+      if (!seenCarKeys.has(key)) {
+        seenCarKeys.add(key);
+        cars.push(car);
+      }
+    }
+    if (source.packName) includedDlc.push(source.packName);
+  }
+
+  return { ...entry, tracks: [...tracks], cars, includedDlc };
+}
+
+const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = DLC_CONTENT_CATALOG_BASE.map(resolvePassEntry);
 
 export interface SteamFoundContent {
   tracks: string[];
