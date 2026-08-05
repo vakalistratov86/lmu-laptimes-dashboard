@@ -56,6 +56,11 @@ export function SteamAppCard({ app }: SteamAppCardProps) {
               {t("steam.passNotice")}
             </div>
           )}
+          {app.isPass && app.includedDlc.length > 0 && (
+            <div className="text-[11px] text-muted-foreground">
+              {t("steam.includedDlcLabel")}: {app.includedDlc.join(", ")}
+            </div>
+          )}
           {app.isUnmappedContent && (
             <div className="w-fit rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
               {t("steam.unmappedNotice")}

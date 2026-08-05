@@ -33,6 +33,14 @@ interface SteamContentCatalogEntry {
   matchNamePatterns?: RegExp[];
   tracks: string[];
   cars: SteamContentEntry[];
+  /**
+   * Только для Season Pass/Track Pass (см. `isPass` в shared/steamTypes.ts):
+   * названия отдельных DLC-паков, УЖЕ вышедших и входящих в подписку на
+   * сегодня (не то, что она когда-либо даст в будущем — паки, которые ещё
+   * не вышли, сюда не входят, даже если уже анонсированы). Для обычных
+   * (не-Pass) записей не задаётся.
+   */
+  includedDlc?: string[];
 }
 
 /**
@@ -147,6 +155,8 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     matchNamePatterns: [/2024 season pass/i],
     tracks: ["Imola", "COTA", "Interlagos", "Lusail"],
     cars: [],
+    // Сезон 2024 завершён — все 5 паков вышли, подписка полностью "закрыта".
+    includedDlc: ["2024 Pack 1", "2024 Pack 2", "2024 Pack 3", "2024 Pack 4", "2024 Pack 5"],
   },
   {
     // Le Mans Ultimate - ELMS Pack 1, 23.09.2025
@@ -177,6 +187,8 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
     matchNamePatterns: [/elms season pass/i],
     tracks: ["Silverstone", "Paul Ricard", "Barcelona"],
     cars: [],
+    // Все 3 ELMS-пака вышли (последний — 31.03.2026) — подписка полностью "закрыта".
+    includedDlc: ["ELMS Pack 1", "ELMS Pack 2", "ELMS Pack 3"],
   },
   {
     // Le Mans Ultimate - US Track Pack 1, 28.07.2026 — первый из 3 паков
@@ -187,32 +199,36 @@ const DLC_CONTENT_CATALOG: SteamContentCatalogEntry[] = [
   },
   {
     // Le Mans Ultimate - US Track Pass — подписка на все 3 будущих US Track
-    // Pack (isPass=true; 6 трасс анонсировано целиком, паки 2/3 на момент
-    // реализации ещё не вышли и точное распределение оставшихся 4 трасс по
-    // ним официально не раскрыто — см. ограничение в комментарии к
-    // DLC_CONTENT_CATALOG выше).
+    // Pack (isPass=true). Всего анонсировано 6 трасс (Daytona, Laguna Seca,
+    // Watkins Glen, Road Atlanta, Indianapolis Motor Speedway, Long Beach),
+    // но на сегодня фактически вышел только Pack 1 — Pack 2 (~сентябрь 2026)
+    // и Pack 3 (Q4 2026) ещё не выпущены, а точное распределение оставшихся
+    // 4 трасс по ним официально не раскрыто. Поэтому `tracks` здесь содержит
+    // только уже доступные 2 трассы Pack 1 (не выдумываем недоступный
+    // контент, см. §3.12 REQUIREMENTS.md) — полный план см. в `includedDlc`.
     appid: 4906890,
     matchNamePatterns: [/us track pass/i],
-    tracks: [
-      "Daytona International Speedway",
-      "WeatherTech Raceway Laguna Seca",
-      "Watkins Glen",
-      "Road Atlanta",
-      "Indianapolis Motor Speedway",
-      "Long Beach Street Circuit",
-    ],
+    tracks: ["Daytona International Speedway", "WeatherTech Raceway Laguna Seca"],
     cars: [],
+    includedDlc: ["US Track Pack 1"],
   },
 ];
 
-/** Возвращает контент (трассы/машины) для appid+название, либо null если не размечено. */
-export function findSteamContent(appid: number, name: string): { tracks: string[]; cars: SteamContentEntry[] } | null {
+export interface SteamFoundContent {
+  tracks: string[];
+  cars: SteamContentEntry[];
+  /** Только для Season Pass/Track Pass — названия уже вышедших паков, входящих в подписку (см. SteamContentCatalogEntry.includedDlc) */
+  includedDlc: string[];
+}
+
+/** Возвращает контент (трассы/машины/уже включённые DLC) для appid+название, либо null если не размечено. */
+export function findSteamContent(appid: number, name: string): SteamFoundContent | null {
   if (appid === STEAM_BASE_APPID) {
-    return { tracks: BASE_GAME_CONTENT.tracks, cars: BASE_GAME_CONTENT.cars };
+    return { tracks: BASE_GAME_CONTENT.tracks, cars: BASE_GAME_CONTENT.cars, includedDlc: [] };
   }
   const byAppId = DLC_CONTENT_CATALOG.find((e) => e.appid === appid);
-  if (byAppId) return { tracks: byAppId.tracks, cars: byAppId.cars };
+  if (byAppId) return { tracks: byAppId.tracks, cars: byAppId.cars, includedDlc: byAppId.includedDlc ?? [] };
 
   const byName = DLC_CONTENT_CATALOG.find((e) => e.matchNamePatterns?.some((pattern) => pattern.test(name)));
-  return byName ? { tracks: byName.tracks, cars: byName.cars } : null;
+  return byName ? { tracks: byName.tracks, cars: byName.cars, includedDlc: byName.includedDlc ?? [] } : null;
 }

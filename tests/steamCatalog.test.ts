@@ -30,7 +30,11 @@ describe("steamCatalog", () => {
   it("сопоставляет DLC по подтверждённому appid в приоритете", () => {
     // ELMS Pack 1 — appid 3954000, добавляет Silverstone и Ligier JS P325
     const content = findSteamContent(3954000, "Le Mans Ultimate - ELMS Pack 1");
-    expect(content).toEqual({ tracks: ["Silverstone"], cars: [{ carClass: "LMP3", name: "Ligier JS P325" }] });
+    expect(content).toEqual({
+      tracks: ["Silverstone"],
+      cars: [{ carClass: "LMP3", name: "Ligier JS P325" }],
+      includedDlc: [],
+    });
   });
 
   it("базовая игра не включает Silverstone/Paul Ricard/Barcelona — это платный ELMS-контент", () => {
@@ -38,5 +42,31 @@ describe("steamCatalog", () => {
     expect(content!.tracks).not.toContain("Silverstone");
     expect(content!.tracks).not.toContain("Paul Ricard");
     expect(content!.tracks).not.toContain("Barcelona");
+  });
+
+  // ── includedDlc: список уже вышедших паков, входящих в Season/Track Pass ──
+  describe("includedDlc — состав подписок", () => {
+    it("2024 Season Pass включает все 5 вышедших паков сезона", () => {
+      const content = findSteamContent(2997280, "Le Mans Ultimate - 2024 Season Pass");
+      expect(content!.includedDlc).toEqual(["2024 Pack 1", "2024 Pack 2", "2024 Pack 3", "2024 Pack 4", "2024 Pack 5"]);
+    });
+
+    it("ELMS Season Pass включает все 3 вышедших ELMS-пака", () => {
+      const content = findSteamContent(3948300, "Le Mans Ultimate - ELMS Season Pass");
+      expect(content!.includedDlc).toEqual(["ELMS Pack 1", "ELMS Pack 2", "ELMS Pack 3"]);
+    });
+
+    it("US Track Pass на сегодня включает только вышедший Pack 1 (Pack 2/3 ещё не вышли)", () => {
+      const content = findSteamContent(4906890, "Le Mans Ultimate - US Track Pass");
+      expect(content!.includedDlc).toEqual(["US Track Pack 1"]);
+      // tracks подписки ограничены уже вышедшим контентом — не выдумываем
+      // трассы паков 2/3, которые официально анонсированы, но ещё не вышли.
+      expect(content!.tracks).toEqual(["Daytona International Speedway", "WeatherTech Raceway Laguna Seca"]);
+    });
+
+    it("обычные (не-Pass) DLC не имеют includedDlc", () => {
+      const content = findSteamContent(2973290, "Le Mans Ultimate - 2024 Pack 1");
+      expect(content!.includedDlc).toEqual([]);
+    });
   });
 });
