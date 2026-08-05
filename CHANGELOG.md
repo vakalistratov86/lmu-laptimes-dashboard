@@ -12,6 +12,12 @@
 
 ---
 
+## [1.9.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.9.0...v1.9.1) (2026-08-05)
+
+### Fixed
+
+* подписки формируют трассы/авто из уже вышедших DLC, редизайн карточки ([#198](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/198)) ([d004a53](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/d004a53e730971d9d27639a1b7b2bec6ee8ebf79))
+
 ## [1.9.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.8.1...v1.9.0) (2026-08-05)
 
 ### Added
