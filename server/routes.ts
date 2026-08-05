@@ -14,6 +14,7 @@ import {
   sessionIncidents,
   sessionSectorBests,
   sessionTrackLimits,
+  sessionPenalties,
   telemetryImportJobs,
   telemetrySessions,
   telemetryChannels,
@@ -474,6 +475,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     requireAdminToken,
     asyncRoute(async (_req, res) => {
       await db.transaction(async (tx) => {
+        await tx.delete(sessionPenalties);
         await tx.delete(sessionTrackLimits);
         await tx.delete(sessionSectorBests);
         await tx.delete(sessionIncidents);

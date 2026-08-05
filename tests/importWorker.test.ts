@@ -37,7 +37,11 @@ vi.mock("../server/sessionSupersede", () => ({
 }));
 
 import { runImport } from "../server/importWorker";
-import { sessionLaps as sessionLapsTable, sessionResults as sessionResultsTable } from "@shared/schema";
+import {
+  sessionLaps as sessionLapsTable,
+  sessionResults as sessionResultsTable,
+  sessionPenalties as sessionPenaltiesTable,
+} from "@shared/schema";
 
 /**
  * tx-мок для командных гонок: в отличие от makeTxWithExistingTrack(), каждый
@@ -123,6 +127,7 @@ function makeParsedSession() {
     incidents: [],
     sectorBests: [],
     trackLimits: [],
+    penalties: [],
     driverChanges: [],
   } as any;
 }
@@ -643,5 +648,87 @@ describe("runImport — командная гонка: несколько реа
 
     const unknownDriverDlq = importErrorRows.filter((r) => r.errorMessage?.includes("неизвестного пилота"));
     expect(unknownDriverDlq).toHaveLength(0);
+  });
+
+  // #173 — <Penalty> из Stream
+  it("сохраняет штраф пилота в session_penalties с резолвом driverId по имени", async () => {
+    parseRaceResults.mockReturnValueOnce({
+      ...makeParsedSession(),
+      penalties: [
+        {
+          driverName: "Driver A",
+          elapsedTimeSec: 1234.5,
+          penaltyType: "Time",
+          timeSec: 10,
+          laps: 0,
+          reason: "Erratic driving",
+        },
+      ],
+    });
+
+    const { tx } = makeTeamRaceTx();
+    const penaltyRows: any[] = [];
+    const originalInsert = tx.insert;
+    tx.insert = vi.fn((table: any) => {
+      const built = originalInsert(table);
+      return {
+        values: vi.fn((payload: any) => {
+          if (table === sessionPenaltiesTable) {
+            penaltyRows.push(...(Array.isArray(payload) ? payload : [payload]));
+          }
+          return built.values(payload);
+        }),
+      };
+    });
+    db.transaction.mockImplementationOnce(async (fn: any) => fn(tx));
+
+    await runImport({ id: "job-30", fileHash: "hash-30", fileName: "penalty.xml", content: "<x/>" });
+
+    expect(penaltyRows).toHaveLength(1);
+    expect(penaltyRows[0]).toMatchObject({
+      elapsedTimeSec: 1234.5,
+      penaltyType: "Time",
+      timeSec: 10,
+      laps: 0,
+      reason: "Erratic driving",
+    });
+    expect(penaltyRows[0].driverId).toBeDefined();
+  });
+
+  it("штраф неизвестного пилота (не в ростере сессии) фиксируется в DLQ, а не пропадает молча", async () => {
+    parseRaceResults.mockReturnValueOnce({
+      ...makeParsedSession(),
+      penalties: [
+        {
+          driverName: "Ghost Driver",
+          elapsedTimeSec: 10,
+          penaltyType: "Drive Thru",
+          timeSec: 0,
+          laps: 0,
+          reason: "Speeding",
+        },
+      ],
+    });
+
+    const { tx } = makeTeamRaceTx();
+    const importErrorRows: any[] = [];
+    const originalInsert = tx.insert;
+    tx.insert = vi.fn((table: any) => {
+      const built = originalInsert(table);
+      return {
+        values: vi.fn((payload: any) => {
+          const rows = Array.isArray(payload) ? payload : [payload];
+          if (rows[0] && "errorCode" in rows[0]) importErrorRows.push(...rows);
+          return built.values(payload);
+        }),
+      };
+    });
+    db.transaction.mockImplementationOnce(async (fn: any) => fn(tx));
+
+    await runImport({ id: "job-31", fileHash: "hash-31", fileName: "penalty-unknown.xml", content: "<x/>" });
+
+    const unknownPenaltyDlq = importErrorRows.filter((r) => r.errorMessage?.includes("Ghost Driver"));
+    expect(unknownPenaltyDlq).toHaveLength(1);
+    expect(unknownPenaltyDlq[0].errorCode).toBe("SEMANTIC_ERROR");
   });
 });

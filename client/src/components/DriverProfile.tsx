@@ -85,7 +85,7 @@ interface DriverProfileProps {
  * передают driverId, вся загрузка данных и рендер живут здесь.
  */
 export function DriverProfile({ driverId }: DriverProfileProps) {
-  const { t, intlLocale } = useLanguage();
+  const { t, tn, intlLocale } = useLanguage();
 
   const { data: drivers, isLoading: driversLoading } = useDrivers();
   // #121: собственные круги пилота — уже фильтр по driverId (не весь /api/laps).
@@ -97,6 +97,16 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
   const { data: incidentsData, isLoading: incidentsLoading } = useDriverIncidents(driverId);
 
   const driver = useMemo(() => drivers?.find((d) => d.id === driverId), [drivers, driverId]);
+
+  // Штраф временем и/или кругами — оба поля независимы (Time penalty задаёт
+  // только timeSec, Drive Thru — только laps=0/timeSec=0, поэтому пустая
+  // часть просто опускается, а не рисуется нулём).
+  const formatPenaltyAmount = (timeSec: number | null, laps: number | null): string => {
+    const parts: string[] = [];
+    if (timeSec != null && timeSec > 0) parts.push(t("driverDetail.penaltySeconds", { n: timeSec }));
+    if (laps != null && laps > 0) parts.push(tn(laps, "laps"));
+    return parts.length ? parts.join(" + ") : "—";
+  };
 
   const driverLaps = useMemo(() => driverLapsRaw ?? [], [driverLapsRaw]);
 
@@ -260,8 +270,10 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
   const firstSeenYear = stats?.firstSeen ? new Date(stats.firstSeen).getFullYear() : null;
   const incidents = incidentsData?.incidents ?? [];
   const trackLimits = incidentsData?.trackLimits ?? [];
+  const penalties = incidentsData?.penalties ?? [];
   const hasIncidents = incidents.length > 0;
   const hasTrackLimits = trackLimits.length > 0;
+  const hasPenalties = penalties.length > 0;
 
   return (
     <div className="space-y-5">
@@ -442,8 +454,8 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
             </Card>
           )}
 
-          {/* Incidents & track limits */}
-          {!incidentsLoading && (hasIncidents || hasTrackLimits) && (
+          {/* Incidents, track limits & penalties */}
+          {!incidentsLoading && (hasIncidents || hasTrackLimits || hasPenalties) && (
             <Card className="overflow-hidden">
               <div className="flex items-center gap-2 border-b border-border bg-secondary/40 px-4 py-3">
                 <AlertTriangle size={15} className="text-amber-500" />
@@ -527,6 +539,46 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
                             {tl.warningPoints != null ? ` / ${tl.warningPoints}` : ""}
                           </td>
                           <td className="hidden px-4 py-2 text-muted-foreground sm:table-cell">{tl.decision ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {hasPenalties && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-xs uppercase tracking-wider text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium">{t("driverDetail.colDate")}</th>
+                        <th className="px-4 py-2 text-left font-medium">{t("driverDetail.colTrack")}</th>
+                        <th className="px-4 py-2 text-left font-medium">{t("driverDetail.colPenaltyType")}</th>
+                        <th className="px-4 py-2 text-right font-medium">{t("driverDetail.colPenaltyAmount")}</th>
+                        <th className="hidden px-4 py-2 text-left font-medium sm:table-cell">
+                          {t("driverDetail.colReason")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {penalties.map((p, i) => (
+                        <tr key={i} className="border-t border-border/60">
+                          <td className="px-4 py-2 text-xs text-muted-foreground">
+                            {formatDateTime(p.dateTime, intlLocale)}
+                          </td>
+                          <td className="px-4 py-2">{p.trackName}</td>
+                          <td className="px-4 py-2">
+                            <Badge
+                              variant="outline"
+                              className="border-red-500/30 bg-red-500/10 text-[10px] text-red-500"
+                            >
+                              {p.penaltyType}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-2 text-right font-data tabular-nums text-muted-foreground">
+                            {formatPenaltyAmount(p.timeSec, p.laps)}
+                          </td>
+                          <td className="hidden px-4 py-2 text-muted-foreground sm:table-cell">{p.reason ?? "—"}</td>
                         </tr>
                       ))}
                     </tbody>

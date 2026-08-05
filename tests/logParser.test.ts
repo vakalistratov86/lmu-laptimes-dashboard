@@ -506,6 +506,43 @@ describe("parseRaceResults", () => {
       });
     });
 
+    // #173 — <Penalty> из Stream: все нужные данные лежат в атрибутах, текст
+    // тега — только человекочитаемое резюме, регэксп по тексту не требуется.
+    it('парсит реальную схему <Penalty Driver=... Penalty="Time" Time="10" Laps="0" Reason="...">', () => {
+      const stream = `<Stream>
+    <Penalty Driver="Matt heliot" ID="12" Penalty="Time" Time="10" Laps="0" Reason="Erratic driving" et="1234.5">Matt heliot received Time penalty, 10s, 0laps for Erratic driving. Result: penalties=1, 1st=Time,10s</Penalty>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ stream }))!;
+      expect(result.penalties).toHaveLength(1);
+      expect(result.penalties[0]).toMatchObject({
+        driverName: "Matt heliot",
+        elapsedTimeSec: 1234.5,
+        penaltyType: "Time",
+        timeSec: 10,
+        laps: 0,
+        reason: "Erratic driving",
+      });
+    });
+
+    it('парсит Drive Thru штраф (<Penalty Penalty="Drive Thru">) отдельно от Time penalty другого пилота', () => {
+      const stream = `<Stream>
+    <Penalty Driver="Maciek Bruna" ID="7" Penalty="Drive Thru" Time="0" Laps="0" Reason="Speeding" et="600.0">Maciek Bruna received Drive Thru penalty, 0s, 0laps for Speeding. Result: penalties=1, 1st=Drive Thru,0s</Penalty>
+    <Penalty Driver="Matt heliot" ID="12" Penalty="Time" Time="10" Laps="0" Reason="Erratic driving" et="1234.5">Matt heliot received Time penalty, 10s, 0laps for Erratic driving. Result: penalties=1, 1st=Time,10s</Penalty>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ stream }))!;
+      expect(result.penalties).toHaveLength(2);
+      expect(result.penalties[0].penaltyType).toBe("Drive Thru");
+      expect(result.penalties[1].penaltyType).toBe("Time");
+    });
+
+    it("пропускает <Penalty> без атрибута Driver (не создаёт запись с фиктивным пилотом)", () => {
+      const stream = `<Stream>
+    <Penalty ID="7" Penalty="Time" Time="10" Laps="0" Reason="Erratic driving" et="600.0">unknown</Penalty>
+  </Stream>`;
+      const result = parseRaceResults(makeXml({ stream }))!;
+      expect(result.penalties).toHaveLength(0);
+    });
+
     it("не путает несколько разных <Driver> с одинаковыми вложенными тегами", () => {
       const driversXml = `<Driver>
   <Name>Alpha</Name><isPlayer>1</isPlayer><Position>1</Position><ClassPosition>1</ClassPosition>

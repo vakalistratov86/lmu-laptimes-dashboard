@@ -26,6 +26,7 @@ import {
   sessionIncidents,
   sessionSectorBests,
   sessionTrackLimits,
+  sessionPenalties,
   tracks,
   drivers,
 } from "@shared/schema";
@@ -629,7 +630,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
     // видно и в GET /api/import/:id/errors, и в консоли, а не теряются бесследно.
     const streamDlqRows: InsertImportError[] = [];
     const logUnknownStreamDriver = (
-      kind: "incident" | "sectorBest" | "trackLimit",
+      kind: "incident" | "sectorBest" | "trackLimit" | "penalty",
       driverName: string,
       payload: unknown,
     ) => {
@@ -700,6 +701,25 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
         currentPoints: tl.currentPoints ?? null,
         resolution: tl.resolution ?? null,
         decision: tl.decision ?? null,
+      });
+    }
+
+    // Штрафы (#173)
+    for (const p of parsed!.penalties) {
+      const normalizedPDriver = normalizeDriverNameForStorage(p.driverName).toLowerCase();
+      const driverId = driverIdByName.get(normalizedPDriver);
+      if (driverId == null) {
+        logUnknownStreamDriver("penalty", p.driverName, p);
+        continue;
+      }
+      await tx.insert(sessionPenalties).values({
+        sessionId: session.id,
+        driverId,
+        elapsedTimeSec: p.elapsedTimeSec,
+        penaltyType: p.penaltyType,
+        timeSec: p.timeSec ?? null,
+        laps: p.laps ?? null,
+        reason: p.reason ?? null,
       });
     }
 

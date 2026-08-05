@@ -22,6 +22,7 @@ import {
   sessionIncidents,
   sessionSectorBests,
   sessionTrackLimits,
+  sessionPenalties,
 } from "@shared/schema";
 import type { Session } from "@shared/schema";
 import { normalizeDriverNameForStorage } from "./normalizer";
@@ -192,6 +193,7 @@ export async function findSupersedeCandidate(
  * (общие для всех сессий).
  */
 export async function deleteSupersededSessionData(tx: any, sessionId: number): Promise<void> {
+  await tx.delete(sessionPenalties).where(eq(sessionPenalties.sessionId, sessionId));
   await tx.delete(sessionTrackLimits).where(eq(sessionTrackLimits.sessionId, sessionId));
   await tx.delete(sessionSectorBests).where(eq(sessionSectorBests.sessionId, sessionId));
   await tx.delete(sessionIncidents).where(eq(sessionIncidents.sessionId, sessionId));

@@ -7,6 +7,7 @@ import {
   sessionLaps,
   sessionIncidents,
   sessionTrackLimits,
+  sessionPenalties,
 } from "@shared/schema";
 import type {
   Track,
@@ -119,12 +120,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Инциденты и нарушения трек-лимитов конкретного пилота по его гоночным
-   * сессиям (те же нарушения на практике/квалификации на карточке пилота
-   * избыточны) — для страницы профиля пилота. Ни та, ни другая таблица нигде
-   * больше не читается на клиенте (только записываются при импорте), это
-   * первая точка входа, поэтому обогащение (трасса/дата/имя второго
-   * участника) выполняется здесь, а не переиспользуется из другого места.
+   * Инциденты, нарушения трек-лимитов и штрафы (#173) конкретного пилота по
+   * его гоночным сессиям (те же нарушения на практике/квалификации на
+   * карточке пилота избыточны) — для страницы профиля пилота. Ни одна из трёх
+   * таблиц нигде больше не читается на клиенте (только записываются при
+   * импорте), это первая точка входа, поэтому обогащение (трасса/дата/имя
+   * второго участника) выполняется здесь, а не переиспользуется из другого места.
    *
    * Инциденты выбираются по driver_id (виновник) ИЛИ target_driver_id
    * (пострадавший) — иначе пилот, в которого просто врезались, никогда не
@@ -132,16 +133,21 @@ export class DatabaseStorage implements IStorage {
    * запись к точке зрения запрошенного пилота.
    */
   async getDriverIncidents(driverId: number): Promise<DriverIncidentsResponse> {
-    const [incRowsAll, tlRowsAll] = await Promise.all([
+    const [incRowsAll, tlRowsAll, penRowsAll] = await Promise.all([
       db
         .select()
         .from(sessionIncidents)
         .where(or(eq(sessionIncidents.driverId, driverId), eq(sessionIncidents.targetDriverId, driverId))),
       db.select().from(sessionTrackLimits).where(eq(sessionTrackLimits.driverId, driverId)),
+      db.select().from(sessionPenalties).where(eq(sessionPenalties.driverId, driverId)),
     ]);
 
     const sessionIds = Array.from(
-      new Set([...incRowsAll.map((r) => r.sessionId), ...tlRowsAll.map((r) => r.sessionId)]),
+      new Set([
+        ...incRowsAll.map((r) => r.sessionId),
+        ...tlRowsAll.map((r) => r.sessionId),
+        ...penRowsAll.map((r) => r.sessionId),
+      ]),
     );
 
     const sessionRows = sessionIds.length
@@ -158,6 +164,7 @@ export class DatabaseStorage implements IStorage {
     };
     const incRows = incRowsAll.filter((r) => isRaceSession(r.sessionId));
     const tlRows = tlRowsAll.filter((r) => isRaceSession(r.sessionId));
+    const penRows = penRowsAll.filter((r) => isRaceSession(r.sessionId));
 
     // Только "другая сторона" инцидентов — а не вся таблица drivers на
     // каждый вызов профиля пилота (тот же класс full-table-scan, что и
@@ -212,7 +219,15 @@ export class DatabaseStorage implements IStorage {
       }))
       .sort((a, b) => b.dateTime.localeCompare(a.dateTime));
 
-    return { incidents, trackLimits };
+    const penalties = penRows
+      .map((r) => ({
+        ...r,
+        trackName: trackNameFor(r.sessionId),
+        dateTime: dateTimeFor(r.sessionId),
+      }))
+      .sort((a, b) => b.dateTime.localeCompare(a.dateTime));
+
+    return { incidents, trackLimits, penalties };
   }
 
   /**

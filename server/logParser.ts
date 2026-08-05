@@ -104,6 +104,16 @@ export interface ParsedTrackLimit {
   decision: string | null;
 }
 
+// #173 — штрафы из Stream
+export interface ParsedPenalty {
+  driverName: string;
+  elapsedTimeSec: number;
+  penaltyType: string; // "Time" | "Drive Thru" | ...
+  timeSec: number | null;
+  laps: number | null;
+  reason: string | null;
+}
+
 // Смена пилота из Stream: <DriverChange et="26143.5">Slot=27
 // Vehicle="The Bend Team WRT 2025 #31:LM" Old="Yuriy Khoroshenkiy"
 // New="Vasiliy Kalistratov"</DriverChange> — даёт точное время смены
@@ -148,6 +158,7 @@ export interface ParsedSession {
   incidents: ParsedIncident[];
   sectorBests: ParsedSectorBest[];
   trackLimits: ParsedTrackLimit[];
+  penalties: ParsedPenalty[]; // #173
   driverChanges: ParsedDriverChange[];
 }
 
@@ -155,7 +166,16 @@ export interface ParsedSession {
 // встретился только один экземпляр (иначе fast-xml-parser даст голый объект).
 // <Name> внутри <Incident> — особый случай: там их обычно два (виновник/жертва),
 // а в <Sector>/<TrackLimits> — Name всегда один, поэтому масштабируем по jPath.
-const ALWAYS_ARRAY_TAGS = new Set(["Driver", "Lap", "Incident", "Sector", "TrackLimits", "Swap", "DriverChange"]);
+const ALWAYS_ARRAY_TAGS = new Set([
+  "Driver",
+  "Lap",
+  "Incident",
+  "Sector",
+  "TrackLimits",
+  "Penalty",
+  "Swap",
+  "DriverChange",
+]);
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -389,11 +409,13 @@ function parseStream(streamNode: XmlNode): {
   incidents: ParsedIncident[];
   sectorBests: ParsedSectorBest[];
   trackLimits: ParsedTrackLimit[];
+  penalties: ParsedPenalty[];
   driverChanges: ParsedDriverChange[];
 } {
   const incidents: ParsedIncident[] = [];
   const sectorBests: ParsedSectorBest[] = [];
   const trackLimits: ParsedTrackLimit[] = [];
+  const penalties: ParsedPenalty[] = [];
   const driverChanges: ParsedDriverChange[] = [];
 
   // --- Incidents ---
@@ -442,6 +464,23 @@ function parseStream(streamNode: XmlNode): {
     trackLimits.push({ driverName, lapNum, elapsedTimeSec: et, warningPoints, currentPoints, resolution, decision });
   }
 
+  // --- Penalties (#173) ---
+  // Данные лежат в атрибутах тега (Driver/Penalty/Time/Laps/Reason/et), как и
+  // у TrackLimits/Sector — текст тега содержит только человекочитаемое резюме
+  // ("... received Time penalty, 10s, 0laps for Erratic driving. Result: ..."),
+  // разбирать его регэкспом не требуется, все нужные значения уже в атрибутах.
+  const penaltyNodes = (streamNode.Penalty as XmlNode[] | undefined) ?? [];
+  for (const pNode of penaltyNodes) {
+    const driverName = attr(pNode, "Driver");
+    if (!driverName) continue;
+    const et = toFloat(attr(pNode, "et")) ?? 0;
+    const penaltyType = attr(pNode, "Penalty") ?? "—";
+    const timeSec = toFloat(attr(pNode, "Time"));
+    const laps = toInt(attr(pNode, "Laps"));
+    const reason = attr(pNode, "Reason");
+    penalties.push({ driverName, elapsedTimeSec: et, penaltyType, timeSec, laps, reason });
+  }
+
   // --- DriverChanges ---
   const driverChangeNodes = (streamNode.DriverChange as XmlNode[] | undefined) ?? [];
   for (const dcNode of driverChangeNodes) {
@@ -452,7 +491,7 @@ function parseStream(streamNode: XmlNode): {
     driverChanges.push({ elapsedTimeSec: et, vehicle: m[2], oldDriverName: m[3].trim(), newDriverName: m[4].trim() });
   }
 
-  return { incidents, sectorBests, trackLimits, driverChanges };
+  return { incidents, sectorBests, trackLimits, penalties, driverChanges };
 }
 
 // Определяем тип сессии по имени секции-обёртки (<Practice1>, <Qualify>, <Race> и т.п.)
@@ -562,9 +601,9 @@ export function parseRaceResults(xml: string): ParsedSession | null {
   // конкретной сессии (напр. <Practice1><Stream>...), поэтому ищем рекурсивно —
   // как и старый regex-парсер, искавший <Stream> по всему сырому тексту.
   const streamNode = findFirst(raceResults, "Stream") as XmlNode | undefined;
-  const { incidents, sectorBests, trackLimits, driverChanges } = streamNode
+  const { incidents, sectorBests, trackLimits, penalties, driverChanges } = streamNode
     ? parseStream(streamNode)
-    : { incidents: [], sectorBests: [], trackLimits: [], driverChanges: [] };
+    : { incidents: [], sectorBests: [], trackLimits: [], penalties: [], driverChanges: [] };
 
   // Обогащаем стинты точным временем смены из <DriverChange>, когда у машины
   // реально несколько пилотов. Сопоставляем по именам (Old/New), а не по
@@ -617,6 +656,7 @@ export function parseRaceResults(xml: string): ParsedSession | null {
     incidents,
     sectorBests,
     trackLimits,
+    penalties,
     driverChanges,
   };
 }
