@@ -12,6 +12,12 @@
 
 ---
 
+## [1.9.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.8.1...v1.9.0) (2026-08-05)
+
+### Added
+
+* показать какие DLC уже входят в подписку Season Pass/Track Pass ([#197](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/197)) ([b7a9a5c](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/b7a9a5c00b1e3fc5978556678efce106346d2d08))
+
 ## [1.8.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.8.0...v1.8.1) (2026-08-05)
 
 ### Fixed
