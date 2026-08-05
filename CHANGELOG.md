@@ -12,6 +12,12 @@
 
 ---
 
+## [1.8.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.7.0...v1.8.0) (2026-08-05)
+
+### Added
+
+* заполнить состав игры и DLC LMU Steam реальными данными из открытых источников ([#195](https://github.com/vakalistratov86/lmu-laptimes-dashboard/issues/195)) ([24b7150](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/24b71509b9ce0b6a2dda5b773fa4b249e1cca7cf))
+
 ## [1.7.0](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.6.0...v1.7.0) (2026-08-04)
 
 ### Added
