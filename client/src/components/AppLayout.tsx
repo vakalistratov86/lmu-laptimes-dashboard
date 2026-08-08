@@ -20,7 +20,10 @@ import { useState, useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useLanguage, type Locale } from "@/lib/i18n";
 import { useImportActivity } from "@/lib/importActivity";
+import { useAuth } from "@/lib/auth";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { LogOut, UserCircle2 } from "lucide-react";
 
 // Импорт логов перенесён из бокового меню в иконку хедера (см. ImportButton) —
 // в основном списке навигации страниц больше не участвует.
@@ -154,6 +157,44 @@ function ImportButton() {
   );
 }
 
+/** Кнопка входа/выхода в хедере — состояние берётся из AuthProvider (client/src/lib/auth.tsx). */
+function AuthControl() {
+  const { t } = useLanguage();
+  const { user, isLoading, logout } = useAuth();
+
+  if (isLoading) return null;
+
+  if (!user) {
+    return (
+      <Link
+        href="/login"
+        data-testid="link-header-login"
+        className="flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground hover-elevate"
+      >
+        <UserCircle2 size={15} />
+        <span className="hidden sm:inline">{t("auth.navLogin")}</span>
+      </Link>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon"
+          data-testid="button-header-logout"
+          aria-label={t("auth.navLogout")}
+          onClick={() => logout()}
+        >
+          <LogOut size={15} />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{t("auth.loggedInAs", { name: user.displayName })}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { theme, toggle } = useTheme();
   const { t } = useLanguage();
@@ -203,6 +244,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
         <div className="flex items-center gap-2">
           <ImportButton />
+          <AuthControl />
           <LanguageSwitcher />
           <button
             data-testid="button-theme-toggle"

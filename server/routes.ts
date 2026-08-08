@@ -28,11 +28,23 @@ import { computeFileHashBinary, runTelemetryImport } from "./telemetryImportWork
 import { listTelemetrySessions, getTelemetrySessionWithChannels, getSessionLaps, getLapSeries } from "./telemetryQuery";
 import { requireAdminToken } from "./adminAuth";
 import {
+  hashPassword,
+  verifyPassword,
+  createUserSession,
+  setSessionCookie,
+  clearSessionCookie,
+  readSessionToken,
+  resolveCurrentUser,
+  toPublicUser,
+} from "./auth";
+import {
   IdParamSchema,
   LapNumberParamSchema,
   PaginationQuerySchema,
   LapsQuerySchema,
   BestLapsQuerySchema,
+  RegisterSchema,
+  LoginSchema,
   formatZodError,
 } from "@shared/validators";
 import type { z } from "zod";
@@ -101,6 +113,75 @@ function parseIdParam(
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  // ── Регистрация / вход по email + паролю (server/auth.ts) ────────────────
+  app.post(
+    "/api/auth/register",
+    asyncRoute(async (req, res) => {
+      const parsed = RegisterSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: formatZodError(parsed.error) });
+      }
+      const { email, password, displayName } = parsed.data;
+
+      const existing = await storage.getUserByEmail(email);
+      if (existing) {
+        return res.status(409).json({ message: "Пользователь с таким email уже зарегистрирован" });
+      }
+
+      const user = await storage.createUser({
+        email,
+        passwordHash: hashPassword(password),
+        displayName,
+        createdAt: Date.now(),
+      });
+
+      const { token, expiresAt } = await createUserSession(user.id);
+      setSessionCookie(res, token, expiresAt);
+      res.status(201).json(toPublicUser(user));
+    }),
+  );
+
+  app.post(
+    "/api/auth/login",
+    asyncRoute(async (req, res) => {
+      const parsed = LoginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: formatZodError(parsed.error) });
+      }
+      const { email, password } = parsed.data;
+
+      const user = await storage.getUserByEmail(email);
+      // Одно и то же сообщение для "нет такого email" и "неверный пароль" —
+      // не даём перебором email узнать, зарегистрирован ли адрес в системе.
+      if (!user || !verifyPassword(password, user.passwordHash)) {
+        return res.status(401).json({ message: "Неверный email или пароль" });
+      }
+
+      const { token, expiresAt } = await createUserSession(user.id);
+      setSessionCookie(res, token, expiresAt);
+      res.json(toPublicUser(user));
+    }),
+  );
+
+  app.post(
+    "/api/auth/logout",
+    asyncRoute(async (req, res) => {
+      const token = readSessionToken(req);
+      if (token) await storage.deleteUserSession(token);
+      clearSessionCookie(res);
+      res.json({ ok: true });
+    }),
+  );
+
+  app.get(
+    "/api/auth/me",
+    asyncRoute(async (req, res) => {
+      const user = await resolveCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "Не выполнен вход" });
+      res.json(toPublicUser(user));
+    }),
+  );
+
   app.get(
     "/api/tracks",
     asyncRoute(async (_req, res) => {

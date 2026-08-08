@@ -145,3 +145,27 @@ export type BestLapsQuery = z.infer<typeof BestLapsQuerySchema>;
 export function formatZodError(error: z.ZodError): string {
   return error.errors.map((e) => `${e.path.join(".") || "value"}: ${e.message}`).join("; ");
 }
+
+// ──────────────────────────────────────────────
+// Регистрация / вход (server/auth.ts)
+// ──────────────────────────────────────────────
+
+/** 8 символов — минимум, достаточный для scrypt-хэша с высокой стоимостью подбора (не пытаемся угадать политику NIST за пользователя). */
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 200; // защита от DoS через сколь угодно длинный вход в дорогую scrypt-функцию
+
+export const RegisterSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Некорректный email").max(320),
+  password: z
+    .string()
+    .min(MIN_PASSWORD_LENGTH, `Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов`)
+    .max(MAX_PASSWORD_LENGTH),
+  displayName: z.string().trim().min(1, "Укажите имя").max(100),
+});
+export type RegisterInput = z.infer<typeof RegisterSchema>;
+
+export const LoginSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Некорректный email").max(320),
+  password: z.string().min(1, "Введите пароль").max(MAX_PASSWORD_LENGTH),
+});
+export type LoginInput = z.infer<typeof LoginSchema>;

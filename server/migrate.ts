@@ -332,6 +332,29 @@ export async function runMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS telemetry_samples_channel_id_idx ON telemetry_samples (channel_id)
     `;
 
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS users (
+        id             SERIAL PRIMARY KEY,
+        email          TEXT NOT NULL UNIQUE,
+        password_hash  TEXT NOT NULL,
+        display_name   TEXT NOT NULL,
+        created_at     BIGINT NOT NULL
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id          TEXT PRIMARY KEY,
+        user_id     INTEGER NOT NULL,
+        created_at  BIGINT NOT NULL,
+        expires_at  BIGINT NOT NULL
+      )
+    `;
+
+    await migrationClient`
+      CREATE INDEX IF NOT EXISTS user_sessions_user_id_idx ON user_sessions (user_id)
+    `;
+
     console.log("[migrate] All tables are up to date.");
   } finally {
     await migrationClient.end();

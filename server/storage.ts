@@ -8,6 +8,8 @@ import {
   sessionIncidents,
   sessionTrackLimits,
   sessionPenalties,
+  users,
+  userSessions,
 } from "@shared/schema";
 import type {
   Track,
@@ -20,6 +22,10 @@ import type {
   SessionResult,
   SessionLapEnriched,
   DriverIncidentsResponse,
+  User,
+  InsertUser,
+  UserSession,
+  InsertUserSession,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -75,6 +81,12 @@ export interface IStorage {
   getSessions(pagination?: Pagination): Promise<SessionEnriched[]>;
   getSession(id: number): Promise<SessionEnriched | undefined>;
   getSessionLapsEnriched(sessionId: number): Promise<SessionLapEnriched[]>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserById(id: number): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  createUserSession(session: InsertUserSession): Promise<UserSession>;
+  getUserSession(token: string): Promise<UserSession | undefined>;
+  deleteUserSession(token: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -457,6 +469,37 @@ export class DatabaseStorage implements IStorage {
       trackName: trackName ?? session.venue,
       results: (resultsBySession.get(session.id) ?? []).sort((a, b) => a.position - b.position),
     }));
+  }
+
+  // ── Пользователи / вход по email+паролю (server/auth.ts) ──────────────────
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const rows = await db.select().from(users).where(eq(users.email, email));
+    return rows[0];
+  }
+
+  async getUserById(id: number): Promise<User | undefined> {
+    const rows = await db.select().from(users).where(eq(users.id, id));
+    return rows[0];
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const rows = await db.insert(users).values(user).returning();
+    return rows[0];
+  }
+
+  async createUserSession(session: InsertUserSession): Promise<UserSession> {
+    const rows = await db.insert(userSessions).values(session).returning();
+    return rows[0];
+  }
+
+  async getUserSession(token: string): Promise<UserSession | undefined> {
+    const rows = await db.select().from(userSessions).where(eq(userSessions.id, token));
+    return rows[0];
+  }
+
+  async deleteUserSession(token: string): Promise<void> {
+    await db.delete(userSessions).where(eq(userSessions.id, token));
   }
 }
 

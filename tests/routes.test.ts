@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach, beforeAll, afterAll } 
 import express, { type Express } from "express";
 import http from "node:http";
 import { registerRoutes } from "../server/routes";
+import { hashPassword } from "../server/auth";
 
 // ---------------------------------------------------------------------------
 // Мок db (drizzle-orm/postgres-js): каждый метод возвращает "thenable"-цепочку,
@@ -45,6 +46,12 @@ vi.mock("../server/storage", () => ({
     getSessions: vi.fn().mockResolvedValue([]),
     getSession: vi.fn(),
     getSessionLapsEnriched: vi.fn().mockResolvedValue([]),
+    getUserByEmail: vi.fn(),
+    getUserById: vi.fn(),
+    createUser: vi.fn(),
+    createUserSession: vi.fn(),
+    getUserSession: vi.fn(),
+    deleteUserSession: vi.fn(),
   },
   db,
 }));
@@ -181,6 +188,170 @@ describe("API Routes", () => {
   afterEach(() => {
     vi.clearAllMocks();
     server.close();
+  });
+
+  // ── POST /api/auth/register ──────────────────────────────────────────────
+  describe("POST /api/auth/register", () => {
+    it("возвращает 400 при некорректном email", async () => {
+      const res = await makeRequest(app, "POST", "/api/auth/register", {
+        email: "not-an-email",
+        password: "password123",
+        displayName: "Max",
+      });
+      expect(res.status).toBe(400);
+      expect(storage.createUser).not.toHaveBeenCalled();
+    });
+
+    it("возвращает 400 при слишком коротком пароле", async () => {
+      const res = await makeRequest(app, "POST", "/api/auth/register", {
+        email: "driver@example.com",
+        password: "short",
+        displayName: "Max",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("возвращает 409, если email уже зарегистрирован", async () => {
+      (storage.getUserByEmail as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        id: 1,
+        email: "driver@example.com",
+        passwordHash: "salt:hash",
+        displayName: "Max",
+        createdAt: 0,
+      });
+      const res = await makeRequest(app, "POST", "/api/auth/register", {
+        email: "driver@example.com",
+        password: "password123",
+        displayName: "Max",
+      });
+      expect(res.status).toBe(409);
+      expect(storage.createUser).not.toHaveBeenCalled();
+    });
+
+    it("создаёт пользователя, хэширует пароль (не хранит его в открытом виде) и ставит cookie сессии", async () => {
+      (storage.getUserByEmail as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+      (storage.createUser as ReturnType<typeof vi.fn>).mockImplementationOnce(async (u) => ({ id: 1, ...u }));
+      (storage.createUserSession as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        id: "tok",
+        userId: 1,
+        createdAt: 0,
+        expiresAt: 0,
+      });
+
+      const res = await makeRequest(app, "POST", "/api/auth/register", {
+        email: "Driver@Example.com",
+        password: "password123",
+        displayName: "Max",
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body).not.toHaveProperty("passwordHash");
+      expect((res.body as { email: string }).email).toBe("driver@example.com");
+
+      const insertedUser = (storage.createUser as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(insertedUser.passwordHash).not.toBe("password123");
+      expect(storage.createUserSession).toHaveBeenCalledWith(expect.objectContaining({ userId: 1 }));
+    });
+  });
+
+  // ── POST /api/auth/login ──────────────────────────────────────────────────
+  describe("POST /api/auth/login", () => {
+    it("возвращает 401, если пользователь не найден", async () => {
+      (storage.getUserByEmail as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+      const res = await makeRequest(app, "POST", "/api/auth/login", {
+        email: "nobody@example.com",
+        password: "password123",
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("возвращает 401 при неверном пароле", async () => {
+      (storage.getUserByEmail as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        id: 1,
+        email: "driver@example.com",
+        passwordHash: hashPassword("correct-password"),
+        displayName: "Max",
+        createdAt: 0,
+      });
+      const res = await makeRequest(app, "POST", "/api/auth/login", {
+        email: "driver@example.com",
+        password: "wrong-password",
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("возвращает 200 и пользователя без passwordHash при верном пароле", async () => {
+      (storage.getUserByEmail as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        id: 1,
+        email: "driver@example.com",
+        passwordHash: hashPassword("correct-password"),
+        displayName: "Max",
+        createdAt: 0,
+      });
+      (storage.createUserSession as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        id: "tok",
+        userId: 1,
+        createdAt: 0,
+        expiresAt: 0,
+      });
+
+      const res = await makeRequest(app, "POST", "/api/auth/login", {
+        email: "driver@example.com",
+        password: "correct-password",
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty("passwordHash");
+      expect((res.body as { displayName: string }).displayName).toBe("Max");
+    });
+  });
+
+  // ── POST /api/auth/logout ────────────────────────────────────────────────
+  describe("POST /api/auth/logout", () => {
+    it("удаляет сессию по токену из cookie и возвращает ok", async () => {
+      const res = await makeRequest(app, "POST", "/api/auth/logout", undefined, { cookie: "lmu_session=tok" });
+      expect(res.status).toBe(200);
+      expect(storage.deleteUserSession).toHaveBeenCalledWith("tok");
+    });
+
+    it("не падает, если cookie нет", async () => {
+      const res = await makeRequest(app, "POST", "/api/auth/logout");
+      expect(res.status).toBe(200);
+      expect(storage.deleteUserSession).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── GET /api/auth/me ──────────────────────────────────────────────────────
+  describe("GET /api/auth/me", () => {
+    it("возвращает 401 без cookie сессии", async () => {
+      const res = await makeRequest(app, "GET", "/api/auth/me");
+      expect(res.status).toBe(401);
+    });
+
+    it("возвращает 401 для несуществующей сессии", async () => {
+      (storage.getUserSession as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+      const res = await makeRequest(app, "GET", "/api/auth/me", undefined, { cookie: "lmu_session=tok" });
+      expect(res.status).toBe(401);
+    });
+
+    it("возвращает текущего пользователя без passwordHash для валидной сессии", async () => {
+      (storage.getUserSession as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        id: "tok",
+        userId: 1,
+        createdAt: 0,
+        expiresAt: Date.now() + 100_000,
+      });
+      (storage.getUserById as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        id: 1,
+        email: "driver@example.com",
+        passwordHash: "salt:hash",
+        displayName: "Max",
+        createdAt: 0,
+      });
+      const res = await makeRequest(app, "GET", "/api/auth/me", undefined, { cookie: "lmu_session=tok" });
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty("passwordHash");
+    });
   });
 
   // ── GET /api/tracks ──────────────────────────────────────────────────────
