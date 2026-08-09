@@ -27,11 +27,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
+          build-args: |
+            APP_VERSION_SUFFIX=${{ steps.sha.outputs.short }}
           tags: |
             ghcr.io/${{ env.IMAGE_NAME }}:staging
             ghcr.io/${{ env.IMAGE_NAME }}:staging-${{ github.sha }}

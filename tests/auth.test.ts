@@ -27,6 +27,8 @@ import {
   clearSessionCookie,
   readSessionToken,
   resolveCurrentUser,
+  rateLimitByIp,
+  resetRateLimitsForTests,
 } from "../server/auth";
 import { storage } from "../server/storage";
 import type { User } from "@shared/schema";
@@ -150,5 +152,93 @@ describe("resolveCurrentUser", () => {
     vi.mocked(storage.getUserById).mockResolvedValueOnce(user);
     const req = { headers: { cookie: "lmu_session=tok" } } as any;
     expect(await resolveCurrentUser(req)).toEqual(user);
+  });
+});
+
+describe("rateLimitByIp", () => {
+  function mockReqRes(ip: string) {
+    const req = { socket: { remoteAddress: ip } } as any;
+    const headers: Record<string, string> = {};
+    const res = {
+      setHeader: vi.fn((name: string, value: string) => {
+        headers[name] = value;
+      }),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
+      _headers: headers,
+    } as any;
+    return { req, res };
+  }
+
+  it("пропускает запросы, пока их меньше лимита", () => {
+    resetRateLimitsForTests();
+    const limiter = rateLimitByIp("test", 3, 60_000);
+    const next = vi.fn();
+    const { req, res } = mockReqRes("1.2.3.4");
+
+    limiter(req, res, next);
+    limiter(req, res, next);
+    limiter(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(3);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it("возвращает 429 и Retry-After после превышения лимита", () => {
+    resetRateLimitsForTests();
+    const limiter = rateLimitByIp("test", 2, 60_000);
+    const next = vi.fn();
+    const { req, res } = mockReqRes("1.2.3.4");
+
+    limiter(req, res, next);
+    limiter(req, res, next);
+    limiter(req, res, next); // 3-й — сверх лимита в 2
+
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(res.status).toHaveBeenCalledWith(429);
+    expect(res._headers["Retry-After"]).toBeDefined();
+  });
+
+  it("не делит счётчик между разными IP", () => {
+    resetRateLimitsForTests();
+    const limiter = rateLimitByIp("test", 1, 60_000);
+    const next = vi.fn();
+
+    const a = mockReqRes("1.1.1.1");
+    const b = mockReqRes("2.2.2.2");
+    limiter(a.req, a.res, next);
+    limiter(b.req, b.res, next);
+
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(a.res.status).not.toHaveBeenCalled();
+    expect(b.res.status).not.toHaveBeenCalled();
+  });
+
+  it("не делит счётчик между разными keyPrefix на одном IP", () => {
+    resetRateLimitsForTests();
+    const registerLimiter = rateLimitByIp("register", 1, 60_000);
+    const loginLimiter = rateLimitByIp("login", 1, 60_000);
+    const next = vi.fn();
+    const { req, res } = mockReqRes("1.2.3.4");
+
+    registerLimiter(req, res, next);
+    loginLimiter(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it("resetRateLimitsForTests снимает накопленные счётчики", () => {
+    resetRateLimitsForTests();
+    const limiter = rateLimitByIp("test", 1, 60_000);
+    const next = vi.fn();
+    const { req, res } = mockReqRes("1.2.3.4");
+
+    limiter(req, res, next);
+    resetRateLimitsForTests();
+    limiter(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(res.status).not.toHaveBeenCalled();
   });
 });

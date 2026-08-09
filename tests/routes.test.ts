@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach, beforeAll, afterAll } 
 import express, { type Express } from "express";
 import http from "node:http";
 import { registerRoutes } from "../server/routes";
-import { hashPassword } from "../server/auth";
+import { hashPassword, resetRateLimitsForTests } from "../server/auth";
 
 // ---------------------------------------------------------------------------
 // Мок db (drizzle-orm/postgres-js): каждый метод возвращает "thenable"-цепочку,
@@ -125,6 +125,7 @@ function makeRequest(
       params: {},
       headers: { "content-type": "application/json", ...headers },
       body: body ?? {},
+      socket: { remoteAddress: "127.0.0.1" },
     } as unknown as import("express").Request;
 
     const mockRes = {
@@ -178,6 +179,7 @@ describe("API Routes", () => {
   });
 
   beforeEach(async () => {
+    resetRateLimitsForTests();
     const result = await buildTestApp();
     app = result.app;
     server = result.server;

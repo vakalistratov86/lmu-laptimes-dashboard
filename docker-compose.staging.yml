@@ -4,11 +4,20 @@
 # задеть продовые данные. Разворачивается отдельным workflow
 # (.github/workflows/staging-deploy.yml) в свою директорию на сервере
 # (/opt/lmu-dashboard-staging) — см. docs/REQUIREMENTS.md, §9.
+#
+# mem_limit/cpus на обоих сервисах — сервер общий с продакшном (1 vCPU,
+# 1.9 ГБ RAM, без swap): без явного потолка стенд при пиковой нагрузке
+# (например, тестовый импорт большого файла) может забрать память/CPU у
+# прод-контейнеров, а без swap это может дойти до OOM-kill. Продовые
+# контейнеры своей нагрузкой в этот лимит не упираются (см. `docker stats`),
+# запас заложен с кратным резервом на рост тестовых данных.
 services:
   db:
     image: postgres:16-alpine
     container_name: lmu-postgres-staging
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.3
     environment:
       POSTGRES_DB: lmu_dashboard
       POSTGRES_USER: lmu
@@ -25,6 +34,8 @@ services:
     image: ghcr.io/vakalistratov86/lmu-laptimes-dashboard:staging
     container_name: lmu-dashboard-staging
     restart: unless-stopped
+    mem_limit: 384m
+    cpus: 0.4
     ports:
       - "3001:5000"
     env_file:

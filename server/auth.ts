@@ -117,3 +117,68 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   req.user = user;
   next();
 }
+
+// ── Rate limiting на /api/auth/*: без внешней зависимости, in-memory, по IP ──
+// scrypt намеренно CPU/memory-hard (это и есть защита пароля от перебора) —
+// без лимита на сам HTTP-эндпоинт это же свойство превращает login/register
+// в дешёвый DoS-вектор против самого сервера, особенно на маленькой VM.
+// Single-instance процесс (нет кластера/нескольких реплик за балансировщиком)
+// — состояние в памяти одного процесса корректно отражает реальные попытки.
+
+interface RateLimitBucket {
+  count: number;
+  windowStart: number;
+}
+
+const rateLimitBuckets = new Map<string, RateLimitBucket>();
+let requestsSinceSweep = 0;
+
+/** Только для тестов: сбрасывает счётчики между кейсами, чтобы они не зависели от порядка/количества предыдущих запросов в файле. */
+export function resetRateLimitsForTests(): void {
+  rateLimitBuckets.clear();
+  requestsSinceSweep = 0;
+}
+
+/** Периодическая чистка устаревших записей — не даёт Map расти неограниченно от IP, которые больше не приходят. */
+function sweepExpiredBuckets(windowMs: number, now: number): void {
+  requestsSinceSweep++;
+  if (requestsSinceSweep < 200) return;
+  requestsSinceSweep = 0;
+  for (const [key, bucket] of rateLimitBuckets) {
+    if (now - bucket.windowStart > windowMs) rateLimitBuckets.delete(key);
+  }
+}
+
+/**
+ * Fixed-window лимит попыток на IP: `max` запросов за `windowMs`, иначе 429.
+ * `keyPrefix` разделяет счётчики /login и /register — не делят один лимит.
+ */
+export function rateLimitByIp(keyPrefix: string, max: number, windowMs: number) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const now = Date.now();
+    sweepExpiredBuckets(windowMs, now);
+
+    // req.socket.remoteAddress, не req.ip: сервер стоит без реверс-прокси
+    // перед собой (прямой проброс порта в docker-compose), так что доверять
+    // X-Forwarded-For (что и делает req.ip) не нужно и не нужно настраивать
+    // trust proxy — клиент подключается к контейнеру напрямую.
+    const key = `${keyPrefix}:${req.socket?.remoteAddress ?? "unknown"}`;
+    const bucket = rateLimitBuckets.get(key);
+
+    if (!bucket || now - bucket.windowStart > windowMs) {
+      rateLimitBuckets.set(key, { count: 1, windowStart: now });
+      next();
+      return;
+    }
+
+    if (bucket.count >= max) {
+      const retryAfterSec = Math.ceil((bucket.windowStart + windowMs - now) / 1000);
+      res.setHeader("Retry-After", String(retryAfterSec));
+      res.status(429).json({ message: "Слишком много попыток, попробуйте позже" });
+      return;
+    }
+
+    bucket.count++;
+    next();
+  };
+}

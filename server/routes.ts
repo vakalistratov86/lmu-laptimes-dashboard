@@ -36,6 +36,7 @@ import {
   readSessionToken,
   resolveCurrentUser,
   toPublicUser,
+  rateLimitByIp,
 } from "./auth";
 import {
   IdParamSchema,
@@ -114,8 +115,14 @@ function parseIdParam(
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // ── Регистрация / вход по email + паролю (server/auth.ts) ────────────────
+  // Лимиты по IP: register строже логина — создание аккаунта дешевле для
+  // атакующего перебирать, а scrypt на каждую попытку дорог для сервера.
+  const registerRateLimit = rateLimitByIp("register", 5, 15 * 60 * 1000);
+  const loginRateLimit = rateLimitByIp("login", 10, 15 * 60 * 1000);
+
   app.post(
     "/api/auth/register",
+    registerRateLimit,
     asyncRoute(async (req, res) => {
       const parsed = RegisterSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -143,6 +150,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post(
     "/api/auth/login",
+    loginRateLimit,
     asyncRoute(async (req, res) => {
       const parsed = LoginSchema.safeParse(req.body);
       if (!parsed.success) {
