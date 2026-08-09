@@ -5,9 +5,10 @@
  * остаётся неизменной при переключении вкладок Результаты / Круги / Прогресс.
  */
 import { Link } from "wouter";
-import { ArrowLeft, Users } from "lucide-react";
+import { ArrowLeft, Trash2, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { SessionTypeBadge } from "@/components/SessionTypeBadge";
 import { StatTile } from "@/components/StatTile";
 import { useLanguage } from "@/lib/i18n";
@@ -25,6 +26,9 @@ interface SessionInfoCardProps {
   gameVersion?: string | null;
   /** Хотя бы одна машина сессии вела несколько реальных пилотов по очереди. */
   hasCoDrivers?: boolean;
+  /** Кнопка удаления сессии — передаётся только для user.isAdmin (см. SessionDetail.tsx). */
+  onDelete?: () => void;
+  isDeleting?: boolean;
 }
 
 export function SessionInfoCard({
@@ -39,18 +43,35 @@ export function SessionInfoCard({
   trackLengthKm,
   gameVersion,
   hasCoDrivers,
+  onDelete,
+  isDeleting,
 }: SessionInfoCardProps) {
   const { t } = useLanguage();
   return (
     <Card className="overflow-hidden">
       <div className="space-y-3 border-b border-border px-4 py-3">
-        <Link
-          href={backHref}
-          data-testid="link-back"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft size={15} /> {t("sessionDetail.back")}
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link
+            href={backHref}
+            data-testid="link-back"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft size={15} /> {t("sessionDetail.back")}
+          </Link>
+          {onDelete && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-destructive hover:text-destructive"
+              onClick={onDelete}
+              disabled={isDeleting}
+              data-testid="button-delete-session"
+            >
+              <Trash2 size={14} />
+              {t("sessionDetail.deleteSession")}
+            </Button>
+          )}
+        </div>
 
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <SessionTypeBadge sessionType={sessionType} />

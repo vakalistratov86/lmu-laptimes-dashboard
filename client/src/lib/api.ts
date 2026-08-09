@@ -7,6 +7,8 @@ import type {
   SessionEnriched,
   TelemetrySession,
   DriverIncidentsResponse,
+  AdminUserSummary,
+  AdminDbStats,
 } from "@shared/schema";
 import type { SteamCatalogResponse } from "@shared/steamTypes";
 
@@ -277,6 +279,33 @@ export function useRefreshSteamCatalog() {
       return res.json() as Promise<SteamCatalogResponse>;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/steam/catalog"] }),
+  });
+}
+
+// ── Администрирование (/admin, только для user.isAdmin) ──────────────────
+
+export function useAdminUsers() {
+  return useQuery<AdminUserSummary[]>({ queryKey: ["/api/admin/users"] });
+}
+
+export function useAdminStats() {
+  return useQuery<AdminDbStats>({ queryKey: ["/api/admin/stats"] });
+}
+
+/** Удаление сессии целиком (только для администратора) — см. server/routes.ts DELETE /api/sessions/:id. */
+export function useDeleteSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (sessionId: number) => {
+      const res = await apiRequest("DELETE", `/api/sessions/${sessionId}`);
+      return res.json() as Promise<{ ok: true }>;
+    },
+    onSuccess: (_data, sessionId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+      queryClient.removeQueries({ queryKey: ["/api/sessions", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+    },
   });
 }
 

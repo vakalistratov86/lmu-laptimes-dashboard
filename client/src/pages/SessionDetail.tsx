@@ -13,8 +13,10 @@
  *   пилотов) — она тоже видна на всех вкладках.
  */
 import { useMemo, useState } from "react";
-import { useRoute, useSearch } from "wouter";
-import { useSession, useSessionLaps } from "@/lib/api";
+import { useRoute, useSearch, useLocation } from "wouter";
+import { useSession, useSessionLaps, useDeleteSession } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 import { formatLap } from "@/lib/format";
 import {
   buildResultRows,
@@ -54,10 +56,29 @@ export default function SessionDetail() {
   const searchString = useSearch();
   const backFilter = new URLSearchParams(searchString).get("from_filter");
   const backHref = backFilter ? `/sessions?filter=${encodeURIComponent(backFilter)}` : "/sessions";
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const { user } = useAuth();
 
   const id = params ? Number(params.id) : undefined;
   const { data: session, isLoading } = useSession(id);
   const { data: laps } = useSessionLaps(id);
+  const deleteSession = useDeleteSession();
+
+  function handleDelete() {
+    if (id == null) return;
+    if (!window.confirm(t("sessionDetail.confirmDeleteSession"))) return;
+    deleteSession.mutate(id, {
+      onSuccess: () => {
+        toast({ title: t("sessionDetail.toastSessionDeletedTitle") });
+        navigate(backHref);
+      },
+      onError: (e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast({ title: t("common.error"), description: msg, variant: "destructive" });
+      },
+    });
+  }
 
   const [activeTab, setActiveTab] = useState<SessionTabKey>("results");
 
@@ -148,6 +169,8 @@ export default function SessionDetail() {
         trackLengthKm={trackLengthKm}
         gameVersion={s.gameVersion}
         hasCoDrivers={!!s.hasCoDrivers}
+        onDelete={user?.isAdmin ? handleDelete : undefined}
+        isDeleting={deleteSession.isPending}
       />
 
       {/* SD-20: Карточка деталей машины/команды — всегда видна, не зависит от вкладки */}

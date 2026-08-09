@@ -35,6 +35,7 @@ const ru = {
     cancel: "Отмена",
     yes: "Да",
     no: "Нет",
+    error: "Ошибка",
   },
   plural: {
     // Русское склонение существительных по числу: [1, 2-4, 5+]
@@ -312,6 +313,10 @@ const ru = {
     stintRange: "Круги {{start}}–{{end}}",
     yourStint: "Ваш стинт: круги {{start}}–{{end}}",
     coDrivers: "Со-пилоты",
+    deleteSession: "Удалить сессию",
+    confirmDeleteSession:
+      "Удалить эту сессию и все связанные данные (круги, результаты, инциденты)? Действие необратимо.",
+    toastSessionDeletedTitle: "Сессия удалена",
   },
   driverDetail: {
     back: "Лидерборды",
@@ -365,9 +370,6 @@ const ru = {
     subtitle: "Подключите папку с логами результатов LMU. Файлы .xml импортируются поочерёдно.",
     tabLogs: "Импорт логов",
     tabTelemetry: "Импорт телеметрии",
-    cleanupTitle: "Очистка базы данных",
-    cleanupBody:
-      "Будут удалены все импортированные данные: сессии, круги, трассы и связанные записи. Действие необратимо. После очистки файлы можно импортировать заново.",
     cleanupCta: "Очистить БД",
     whereTitle: "Где лежат логи результатов",
     wherePath: "…\\Le Mans Ultimate\\UserData\\Log\\Results\\*.xml",
@@ -431,9 +433,6 @@ const ru = {
   telemetry: {
     title: "Импорт телеметрии игры",
     subtitle: "Подключите папку с файлами телеметрии LMU (.duckdb). Данные заносятся в базу по одному файлу.",
-    cleanupTitle: "Очистка телеметрии",
-    cleanupBody:
-      "Будут удалены все импортированные данные телеметрии: сессии записи, каналы и сэмплы. Действие необратимо. Данные заездов (круги, результаты) не затрагиваются.",
     cleanupCta: "Очистить телеметрию",
     confirmClear:
       "Удалить всю импортированную телеметрию? Будут удалены все записи, каналы и сэмплы. Это действие необратимо.",
@@ -557,6 +556,27 @@ const ru = {
     navLogout: "Выйти",
     loggedInAs: "Вы вошли как {{name}}",
   },
+  admin: {
+    title: "Администрирование",
+    subtitle: "Зарегистрированные пользователи, статистика загрузок и размер базы данных",
+    accessDeniedTitle: "Доступ только для администратора",
+    accessDeniedBody: "У вашей учётной записи нет прав администратора.",
+    backToOverview: "Вернуться к обзору",
+    usersTitle: "Зарегистрированные пользователи",
+    usersEmpty: "Пока никто не зарегистрировался",
+    loadError: "Не удалось загрузить данные",
+    colUser: "Пользователь",
+    colRegistered: "Регистрация",
+    colSessions: "Сессий загружено",
+    colLaps: "Кругов загружено",
+    badgeAdmin: "Админ",
+    showSessions: "Показать загруженные сессии",
+    dbStatsTitle: "Размер базы данных",
+    totalSize: "Общий размер БД",
+    colTable: "Таблица",
+    colRowsEstimate: "Строк (оценка)",
+    colSize: "Размер",
+  },
 } as const;
 
 type DeepString<T> = {
@@ -591,6 +611,7 @@ const en: Dict = {
     cancel: "Cancel",
     yes: "Yes",
     no: "No",
+    error: "Error",
   },
   plural: {
     // English has only singular/plural, so all three forms are the same value.
@@ -867,6 +888,10 @@ const en: Dict = {
     stintRange: "Laps {{start}}–{{end}}",
     yourStint: "Your stint: laps {{start}}–{{end}}",
     coDrivers: "Co-drivers",
+    deleteSession: "Delete session",
+    confirmDeleteSession:
+      "Delete this session and all related data (laps, results, incidents)? This action is irreversible.",
+    toastSessionDeletedTitle: "Session deleted",
   },
   driverDetail: {
     back: "Leaderboards",
@@ -920,9 +945,6 @@ const en: Dict = {
     subtitle: "Connect the LMU results log folder. .xml files are imported one at a time.",
     tabLogs: "Log import",
     tabTelemetry: "Telemetry import",
-    cleanupTitle: "Clear database",
-    cleanupBody:
-      "All imported data will be deleted: sessions, laps, tracks and related records. This action is irreversible. Files can be re-imported after clearing.",
     cleanupCta: "Clear database",
     whereTitle: "Where result logs are stored",
     wherePath: "…\\Le Mans Ultimate\\UserData\\Log\\Results\\*.xml",
@@ -985,9 +1007,6 @@ const en: Dict = {
   telemetry: {
     title: "Import game telemetry",
     subtitle: "Connect the LMU telemetry folder (.duckdb). Data is stored one file at a time.",
-    cleanupTitle: "Clear telemetry",
-    cleanupBody:
-      "All imported telemetry data will be deleted: recording sessions, channels and samples. This action is irreversible. Race data (laps, results) is not affected.",
     cleanupCta: "Clear telemetry",
     confirmClear:
       "Delete all imported telemetry? All sessions, channels and samples will be deleted. This action is irreversible.",
@@ -1109,6 +1128,27 @@ const en: Dict = {
     navLogin: "Sign in",
     navLogout: "Sign out",
     loggedInAs: "Signed in as {{name}}",
+  },
+  admin: {
+    title: "Administration",
+    subtitle: "Registered users, upload statistics and database size",
+    accessDeniedTitle: "Admins only",
+    accessDeniedBody: "Your account doesn't have administrator privileges.",
+    backToOverview: "Back to overview",
+    usersTitle: "Registered users",
+    usersEmpty: "No one has registered yet",
+    loadError: "Failed to load data",
+    colUser: "User",
+    colRegistered: "Registered",
+    colSessions: "Sessions uploaded",
+    colLaps: "Laps uploaded",
+    badgeAdmin: "Admin",
+    showSessions: "Show uploaded sessions",
+    dbStatsTitle: "Database size",
+    totalSize: "Total database size",
+    colTable: "Table",
+    colRowsEstimate: "Rows (estimate)",
+    colSize: "Size",
   },
 };
 

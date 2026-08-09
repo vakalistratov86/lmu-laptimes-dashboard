@@ -79,7 +79,8 @@ export async function runMigrations(): Promise<void> {
         session_duration_min  INTEGER,
         session_max_laps      INTEGER,
         most_laps_completed   INTEGER,
-        has_co_drivers        INTEGER NOT NULL DEFAULT 0
+        has_co_drivers        INTEGER NOT NULL DEFAULT 0,
+        uploaded_by_user_id   INTEGER
       )
     `;
 
@@ -87,6 +88,12 @@ export async function runMigrations(): Promise<void> {
     // CREATE TABLE IF NOT EXISTS above is a no-op there, so backfill it.
     await migrationClient`
       ALTER TABLE sessions ADD COLUMN IF NOT EXISTS has_co_drivers INTEGER NOT NULL DEFAULT 0
+    `;
+
+    // Fix: uploaded_by_user_id (admin page — per-user upload stats) added
+    // after sessions already existed in prod — same backfill pattern.
+    await migrationClient`
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS uploaded_by_user_id INTEGER
     `;
 
     await migrationClient`
@@ -406,8 +413,15 @@ export async function runMigrations(): Promise<void> {
         email          TEXT NOT NULL UNIQUE,
         password_hash  TEXT NOT NULL,
         display_name   TEXT NOT NULL,
-        created_at     BIGINT NOT NULL
+        created_at     BIGINT NOT NULL,
+        is_admin       INTEGER NOT NULL DEFAULT 0
       )
+    `;
+
+    // Fix: is_admin (admin page — server/adminAuth.ts bootstrap route) added
+    // after users already existed in prod — same backfill pattern.
+    await migrationClient`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER NOT NULL DEFAULT 0
     `;
 
     await migrationClient`

@@ -56,6 +56,9 @@ export interface ImportJobPayload {
   fileHash: string;
   fileName: string;
   content: string;
+  // Кто загрузил файл (POST /api/import вызывает resolveCurrentUser() до runImport) —
+  // undefined/null для анонимной загрузки, вход не обязателен для импорта.
+  uploadedByUserId?: number | null;
 }
 
 // Простая in-process очередь задач
@@ -354,6 +357,7 @@ export async function runImport(job: ImportJobPayload): Promise<ImportResult> {
         sessionMaxLaps: parsed!.sessionMaxLaps ?? null,
         mostLapsCompleted: parsed!.mostLapsCompleted ?? null,
         hasCoDrivers: hasCoDrivers ? 1 : 0,
+        uploadedByUserId: job.uploadedByUserId ?? null,
       })
       .returning();
     const session = sessionRows[0];

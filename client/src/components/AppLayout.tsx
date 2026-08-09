@@ -13,6 +13,7 @@ import {
   Activity,
   User,
   Gamepad2,
+  ShieldAlert,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { AppVersion } from "./AppVersion";
@@ -157,6 +158,39 @@ function ImportButton() {
   );
 }
 
+/**
+ * Иконка перехода на /admin в хедере — видна только пользователям с isAdmin=1
+ * (server/auth.ts requireAdminUser). Та же роль ADMIN_TOKEN-only bootstrap
+ * (POST /api/admin/promote), что и у деструктивных операций импорта.
+ */
+function AdminButton() {
+  const { t } = useLanguage();
+  const { user } = useAuth();
+  const [location] = useLocation();
+  const active = location.startsWith("/admin");
+
+  if (!user?.isAdmin) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          href="/admin"
+          data-testid="button-header-admin"
+          aria-label={t("admin.title")}
+          className={cn(
+            "flex h-9 w-9 items-center justify-center rounded-md border transition-colors hover-elevate",
+            active ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground",
+          )}
+        >
+          <ShieldAlert size={16} />
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{t("admin.title")}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** Кнопка входа/выхода в хедере — состояние берётся из AuthProvider (client/src/lib/auth.tsx). */
 function AuthControl() {
   const { t } = useLanguage();
@@ -244,6 +278,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
         <div className="flex items-center gap-2">
           <ImportButton />
+          <AdminButton />
           <AuthControl />
           <LanguageSwitcher />
           <button

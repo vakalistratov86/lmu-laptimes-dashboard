@@ -73,6 +73,9 @@ export const sessions = pgTable("sessions", {
   // 1, если хотя бы у одной машины сессии несколько реальных пилотов
   // (обнаружен <Swap> с разными именами) — командная гонка со сменой пилота.
   hasCoDrivers: integer("has_co_drivers").notNull().default(0),
+  // Кто загрузил файл лога этой сессии (POST /api/import) — null для
+  // анонимной загрузки и для сессий, импортированных до появления этого поля.
+  uploadedByUserId: integer("uploaded_by_user_id"),
 });
 
 // Задания импорта — idempotency + async status (#5, #6)
@@ -284,6 +287,10 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   displayName: text("display_name").notNull(),
   createdAt: bigint("created_at", { mode: "number" }).notNull(), // Unix ms
+  // 1 — учётная запись администратора (доступ к /admin, удаление сессий).
+  // Выставляется только через POST /api/admin/promote (требует ADMIN_TOKEN) —
+  // самостоятельно назначить себе роль через обычную регистрацию нельзя.
+  isAdmin: integer("is_admin").notNull().default(0),
 });
 
 // Сессии входа — случайный токен в httpOnly-cookie, не JWT: строка удаляется
@@ -431,4 +438,40 @@ export type DriverIncidentsResponse = {
   incidents: SessionIncidentEnriched[];
   trackLimits: SessionTrackLimitsEnriched[];
   penalties: SessionPenaltyEnriched[];
+};
+
+// ── Страница администратора (GET /api/admin/users, GET /api/admin/stats) ──
+
+/** Сводка по одной сессии, загруженной пользователем — для списка "какие сессии" на /admin. */
+export type AdminSessionSummary = {
+  id: number;
+  event: string;
+  venue: string;
+  sessionType: string;
+  dateTime: string;
+  lapCount: number;
+};
+
+/** Пользователь + статистика его загрузок — без passwordHash (storage выбирает только нужные колонки). */
+export type AdminUserSummary = {
+  id: number;
+  email: string;
+  displayName: string;
+  createdAt: number;
+  isAdmin: number;
+  sessionCount: number;
+  totalLaps: number;
+  sessions: AdminSessionSummary[];
+};
+
+/** Размер одной таблицы БД — rowCountEstimate из pg_class.reltuples (см. storage.ts), не точный COUNT(*). */
+export type AdminTableSize = {
+  table: string;
+  rowCountEstimate: number;
+  sizeBytes: number;
+};
+
+export type AdminDbStats = {
+  databaseSizeBytes: number;
+  tables: AdminTableSize[];
 };

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { tracks, drivers, lapTimes, sessions, sessionResults, sessionLaps } from "@shared/schema";
+import { tracks, drivers, lapTimes, sessions, sessionResults, sessionLaps, users } from "@shared/schema";
 
 // ---------------------------------------------------------------------------
 // Helpers: in-memory DB для изолированных тестов
@@ -56,7 +56,16 @@ function createTestDb() {
       session_duration_min INTEGER,
       session_max_laps INTEGER,
       most_laps_completed INTEGER,
-      has_co_drivers INTEGER NOT NULL DEFAULT 0
+      has_co_drivers INTEGER NOT NULL DEFAULT 0,
+      uploaded_by_user_id INTEGER
+    );
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      password_hash TEXT NOT NULL DEFAULT '',
+      display_name TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL DEFAULT 0,
+      is_admin INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE lap_times (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -695,5 +704,94 @@ describe("session_results — несколько строк на одну маш
       stintStartLap: 195,
       stintEndLap: 216,
     });
+  });
+});
+
+// Страница администратора (server/storage.ts getUsersWithUploadStats()) — та
+// же JOIN/группировка-по-uploadedByUserId, что и реальный метод, проверяется
+// здесь на sqlite (как и остальной файл), т.к. сам storage.ts привязан к
+// живому postgres-js соединению на уровне модуля.
+describe("getUsersWithUploadStats() — группировка сессий по загрузившему пользователю (/admin)", () => {
+  let testDb: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    testDb = createTestDb();
+  });
+
+  it("считает сессии/круги отдельно на пользователя, анонимные сессии не попадают ни к кому", async () => {
+    const { inArray } = await import("drizzle-orm");
+
+    const track = testDb
+      .insert(tracks)
+      .values({ name: "Le Mans", country: "FR", lengthKm: 13.6, turns: 38, layout: "Full" })
+      .returning()
+      .get();
+
+    const userA = testDb
+      .insert(users)
+      .values({ email: "a@example.com", passwordHash: "salt:hash", displayName: "A", createdAt: 0 })
+      .returning()
+      .get();
+    const userB = testDb
+      .insert(users)
+      .values({ email: "b@example.com", passwordHash: "salt:hash", displayName: "B", createdAt: 0, isAdmin: 1 })
+      .returning()
+      .get();
+
+    const baseSession = {
+      trackId: track.id,
+      event: "Test",
+      sessionType: "Race",
+      venue: "Le Mans",
+      dateTime: "2026-07-14T15:00:00.000Z",
+      fileName: "race.xml",
+      driverCount: 1,
+    };
+    testDb
+      .insert(sessions)
+      .values({ ...baseSession, lapCount: 10, uploadedByUserId: userA.id })
+      .run();
+    testDb
+      .insert(sessions)
+      .values({ ...baseSession, lapCount: 20, uploadedByUserId: userA.id })
+      .run();
+    testDb
+      .insert(sessions)
+      .values({ ...baseSession, lapCount: 30, uploadedByUserId: userB.id })
+      .run();
+    // Анонимная загрузка — не должна попасть ни к одному пользователю.
+    testDb
+      .insert(sessions)
+      .values({ ...baseSession, lapCount: 999, uploadedByUserId: null })
+      .run();
+
+    const allUsers = testDb.select().from(users).all();
+    const userIds = allUsers.map((u) => u.id);
+    const uploadedSessions = testDb
+      .select({ id: sessions.id, uploadedByUserId: sessions.uploadedByUserId, lapCount: sessions.lapCount })
+      .from(sessions)
+      .where(inArray(sessions.uploadedByUserId, userIds))
+      .all();
+
+    const byUser = new Map<number, typeof uploadedSessions>();
+    for (const s of uploadedSessions) {
+      const uid = s.uploadedByUserId as number;
+      const list = byUser.get(uid) ?? [];
+      list.push(s);
+      byUser.set(uid, list);
+    }
+    const summaries = allUsers.map((u) => {
+      const list = byUser.get(u.id) ?? [];
+      return { id: u.id, sessionCount: list.length, totalLaps: list.reduce((sum, s) => sum + s.lapCount, 0) };
+    });
+
+    expect(summaries).toEqual(
+      expect.arrayContaining([
+        { id: userA.id, sessionCount: 2, totalLaps: 30 },
+        { id: userB.id, sessionCount: 1, totalLaps: 30 },
+      ]),
+    );
+    const totalCountedSessions = summaries.reduce((sum, u) => sum + u.sessionCount, 0);
+    expect(totalCountedSessions).toBe(3); // не 4 — анонимная сессия (999 кругов) исключена
   });
 });

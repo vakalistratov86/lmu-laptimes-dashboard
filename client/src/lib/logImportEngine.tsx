@@ -323,6 +323,11 @@ function useLogImportEngineInternal(): LogImportEngineState {
       queryClient.invalidateQueries({ queryKey: ["/api/laps"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tracks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/drivers"] });
+      // Кнопка переехала на /admin (рядом с таблицей размера БД) — без этого
+      // счётчики сессий/кругов на странице администратора остались бы устаревшими
+      // после очистки, пока пользователь не перезагрузит страницу вручную.
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       setCountersState(DEFAULT_COUNTERS);
       saveCounters(DEFAULT_COUNTERS);
       addLog("ok", t("imp.logDbCleared"));

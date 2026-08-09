@@ -8,7 +8,6 @@ import {
   Info,
   RefreshCw,
   AlertTriangle,
-  Trash2,
   FileText,
   Activity,
   CircleSlash,
@@ -50,12 +49,10 @@ export default function Import() {
     log,
     counters,
     mode,
-    clearingDb,
     pickFolderFSA,
     requestPermission,
     scanFSAFolder,
     importFiles,
-    clearDatabase,
     setAutoImport,
     addLog,
     clearLog,
@@ -137,29 +134,6 @@ export default function Import() {
         <TelemetryImportPanel />
       ) : (
         <>
-          {/* Предупреждение об очистке БД */}
-          <div className="space-y-3">
-            <div className="flex flex-col gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex gap-3">
-                <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-400" />
-                <div className="text-sm">
-                  <p className="text-card-foreground font-medium">{t("imp.cleanupTitle")}</p>
-                  <p className="mt-1 text-muted-foreground">{t("imp.cleanupBody")}</p>
-                </div>
-              </div>
-
-              <button
-                data-testid="button-clear-db"
-                onClick={clearDatabase}
-                disabled={clearingDb || mode !== "idle"}
-                className="inline-flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/15 px-4 py-2.5 text-sm font-medium text-red-300 hover:bg-red-500/20 hover:text-red-200 disabled:opacity-40"
-              >
-                {clearingDb ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                {t("imp.cleanupCta")}
-              </button>
-            </div>
-          </div>
-
           {/* Подсказка */}
           <div className="flex gap-3 rounded-lg border border-border bg-card/50 p-4 text-sm text-muted-foreground">
             <Info size={18} className="mt-0.5 shrink-0 text-primary" />

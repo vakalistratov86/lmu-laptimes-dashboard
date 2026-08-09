@@ -118,6 +118,27 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   next();
 }
 
+/**
+ * Middleware для страницы администратора (список пользователей, статистика
+ * загрузок, размер БД, удаление сессий): 401 без валидной сессии входа, 403
+ * для залогиненного, но не-админского пользователя, иначе req.user заполнен.
+ * Роль назначается только через POST /api/admin/promote (server/adminAuth.ts,
+ * requireAdminToken) — обычная регистрация не может выставить isAdmin сама себе.
+ */
+export async function requireAdminUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const user = await resolveCurrentUser(req);
+  if (!user) {
+    res.status(401).json({ message: "Требуется вход в систему" });
+    return;
+  }
+  if (!user.isAdmin) {
+    res.status(403).json({ message: "Требуются права администратора" });
+    return;
+  }
+  req.user = user;
+  next();
+}
+
 // ── Rate limiting на /api/auth/*: без внешней зависимости, in-memory, по IP ──
 // scrypt намеренно CPU/memory-hard (это и есть защита пароля от перебора) —
 // без лимита на сам HTTP-эндпоинт это же свойство превращает login/register

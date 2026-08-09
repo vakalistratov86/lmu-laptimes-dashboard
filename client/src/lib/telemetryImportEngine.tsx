@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
-import { API_BASE } from "@/lib/queryClient";
+import { API_BASE, queryClient } from "@/lib/queryClient";
 import { promptAdminToken, clearStoredAdminToken } from "@/lib/adminToken";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/lib/i18n";
@@ -218,6 +218,9 @@ function useTelemetryImportEngineInternal(): TelemetryImportEngineState {
       await dbSaveSeenSet(new Set(), SEEN_KEY_PREFIX);
       setCountersState(DEFAULT_COUNTERS);
       saveCounters(DEFAULT_COUNTERS);
+      // Кнопка живёт на /admin (рядом с таблицей размера БД, telemetry_*
+      // строки которой без этого остались бы устаревшими до ручной перезагрузки).
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       addLog("ok", t("telemetry.logCleared"));
       toast({ title: t("telemetry.toastClearedTitle"), description: t("telemetry.toastClearedDesc") });
     } catch (e: unknown) {

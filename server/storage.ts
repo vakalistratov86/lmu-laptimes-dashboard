@@ -26,10 +26,13 @@ import type {
   InsertUser,
   UserSession,
   InsertUserSession,
+  AdminUserSummary,
+  AdminDbStats,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { eq, and, or, desc, inArray, sql as sqlExpr } from "drizzle-orm";
+import { deleteSupersededSessionData } from "./sessionSupersede";
 
 const sql = postgres(process.env.DATABASE_URL!);
 export const db = drizzle(sql);
@@ -87,6 +90,10 @@ export interface IStorage {
   createUserSession(session: InsertUserSession): Promise<UserSession>;
   getUserSession(token: string): Promise<UserSession | undefined>;
   deleteUserSession(token: string): Promise<void>;
+  setUserAdminByEmail(email: string): Promise<User | undefined>;
+  getUsersWithUploadStats(): Promise<AdminUserSummary[]>;
+  getDbSizeStats(): Promise<AdminDbStats>;
+  deleteSession(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -500,6 +507,120 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUserSession(token: string): Promise<void> {
     await db.delete(userSessions).where(eq(userSessions.id, token));
+  }
+
+  // ── Страница администратора ────────────────────────────────────────────
+
+  async setUserAdminByEmail(email: string): Promise<User | undefined> {
+    const rows = await db.update(users).set({ isAdmin: 1 }).where(eq(users.email, email)).returning();
+    return rows[0];
+  }
+
+  /**
+   * Пользователи + статистика их загрузок (POST /api/import) — для /admin.
+   * uploaded_by_user_id заполняется только для сессий, импортированных после
+   * появления этого поля (см. shared/schema.ts) — старые сессии и анонимные
+   * загрузки в статистику не попадают ни у одного пользователя.
+   */
+  async getUsersWithUploadStats(): Promise<AdminUserSummary[]> {
+    const allUsers = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        displayName: users.displayName,
+        createdAt: users.createdAt,
+        isAdmin: users.isAdmin,
+      })
+      .from(users)
+      .orderBy(users.id);
+    if (allUsers.length === 0) return [];
+
+    const userIds = allUsers.map((u) => u.id);
+    const uploadedSessions = await db
+      .select({
+        id: sessions.id,
+        uploadedByUserId: sessions.uploadedByUserId,
+        event: sessions.event,
+        venue: sessions.venue,
+        sessionType: sessions.sessionType,
+        dateTime: sessions.dateTime,
+        lapCount: sessions.lapCount,
+      })
+      .from(sessions)
+      .where(inArray(sessions.uploadedByUserId, userIds))
+      .orderBy(desc(sessions.dateTime));
+
+    const byUser = new Map<number, typeof uploadedSessions>();
+    for (const s of uploadedSessions) {
+      const uid = s.uploadedByUserId as number;
+      const list = byUser.get(uid) ?? [];
+      list.push(s);
+      byUser.set(uid, list);
+    }
+
+    return allUsers.map((u) => {
+      const list = byUser.get(u.id) ?? [];
+      return {
+        ...u,
+        sessionCount: list.length,
+        totalLaps: list.reduce((sum, s) => sum + s.lapCount, 0),
+        sessions: list.map(({ id, event, venue, sessionType, dateTime, lapCount }) => ({
+          id,
+          event,
+          venue,
+          sessionType,
+          dateTime,
+          lapCount,
+        })),
+      };
+    });
+  }
+
+  /**
+   * Размер БД целиком + оценка по каждой таблице public-схемы. rowCountEstimate
+   * берётся из pg_class.reltuples (статистика планировщика, обновляется
+   * VACUUM/ANALYZE), а не точного COUNT(*) — для крупных таблиц вроде
+   * telemetry_samples (до нескольких миллионов строк) точный подсчёт означал бы
+   * полный скан таблицы при каждом открытии страницы администратора, того же
+   * рода стоимость, которую §5.3 требований запрещает для агрегатов по этой
+   * таблице. Один запрос к системному каталогу вместо цикла по каждой таблице.
+   */
+  async getDbSizeStats(): Promise<AdminDbStats> {
+    const [{ size: databaseSize }] = await sql<{ size: string }[]>`
+      SELECT pg_database_size(current_database()) AS size
+    `;
+
+    const rows = await sql<{ table: string; estimate: string; size: string }[]>`
+      SELECT relname AS table, reltuples::bigint AS estimate, pg_total_relation_size(oid) AS size
+      FROM pg_class
+      WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
+      ORDER BY pg_total_relation_size(oid) DESC
+    `;
+
+    return {
+      databaseSizeBytes: Number(databaseSize),
+      // reltuples — не отрицательный "счётчик": -1 — служебный признак Postgres
+      // "по этой таблице ещё не было ANALYZE" (новая/пустая таблица), а не оценка
+      // числа строк. Отрицательного значения для строк не бывает — клампим в 0,
+      // не показываем "-1 строк" в интерфейсе.
+      tables: rows.map((r) => ({
+        table: r.table,
+        rowCountEstimate: Math.max(0, Number(r.estimate)),
+        sizeBytes: Number(r.size),
+      })),
+    };
+  }
+
+  /**
+   * Удаляет сессию и все связанные с ней данные — переиспользует тот же набор
+   * таблиц/порядок, что и замена сессии-продолжения при реконнекте
+   * (server/sessionSupersede.ts), только вызывается явно с админской страницы,
+   * а не автоматически при импорте более полного дампа.
+   */
+  async deleteSession(id: number): Promise<void> {
+    await db.transaction(async (tx) => {
+      await deleteSupersededSessionData(tx, id);
+    });
   }
 }
 

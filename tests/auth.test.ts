@@ -27,6 +27,7 @@ import {
   clearSessionCookie,
   readSessionToken,
   resolveCurrentUser,
+  requireAdminUser,
   rateLimitByIp,
   resetRateLimitsForTests,
 } from "../server/auth";
@@ -72,10 +73,17 @@ describe("toPublicUser", () => {
       passwordHash: "salt:hash",
       displayName: "Max",
       createdAt: 1_700_000_000_000,
+      isAdmin: 0,
     };
     const publicUser = toPublicUser(user);
     expect(publicUser).not.toHaveProperty("passwordHash");
-    expect(publicUser).toEqual({ id: 1, email: "driver@example.com", displayName: "Max", createdAt: user.createdAt });
+    expect(publicUser).toEqual({
+      id: 1,
+      email: "driver@example.com",
+      displayName: "Max",
+      createdAt: user.createdAt,
+      isAdmin: 0,
+    });
   });
 });
 
@@ -142,6 +150,7 @@ describe("resolveCurrentUser", () => {
       passwordHash: "salt:hash",
       displayName: "Max",
       createdAt: 0,
+      isAdmin: 0,
     };
     vi.mocked(storage.getUserSession).mockResolvedValueOnce({
       id: "tok",
@@ -152,6 +161,74 @@ describe("resolveCurrentUser", () => {
     vi.mocked(storage.getUserById).mockResolvedValueOnce(user);
     const req = { headers: { cookie: "lmu_session=tok" } } as any;
     expect(await resolveCurrentUser(req)).toEqual(user);
+  });
+});
+
+describe("requireAdminUser", () => {
+  function mockRes() {
+    return {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
+    } as any;
+  }
+
+  it("возвращает 401 без cookie сессии, не заполняет req.user", async () => {
+    const req = { headers: {} } as any;
+    const res = mockRes();
+    const next = vi.fn();
+    await requireAdminUser(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+    expect(req.user).toBeUndefined();
+  });
+
+  it("возвращает 403 для валидной сессии без isAdmin", async () => {
+    const user: User = {
+      id: 1,
+      email: "driver@example.com",
+      passwordHash: "salt:hash",
+      displayName: "Max",
+      createdAt: 0,
+      isAdmin: 0,
+    };
+    vi.mocked(storage.getUserSession).mockResolvedValueOnce({
+      id: "tok",
+      userId: 1,
+      createdAt: 0,
+      expiresAt: Date.now() + 100_000,
+    });
+    vi.mocked(storage.getUserById).mockResolvedValueOnce(user);
+    const req = { headers: { cookie: "lmu_session=tok" } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+    await requireAdminUser(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("пропускает дальше и заполняет req.user для isAdmin=1", async () => {
+    const user: User = {
+      id: 1,
+      email: "admin@example.com",
+      passwordHash: "salt:hash",
+      displayName: "Admin",
+      createdAt: 0,
+      isAdmin: 1,
+    };
+    vi.mocked(storage.getUserSession).mockResolvedValueOnce({
+      id: "tok",
+      userId: 1,
+      createdAt: 0,
+      expiresAt: Date.now() + 100_000,
+    });
+    vi.mocked(storage.getUserById).mockResolvedValueOnce(user);
+    const req = { headers: { cookie: "lmu_session=tok" } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+    await requireAdminUser(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+    expect(req.user).toEqual(user);
   });
 });
 

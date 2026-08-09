@@ -26,6 +26,7 @@ import Events from "@/pages/Events";
 import SteamCatalog from "@/pages/SteamCatalog";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import AdminPage from "@/pages/AdminPage";
 
 function AppRouter() {
   return (
@@ -45,6 +46,7 @@ function AppRouter() {
       <Route path="/import" component={Import} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -35,6 +35,7 @@ import {
   clearSessionCookie,
   readSessionToken,
   resolveCurrentUser,
+  requireAdminUser,
   toPublicUser,
   rateLimitByIp,
 } from "./auth";
@@ -187,6 +188,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const user = await resolveCurrentUser(req);
       if (!user) return res.status(401).json({ message: "Не выполнен вход" });
       res.json(toPublicUser(user));
+    }),
+  );
+
+  // ── Администрирование (страница /admin) ───────────────────────────────────
+  // Роль администратора (users.is_admin) назначается ТОЛЬКО через этот роут,
+  // защищённый общим ADMIN_TOKEN (server/adminAuth.ts) — обычная регистрация
+  // не может выставить её себе сама. Дальше все /api/admin/* и удаление
+  // сессии защищены requireAdminUser (server/auth.ts): нужен вход + isAdmin=1.
+  app.post(
+    "/api/admin/promote",
+    requireAdminToken,
+    asyncRoute(async (req, res) => {
+      const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      if (!email) return res.status(400).json({ message: "Не передан email пользователя" });
+
+      const user = await storage.setUserAdminByEmail(email);
+      if (!user) return res.status(404).json({ message: "Пользователь с таким email не найден" });
+      res.json(toPublicUser(user));
+    }),
+  );
+
+  app.get(
+    "/api/admin/users",
+    requireAdminUser,
+    asyncRoute(async (_req, res) => {
+      res.json(await storage.getUsersWithUploadStats());
+    }),
+  );
+
+  app.get(
+    "/api/admin/stats",
+    requireAdminUser,
+    asyncRoute(async (_req, res) => {
+      res.json(await storage.getDbSizeStats());
     }),
   );
 
@@ -356,6 +391,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }),
   );
 
+  /**
+   * DELETE /api/sessions/:id — удаление одной сессии и всех связанных данных.
+   * Раньше такой возможности не было вовсе; теперь — только для администратора
+   * (см. блок "Администрирование" выше). storage.deleteSession() переиспользует
+   * тот же набор таблиц/транзакцию, что и замена сессии-продолжения при
+   * реконнекте (server/sessionSupersede.ts).
+   */
+  app.delete(
+    "/api/sessions/:id",
+    requireAdminUser,
+    asyncRoute(async (req, res) => {
+      const id = parseIdParam(req.params.id, res, "id сессии");
+      if (id === undefined) return;
+      const session = await storage.getSession(id);
+      if (!session) return res.status(404).json({ message: "Сессия не найдена" });
+      await storage.deleteSession(id);
+      res.json({ ok: true });
+    }),
+  );
+
   // ── Телеметрия (просмотр) ────────────────────────────────────────
   app.get(
     "/api/telemetry/sessions",
@@ -414,6 +469,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!Array.isArray(files) || files.length === 0) {
         return res.status(400).json({ message: "Не переданы файлы для импорта" });
       }
+
+      // Вход не обязателен для загрузки логов (см. §6.9 REQUIREMENTS.md) —
+      // если пользователь залогинен, привязываем сессию к нему для статистики
+      // на странице администратора (/admin); анонимная загрузка оставляет
+      // uploaded_by_user_id NULL.
+      const currentUser = await resolveCurrentUser(req);
 
       const results: any[] = [];
       let imported = 0;
@@ -484,7 +545,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             driverCount,
             replacedSessionId,
             replacedLapCount,
-          } = await runImport({ id, fileHash, fileName, content });
+          } = await runImport({ id, fileHash, fileName, content, uploadedByUserId: currentUser?.id ?? null });
 
           await db
             .update(importJobs)

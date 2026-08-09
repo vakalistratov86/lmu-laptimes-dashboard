@@ -52,6 +52,10 @@ vi.mock("../server/storage", () => ({
     createUserSession: vi.fn(),
     getUserSession: vi.fn(),
     deleteUserSession: vi.fn(),
+    setUserAdminByEmail: vi.fn(),
+    getUsersWithUploadStats: vi.fn().mockResolvedValue([]),
+    getDbSizeStats: vi.fn().mockResolvedValue({ databaseSizeBytes: 0, tables: [] }),
+    deleteSession: vi.fn(),
   },
   db,
 }));
@@ -191,6 +195,33 @@ describe("API Routes", () => {
     vi.clearAllMocks();
     server.close();
   });
+
+  /**
+   * Мокает resolveCurrentUser() (server/auth.ts) под успешный вход: storage.getUserSession +
+   * storage.getUserById возвращают валидную сессию/пользователя один раз (mockResolvedValueOnce).
+   * Возвращает заголовок cookie для передачи в makeRequest().
+   */
+  function mockLoggedInUser(
+    overrides: Partial<{ id: number; email: string; displayName: string; isAdmin: number }> = {},
+  ) {
+    const user = {
+      id: 1,
+      email: "user@example.com",
+      passwordHash: "salt:hash",
+      displayName: "Max",
+      createdAt: 0,
+      isAdmin: 0,
+      ...overrides,
+    };
+    (storage.getUserSession as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: "tok",
+      userId: user.id,
+      createdAt: 0,
+      expiresAt: Date.now() + 100_000,
+    });
+    (storage.getUserById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(user);
+    return { cookie: "lmu_session=tok" };
+  }
 
   // ── POST /api/auth/register ──────────────────────────────────────────────
   describe("POST /api/auth/register", () => {
@@ -353,6 +384,100 @@ describe("API Routes", () => {
       const res = await makeRequest(app, "GET", "/api/auth/me", undefined, { cookie: "lmu_session=tok" });
       expect(res.status).toBe(200);
       expect(res.body).not.toHaveProperty("passwordHash");
+    });
+  });
+
+  // ── Администрирование (/api/admin/*, DELETE /api/sessions/:id) ────────────
+  describe("POST /api/admin/promote", () => {
+    it("возвращает 503, если ADMIN_TOKEN не настроен на сервере", async () => {
+      delete process.env.ADMIN_TOKEN;
+      try {
+        const res = await makeRequest(app, "POST", "/api/admin/promote", { email: "user@example.com" }, authHeader);
+        expect(res.status).toBe(503);
+      } finally {
+        process.env.ADMIN_TOKEN = TEST_ADMIN_TOKEN;
+      }
+    });
+
+    it("возвращает 401 без верного токена", async () => {
+      const res = await makeRequest(app, "POST", "/api/admin/promote", { email: "user@example.com" });
+      expect(res.status).toBe(401);
+      expect(storage.setUserAdminByEmail).not.toHaveBeenCalled();
+    });
+
+    it("возвращает 404, если пользователь с таким email не найден", async () => {
+      (storage.setUserAdminByEmail as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+      const res = await makeRequest(app, "POST", "/api/admin/promote", { email: "nobody@example.com" }, authHeader);
+      expect(res.status).toBe(404);
+    });
+
+    it("с верным токеном назначает isAdmin и возвращает пользователя без passwordHash", async () => {
+      (storage.setUserAdminByEmail as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        id: 1,
+        email: "user@example.com",
+        passwordHash: "salt:hash",
+        displayName: "Max",
+        createdAt: 0,
+        isAdmin: 1,
+      });
+      const res = await makeRequest(app, "POST", "/api/admin/promote", { email: "USER@Example.com" }, authHeader);
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty("passwordHash");
+      expect(storage.setUserAdminByEmail).toHaveBeenCalledWith("user@example.com");
+    });
+  });
+
+  describe("GET /api/admin/users", () => {
+    it("возвращает 401 без входа", async () => {
+      const res = await makeRequest(app, "GET", "/api/admin/users");
+      expect(res.status).toBe(401);
+    });
+
+    it("возвращает 403 для залогиненного не-администратора", async () => {
+      const { cookie } = mockLoggedInUser({ isAdmin: 0 });
+      const res = await makeRequest(app, "GET", "/api/admin/users", undefined, { cookie });
+      expect(res.status).toBe(403);
+      expect(storage.getUsersWithUploadStats).not.toHaveBeenCalled();
+    });
+
+    it("возвращает 200 со списком пользователей для администратора", async () => {
+      const { cookie } = mockLoggedInUser({ isAdmin: 1 });
+      (storage.getUsersWithUploadStats as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        {
+          id: 1,
+          email: "user@example.com",
+          displayName: "Max",
+          createdAt: 0,
+          isAdmin: 1,
+          sessionCount: 2,
+          totalLaps: 40,
+          sessions: [],
+        },
+      ]);
+      const res = await makeRequest(app, "GET", "/api/admin/users", undefined, { cookie });
+      expect(res.status).toBe(200);
+      expect((res.body as unknown[]).length).toBe(1);
+    });
+  });
+
+  describe("GET /api/admin/stats", () => {
+    it("возвращает 401 без входа", async () => {
+      const res = await makeRequest(app, "GET", "/api/admin/stats");
+      expect(res.status).toBe(401);
+    });
+
+    it("возвращает 403 для залогиненного не-администратора", async () => {
+      const { cookie } = mockLoggedInUser({ isAdmin: 0 });
+      const res = await makeRequest(app, "GET", "/api/admin/stats", undefined, { cookie });
+      expect(res.status).toBe(403);
+      expect(storage.getDbSizeStats).not.toHaveBeenCalled();
+    });
+
+    it("возвращает 200 со статистикой БД для администратора", async () => {
+      const { cookie } = mockLoggedInUser({ isAdmin: 1 });
+      const res = await makeRequest(app, "GET", "/api/admin/stats", undefined, { cookie });
+      expect(res.status).toBe(200);
+      expect(storage.getDbSizeStats).toHaveBeenCalled();
     });
   });
 
@@ -699,6 +824,40 @@ describe("API Routes", () => {
       const res = await makeRequest(app, "GET", "/api/sessions/7/laps");
       expect(res.status).toBe(200);
       expect(res.body).toEqual(mockLaps);
+    });
+  });
+
+  // ── DELETE /api/sessions/:id ─────────────────────────────────────────────
+  // Раньше такой возможности не было вовсе — теперь только для user.isAdmin
+  // (requireAdminUser, server/auth.ts), см. также docs/REQUIREMENTS.md §3.2/§6.1.
+  describe("DELETE /api/sessions/:id", () => {
+    it("возвращает 401 без входа", async () => {
+      const res = await makeRequest(app, "DELETE", "/api/sessions/1");
+      expect(res.status).toBe(401);
+      expect(storage.deleteSession).not.toHaveBeenCalled();
+    });
+
+    it("возвращает 403 для залогиненного не-администратора", async () => {
+      const { cookie } = mockLoggedInUser({ isAdmin: 0 });
+      const res = await makeRequest(app, "DELETE", "/api/sessions/1", undefined, { cookie });
+      expect(res.status).toBe(403);
+      expect(storage.deleteSession).not.toHaveBeenCalled();
+    });
+
+    it("возвращает 404, если сессия не найдена", async () => {
+      const { cookie } = mockLoggedInUser({ isAdmin: 1 });
+      (storage.getSession as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+      const res = await makeRequest(app, "DELETE", "/api/sessions/999", undefined, { cookie });
+      expect(res.status).toBe(404);
+      expect(storage.deleteSession).not.toHaveBeenCalled();
+    });
+
+    it("удаляет сессию и возвращает ok для администратора", async () => {
+      const { cookie } = mockLoggedInUser({ isAdmin: 1 });
+      (storage.getSession as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ id: 1 });
+      const res = await makeRequest(app, "DELETE", "/api/sessions/1", undefined, { cookie });
+      expect(res.status).toBe(200);
+      expect(storage.deleteSession).toHaveBeenCalledWith(1);
     });
   });
 

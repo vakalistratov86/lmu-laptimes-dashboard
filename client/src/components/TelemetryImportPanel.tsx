@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { FolderOpen, FileUp, CheckCircle2, RefreshCw, AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import { FolderOpen, FileUp, CheckCircle2, RefreshCw, AlertTriangle, Loader2 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import { FSA_SUPPORTED, useTelemetryImportEngine } from "@/lib/telemetryImportEngine";
 
@@ -30,12 +30,10 @@ export default function TelemetryImportPanel() {
     log,
     counters,
     mode,
-    clearing,
     pickFolderFSA,
     requestPermission,
     scanFSAFolder,
     importFiles,
-    clearTelemetry,
     addLog,
     clearLog,
   } = useTelemetryImportEngine();
@@ -61,24 +59,6 @@ export default function TelemetryImportPanel() {
       <div>
         <h2 className="font-display text-lg font-bold tracking-tight">{t("telemetry.title")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{t("telemetry.subtitle")}</p>
-      </div>
-
-      <div className="flex flex-col gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex gap-3">
-          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-400" />
-          <div className="text-sm">
-            <p className="text-card-foreground font-medium">{t("telemetry.cleanupTitle")}</p>
-            <p className="mt-1 text-muted-foreground">{t("telemetry.cleanupBody")}</p>
-          </div>
-        </div>
-        <button
-          onClick={clearTelemetry}
-          disabled={clearing || mode !== "idle"}
-          className="inline-flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/15 px-4 py-2.5 text-sm font-medium text-red-300 hover:bg-red-500/20 hover:text-red-200 disabled:opacity-40"
-        >
-          {clearing ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-          {t("telemetry.cleanupCta")}
-        </button>
       </div>
 
       {FSA_SUPPORTED ? (
