@@ -438,47 +438,49 @@ export default function TrackDetail() {
             <div className="border-b border-border bg-secondary/40 px-4 py-3">
               <h2 className="font-semibold">{t("trackDetail.ratingTitle")}</h2>
             </div>
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2.5 text-left font-medium">{t("trackDetail.colPos")}</th>
-                  <th className="px-4 py-2.5 text-left font-medium">{t("trackDetail.colDriver")}</th>
-                  <th className="px-4 py-2.5 text-left font-medium">{t("trackDetail.colClass")}</th>
-                  <th className="px-4 py-2.5 text-right font-medium">{t("trackDetail.colLap")}</th>
-                  <th className="px-4 py-2.5 text-right font-medium">{t("trackDetail.colDelta")}</th>
-                  <th className="hidden px-4 py-2.5 text-right font-medium md:table-cell">
-                    {t("trackDetail.colSectors")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.board.map((l, i) => (
-                  <tr key={l.id} className="border-t border-border hover:bg-muted/40" data-testid={`td-row-${l.id}`}>
-                    <td className="px-4 py-2.5 font-data tabular-nums text-muted-foreground">{i + 1}</td>
-                    <td className="px-4 py-2.5">
-                      <Link href={`/drivers/${l.driverId}`} className="font-medium hover:underline">
-                        <DriverName name={l.driverName} isPlayer={l.isPlayer} />
-                      </Link>
-                      <div className="text-xs text-muted-foreground">{l.team}</div>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <CarClassBadge carClass={l.carClass} />
-                    </td>
-                    <td
-                      className={`px-4 py-2.5 text-right font-data tabular-nums ${i === 0 ? "font-bold text-primary" : ""}`}
-                    >
-                      {formatLap(l.lapMs)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-data text-xs tabular-nums text-muted-foreground">
-                      {i === 0 ? "—" : formatDelta(l.lapMs, stats.board[0].lapMs)}
-                    </td>
-                    <td className="hidden px-4 py-2.5 text-right font-data text-xs tabular-nums text-muted-foreground md:table-cell">
-                      {formatSector(l.sector1Ms)} / {formatSector(l.sector2Ms)} / {formatSector(l.sector3Ms)}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-medium">{t("trackDetail.colPos")}</th>
+                    <th className="px-4 py-2.5 text-left font-medium">{t("trackDetail.colDriver")}</th>
+                    <th className="px-4 py-2.5 text-left font-medium">{t("trackDetail.colClass")}</th>
+                    <th className="px-4 py-2.5 text-right font-medium">{t("trackDetail.colLap")}</th>
+                    <th className="px-4 py-2.5 text-right font-medium">{t("trackDetail.colDelta")}</th>
+                    <th className="hidden px-4 py-2.5 text-right font-medium md:table-cell">
+                      {t("trackDetail.colSectors")}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {stats.board.map((l, i) => (
+                    <tr key={l.id} className="border-t border-border hover:bg-muted/40" data-testid={`td-row-${l.id}`}>
+                      <td className="px-4 py-2.5 font-data tabular-nums text-muted-foreground">{i + 1}</td>
+                      <td className="px-4 py-2.5">
+                        <Link href={`/drivers/${l.driverId}`} className="font-medium hover:underline">
+                          <DriverName name={l.driverName} isPlayer={l.isPlayer} />
+                        </Link>
+                        <div className="text-xs text-muted-foreground">{l.team}</div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <CarClassBadge carClass={l.carClass} />
+                      </td>
+                      <td
+                        className={`px-4 py-2.5 text-right font-data tabular-nums ${i === 0 ? "font-bold text-primary" : ""}`}
+                      >
+                        {formatLap(l.lapMs)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-data text-xs tabular-nums text-muted-foreground">
+                        {i === 0 ? "—" : formatDelta(l.lapMs, stats.board[0].lapMs)}
+                      </td>
+                      <td className="hidden px-4 py-2.5 text-right font-data text-xs tabular-nums text-muted-foreground md:table-cell">
+                        {formatSector(l.sector1Ms)} / {formatSector(l.sector2Ms)} / {formatSector(l.sector3Ms)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Card>
         </>
       ) : (

@@ -12,6 +12,22 @@
 
 ---
 
+## [1.10.3](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.10.2...v1.10.3) (2026-08-09)
+
+### Fixed
+
+* **deploy:** убрать drizzle-kit push из CI, докатить дрейф схемы в migrate.ts ([7e1f962](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/7e1f962f87f7d1a4cf8aef6c50dc1080d19c31e2))
+
+## [1.10.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.10.1...v1.10.2) (2026-08-06)
+
+### Docs
+
+* синхронизировать README с фактическим состоянием репозитория ([75a7403](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/75a7403b25ef4498b2bb80d68b6861af221b5568))
+
+### Fixed
+
+* включить горизонтальный скролл таблицы рейтинга трассы на мобильных ([d6d08f5](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/d6d08f5f25748adaada83c579c953874d588e0f6))
+
 ## [1.10.1](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.10.0...v1.10.1) (2026-08-05)
 
 ### Fixed

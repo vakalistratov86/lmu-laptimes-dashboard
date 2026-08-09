@@ -447,7 +447,7 @@ users
 | СУБД | PostgreSQL |
 | Драйвер | `postgres-js` |
 | ORM | Drizzle ORM (`drizzle-orm/pg-core`) |
-| Миграции | drizzle-kit (`npm run db:push`) |
+| Миграции | Идемпотентный SQL в `server/migrate.ts`, выполняется при старте сервера до приёма запросов (`npm run db:push` оставлен только для локальной диагностики, в автодеплое не используется) |
 | Валидация схемы | drizzle-zod + Zod |
 | Конфигурация | `drizzle.config.ts` |
 | Расположение схемы | `shared/schema.ts` |

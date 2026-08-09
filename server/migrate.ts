@@ -4,6 +4,18 @@ import postgres from "postgres";
  * Runs DB migrations on startup.
  * CREATE TABLE IF NOT EXISTS for each table in the schema, plus a handful of
  * one-off ALTER TABLE fixups for columns changed after their initial release.
+ *
+ * This is the ONLY schema-migration mechanism — CI no longer runs
+ * `drizzle-kit push` before deploy (removed after it broke the pipeline by
+ * hitting an interactive "truncate table?" prompt with no TTY in CI, when
+ * adding a UNIQUE constraint to import_jobs). Every column/table drizzle-kit
+ * push previously applied out-of-band to prod (has_co_drivers, session_results
+ * stint_*, session_penalties, import_jobs_file_hash_unique) had to be
+ * backfilled here so this file matches prod reality and stays the single
+ * source of truth going forward. A prior attempt to replace this file with
+ * drizzle-orm's migrate() + a generated migration (#161) crashed prod on
+ * deploy and was reverted (#162) — stick with plain idempotent SQL here,
+ * do not reintroduce a second migration engine.
  */
 export async function runMigrations(): Promise<void> {
   const url = process.env.DATABASE_URL;
@@ -66,8 +78,15 @@ export async function runMigrations(): Promise<void> {
         dedicated             INTEGER,
         session_duration_min  INTEGER,
         session_max_laps      INTEGER,
-        most_laps_completed   INTEGER
+        most_laps_completed   INTEGER,
+        has_co_drivers        INTEGER NOT NULL DEFAULT 0
       )
+    `;
+
+    // Fix: has_co_drivers was added after sessions already existed in prod —
+    // CREATE TABLE IF NOT EXISTS above is a no-op there, so backfill it.
+    await migrationClient`
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS has_co_drivers INTEGER NOT NULL DEFAULT 0
     `;
 
     await migrationClient`
@@ -118,7 +137,7 @@ export async function runMigrations(): Promise<void> {
     await migrationClient`
       CREATE TABLE IF NOT EXISTS import_jobs (
         id                  TEXT PRIMARY KEY,
-        file_hash           TEXT NOT NULL UNIQUE,
+        file_hash           TEXT NOT NULL,
         file_name           TEXT NOT NULL,
         status              TEXT NOT NULL DEFAULT 'queued',
         session_id          INTEGER,
@@ -161,6 +180,28 @@ export async function runMigrations(): Promise<void> {
       $$;
     `;
 
+    // file_hash must be UNIQUE for import idempotency (shared/schema.ts).
+    // Applied as an explicit named ALTER rather than inline in CREATE TABLE
+    // above so this statement runs the same way on a fresh table and on an
+    // existing one — inline UNIQUE only takes effect when CREATE TABLE
+    // actually creates the table, which IF NOT EXISTS skips for prod, where
+    // import_jobs already existed before this constraint was introduced.
+    // This used to be applied out-of-band via `drizzle-kit push` in CI,
+    // which broke when it hit an interactive "truncate table?" prompt with
+    // no TTY.
+    await migrationClient`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'import_jobs_file_hash_unique'
+        ) THEN
+          ALTER TABLE import_jobs ADD CONSTRAINT import_jobs_file_hash_unique UNIQUE (file_hash);
+          RAISE NOTICE '[migrate] import_jobs.file_hash: UNIQUE constraint added';
+        END IF;
+      END
+      $$;
+    `;
+
     await migrationClient`
       CREATE TABLE IF NOT EXISTS import_errors (
         id              SERIAL PRIMARY KEY,
@@ -194,8 +235,22 @@ export async function runMigrations(): Promise<void> {
         best_lap_ms               INTEGER,
         finish_status             TEXT,
         control_and_aids          TEXT,
-        connected                 INTEGER
+        connected                 INTEGER,
+        stint_start_lap           INTEGER,
+        stint_end_lap             INTEGER,
+        stint_start_sec           REAL,
+        stint_end_sec             REAL
       )
+    `;
+
+    // Fix: stint_* columns were added after session_results already existed
+    // in prod — CREATE TABLE IF NOT EXISTS above is a no-op there.
+    await migrationClient`
+      ALTER TABLE session_results
+        ADD COLUMN IF NOT EXISTS stint_start_lap INTEGER,
+        ADD COLUMN IF NOT EXISTS stint_end_lap   INTEGER,
+        ADD COLUMN IF NOT EXISTS stint_start_sec REAL,
+        ADD COLUMN IF NOT EXISTS stint_end_sec   REAL
     `;
 
     await migrationClient`
@@ -265,6 +320,19 @@ export async function runMigrations(): Promise<void> {
         current_points    INTEGER,
         resolution        INTEGER,
         decision          TEXT
+      )
+    `;
+
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS session_penalties (
+        id                SERIAL PRIMARY KEY,
+        session_id        INTEGER NOT NULL,
+        driver_id         INTEGER NOT NULL,
+        elapsed_time_sec  REAL NOT NULL,
+        penalty_type      TEXT NOT NULL,
+        time_sec          REAL,
+        laps              INTEGER,
+        reason            TEXT
       )
     `;
 
