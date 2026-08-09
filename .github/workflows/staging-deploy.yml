@@ -60,6 +60,7 @@ jobs:
           script: |
             set -e
 
+            mkdir -p /opt/lmu-dashboard-staging
             cd /opt/lmu-dashboard-staging
             mv -f docker-compose.staging.yml docker-compose.yml
 
