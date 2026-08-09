@@ -12,6 +12,12 @@
 
 ---
 
+## [1.10.3](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.10.2...v1.10.3) (2026-08-09)
+
+### Fixed
+
+* **deploy:** убрать drizzle-kit push из CI, докатить дрейф схемы в migrate.ts ([7e1f962](https://github.com/vakalistratov86/lmu-laptimes-dashboard/commit/7e1f962f87f7d1a4cf8aef6c50dc1080d19c31e2))
+
 ## [1.10.2](https://github.com/vakalistratov86/lmu-laptimes-dashboard/compare/v1.10.1...v1.10.2) (2026-08-06)
 
 ### Docs
