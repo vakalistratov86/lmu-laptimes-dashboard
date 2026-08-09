@@ -157,7 +157,7 @@ describe("resolveCurrentUser", () => {
 
 describe("rateLimitByIp", () => {
   function mockReqRes(ip: string) {
-    const req = { socket: { remoteAddress: ip } } as any;
+    const req = { socket: { remoteAddress: ip }, headers: {} } as any;
     const headers: Record<string, string> = {};
     const res = {
       setHeader: vi.fn((name: string, value: string) => {

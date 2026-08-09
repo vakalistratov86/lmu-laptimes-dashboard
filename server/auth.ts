@@ -150,6 +150,26 @@ function sweepExpiredBuckets(windowMs: number, now: number): void {
 }
 
 /**
+ * IP клиента: X-Real-IP, если есть, иначе прямой TCP-пир.
+ *
+ * Прод стоит за nginx на том же хосте (proxy_pass http://127.0.0.1:3000,
+ * nginx сам ставит X-Real-IP/X-Forwarded-For — конфиг вне репозитория, живёт
+ * на сервере) — контейнер видит входящее соединение не от реального клиента,
+ * а от docker-proxy/бридж-шлюза, так что req.socket.remoteAddress для ВСЕГО
+ * прод-трафика был бы одним и тем же адресом, а не адресом клиента. Порт
+ * приложения (3000/3001) наружу не проброшен файрволом — единственный
+ * публичный вход это nginx на 80-м, и он именно ПЕРЕЗАПИСЫВАЕТ X-Real-IP
+ * своим `$remote_addr`, а не пропускает клиентский заголовок как есть —
+ * подделать его, обратившись напрямую к контейнеру, снаружи нельзя, поэтому
+ * заголовку можно доверять безусловно.
+ */
+function getClientIp(req: Request): string {
+  const xRealIp = req.headers["x-real-ip"];
+  if (typeof xRealIp === "string" && xRealIp) return xRealIp;
+  return req.socket?.remoteAddress ?? "unknown";
+}
+
+/**
  * Fixed-window лимит попыток на IP: `max` запросов за `windowMs`, иначе 429.
  * `keyPrefix` разделяет счётчики /login и /register — не делят один лимит.
  */
@@ -158,11 +178,7 @@ export function rateLimitByIp(keyPrefix: string, max: number, windowMs: number) 
     const now = Date.now();
     sweepExpiredBuckets(windowMs, now);
 
-    // req.socket.remoteAddress, не req.ip: сервер стоит без реверс-прокси
-    // перед собой (прямой проброс порта в docker-compose), так что доверять
-    // X-Forwarded-For (что и делает req.ip) не нужно и не нужно настраивать
-    // trust proxy — клиент подключается к контейнеру напрямую.
-    const key = `${keyPrefix}:${req.socket?.remoteAddress ?? "unknown"}`;
+    const key = `${keyPrefix}:${getClientIp(req)}`;
     const bucket = rateLimitBuckets.get(key);
 
     if (!bucket || now - bucket.windowStart > windowMs) {
