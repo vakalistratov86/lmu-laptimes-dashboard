@@ -72,21 +72,13 @@ jobs:
 
             docker pull ghcr.io/vakalistratov86/lmu-laptimes-dashboard:staging
 
-            # Тот же guard, что и в deploy.yml (продакшн) — drizzle-kit push
-            # на неинтерактивном TTY может завершиться кодом 0, даже если
-            # печатает "Error: Interactive prompts require a TTY..." и ничего
-            # не применяет, поэтому одного `set -e` недостаточно (см. #173,
-            # тот же класс инцидента, что и в проде).
-            set +e
-            PUSH_OUTPUT=$(docker compose run --rm dashboard npx drizzle-kit push --force 2>&1)
-            PUSH_EXIT=$?
-            set -e
-            echo "$PUSH_OUTPUT"
-            if [ "$PUSH_EXIT" -ne 0 ] || echo "$PUSH_OUTPUT" | grep -q '^Error:'; then
-              echo "::error::drizzle-kit push завершился с ошибкой — деплой стенда остановлен, старый контейнер продолжает работать без изменений"
-              exit 1
-            fi
-
+            # Схема применяется НЕ здесь, тем же способом, что и в проде
+            # (deploy.yml) — server/migrate.ts (идемпотентный raw SQL)
+            # выполняется внутри контейнера при старте, до app.listen().
+            # Раньше здесь гонялся отдельный `drizzle-kit push --force`, но
+            # он был несинхронизирован с migrate.ts и падал в non-TTY CI на
+            # любом неоднозначном изменении схемы — убран из обоих
+            # пайплайнов целиком, а не пропатчен (см. deploy.yml).
             docker rm -f lmu-dashboard-staging || true
 
             docker compose up -d --force-recreate
