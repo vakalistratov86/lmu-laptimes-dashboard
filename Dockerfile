@@ -1,12 +1,6 @@
 # Build stage
 FROM node:20-alpine AS builder
 WORKDIR /app
-# Set only by staging-deploy.yml (short commit SHA) so the version badge on
-# the staging stand reads "X.Y.Z-staging.<sha>" instead of a bare X.Y.Z that
-# looks like — but isn't — a real semantic-release version. Empty by default,
-# so prod builds (deploy.yml never passes this build-arg) are unaffected.
-ARG APP_VERSION_SUFFIX=""
-ENV APP_VERSION_SUFFIX=${APP_VERSION_SUFFIX}
 COPY package*.json ./
 RUN npm install --ignore-scripts
 COPY . .

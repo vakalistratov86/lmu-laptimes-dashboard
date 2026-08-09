@@ -46,7 +46,7 @@
 | СУБД | PostgreSQL, доступ по `DATABASE_URL` |
 | Frontend | React 18, Vite 7, TypeScript 5.6, Tailwind CSS 3, shadcn/ui (Radix), wouter (роутинг), TanStack Query, Recharts |
 | Backend | Express 5 (TypeScript, ESM) |
-| ORM | drizzle-orm + postgres-js, миграции — `drizzle-kit push` (без versioned-миграций) |
+| ORM | drizzle-orm + postgres-js, схема применяется идемпотентным raw SQL в `server/migrate.ts` (без versioned-миграций) |
 | Телеметрия | `@duckdb/node-api` для чтения `.duckdb` в режиме read-only |
 | Валидация | Zod (структурная валидация лога, query/path-параметров REST API) |
 | Тесты | Vitest 2 + `@vitest/coverage-v8` |
@@ -829,6 +829,7 @@ XML (`fast-xml-parser`), а не построчный regex — регексов
 1. Пароль хэшируется scrypt'ом (`node:crypto`, без внешней зависимости) в формате `"salt:hash"` — открытый текст пароля никогда не сохраняется и не логируется.
 2. Сессия — случайный токен в `httpOnly` + `SameSite=Lax` cookie (`Secure` в production), хранится в таблице `user_sessions` (не JWT) — удаление строки при logout отзывает сессию мгновенно, без чёрного списка токенов. TTL — 30 дней от создания.
 3. Ответ `/api/auth/*` никогда не включает `passwordHash` — сервер отдаёт клиенту только `PublicUser` (`shared/schema.ts`).
+4. `/api/auth/register` и `/api/auth/login` защищены rate-limit по IP (`server/auth.ts`, `rateLimitByIp`) — 5 и 10 попыток за 15 минут соответственно, иначе `429`. IP берётся из `X-Real-IP` (прод стоит за nginx на том же хосте, конфиг вне репозитория, сам ставит этот заголовок) с фолбэком на прямой TCP-пир — без этого rate limiter в реальной топологии видел бы для всего трафика один и тот же адрес прокси, а не адрес клиента.
 
 ---
 
@@ -973,44 +974,16 @@ drizzle-zod). Полное описание колонок — `docs/database-sc
    `STEAM_STORE_REGION` — регион Steam-магазина (`cc=`) для цен на вкладке
    LMU Steam, по умолчанию `ru`.
 5. CI (`lint.yml`, `test.yml`, `docs-lint.yml`, `update-lockfile.yml`,
-   `deploy.yml`, `staging-deploy.yml`) обязан блокировать мерж/деплой при
-   незелёном линте/форматировании/тестах; `docs-lint` (markdownlint) — с
-   проектным конфигом (`.markdownlint.jsonc`), отключающим правила,
-   конфликтующие с принятым стилем документации (`MD013` лимит длины
-   строки, `MD024` дубли заголовков в CHANGELOG).
+   `deploy.yml`) обязан блокировать мерж/деплой при незелёном
+   линте/форматировании/тестах; `docs-lint` (markdownlint) — с проектным
+   конфигом (`.markdownlint.jsonc`), отключающим правила, конфликтующие с
+   принятым стилем документации (`MD013` лимит длины строки, `MD024`
+   дубли заголовков в CHANGELOG).
 6. `test.yml` прогоняет `npm test` (Vitest) на каждый push в `main` и на
    каждый PR — весь текущий набор тестов мокает БД/внешние зависимости
    (см. §8.6), поэтому отдельный сервис Postgres в CI не требуется; если
    позже появятся тесты, которым нужна реальная БД, джобу нужно будет
    расширить `services: postgres:`.
-7. Тестовый стенд (`staging`) — тот же сервер, что и продакшн, но
-   изолированная пара контейнеров (`docker-compose.staging.yml`:
-   `lmu-postgres-staging`/`lmu-dashboard-staging`, отдельный volume
-   `pg_data_staging`, порт хоста 3001 → контейнер 5000, образ с тегом
-   `:staging` вместо `:latest`) в отдельной директории сервера
-   (`/opt/lmu-dashboard-staging`), не пересекающейся с продакшн-директорией
-   (`/opt/lmu-dashboard`). Деплой — `staging-deploy.yml`, триггер: push в
-   ветку `staging`. В отличие от `deploy.yml`, без semantic-release — образ
-   собирается напрямую из HEAD ветки и тегируется `:staging` (mutable) +
-   `:staging-<sha>` (для отладки конкретного билда), без версии/тега/записи
-   в CHANGELOG. Версия в UI-бейдже на стенде — не голое число из
-   `package.json` (оно там не бампается и выглядело бы как настоящий
-   релиз), а `X.Y.Z-staging.<short-sha>`: короткий SHA коммита прокидывается
-   в сборку через `APP_VERSION_SUFFIX` (build-arg → `ARG`/`ENV` в
-   `Dockerfile` → читает `vite.config.ts`). Схема БД применяется тем же
-   `server/migrate.ts`, что и в проде (см. п.3) — отдельного шага для этого
-   в `staging-deploy.yml` нет. `mem_limit`/`cpus` заданы на оба сервиса в
-   `docker-compose.staging.yml`: сервер общий с продакшном (1 vCPU, 1.9 ГБ
-   RAM, без swap), без явного потолка стенд при пиковой нагрузке мог бы
-   забрать ресурсы у прод-контейнеров. Секреты
-   `STAGING_POSTGRES_PASSWORD`/`STAGING_ADMIN_TOKEN`
-   — отдельные от продакшн-секретов `POSTGRES_PASSWORD`/`ADMIN_TOKEN`, чтобы
-   утечка/компрометация тестового стенда не давала доступа к продакшену;
-   `SERVER_HOST`/`SERVER_USER`/`SSH_PRIVATE_KEY` — общие с продакшеном (тот
-   же сервер). **[ОГРАНИЧЕНИЕ]** Стенд не создаётся и не удаляется
-   автоматически по жизненному циклу веток/PR (не ephemeral-окружение на
-   каждый PR) — это единственный постоянно работающий тестовый инстанс,
-   вручную нацеленный на ветку `staging`.
 
 ---
 
@@ -1021,8 +994,9 @@ drizzle-zod). Полное описание колонок — `docs/database-sc
 
 1. Нет внешних ключей на уровне СУБД — целостность связей полностью на
    совести приложения.
-2. Нет versioned-миграций БД — только `drizzle-kit push` по live-схеме;
-   откат схемы к прошлой версии не поддерживается.
+2. Нет versioned-миграций БД — только идемпотентный raw SQL в
+   `server/migrate.ts` (см. §9, п.3); откат схемы к прошлой версии не
+   поддерживается.
 3. Единственная admin-роль на общем токене — нет индивидуальных учётных
    записей, ролей или журнала действий администратора.
 4. Daily Races — статические данные в коде, требуют ручного обновления;
