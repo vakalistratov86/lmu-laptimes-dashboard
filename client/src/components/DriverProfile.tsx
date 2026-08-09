@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { Link } from "wouter";
 import { useDrivers, useLaps, useBestLaps, useSessions, useDriverIncidents } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { isOwnDriverName } from "@/lib/driverMatch";
 import { formatLap, formatDelta, countryFlag, normalizeCourse } from "@/lib/format";
 import { getMedalColorClass } from "@/lib/classStyles";
 import { Card } from "@/components/ui/card";
@@ -86,6 +88,7 @@ interface DriverProfileProps {
  */
 export function DriverProfile({ driverId }: DriverProfileProps) {
   const { t, tn, intlLocale } = useLanguage();
+  const { user } = useAuth();
 
   const { data: drivers, isLoading: driversLoading } = useDrivers();
   // #121: собственные круги пилота — уже фильтр по driverId (не весь /api/laps).
@@ -97,6 +100,7 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
   const { data: incidentsData, isLoading: incidentsLoading } = useDriverIncidents(driverId);
 
   const driver = useMemo(() => drivers?.find((d) => d.id === driverId), [drivers, driverId]);
+  const isOwnDriver = isOwnDriverName(user?.displayName, driver?.name);
 
   // Штраф временем и/или кругами — оба поля независимы (Time penalty задаёт
   // только timeSec, Drive Thru — только laps=0/timeSec=0, поэтому пустая
@@ -294,6 +298,11 @@ export function DriverProfile({ driverId }: DriverProfileProps) {
             >
               {driver.isPlayer === 1 ? t("driverDetail.badgePlayer") : t("driverDetail.badgeAi")}
             </Badge>
+            {isOwnDriver && (
+              <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-500">
+                {t("driverDetail.badgeYou")}
+              </Badge>
+            )}
             {firstSeenYear != null && (
               <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
                 {t("driverDetail.sinceBadge", { year: firstSeenYear })}
