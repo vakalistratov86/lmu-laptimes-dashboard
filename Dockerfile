@@ -17,13 +17,12 @@ RUN apk add --no-cache libstdc++ libgcc
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-# schema.ts + drizzle.config.ts let `npx drizzle-kit push` run against the
-# production DB after a schema change — dist/ only has the bundled server
-# code, not the raw schema drizzle-kit reads. CI runs this automatically on
-# every deploy (see .github/workflows/deploy.yml), before the new image
-# replaces the running container; kept in the image too so it can still be
-# run manually (`docker compose exec dashboard npx drizzle-kit push`) if a
-# schema drift ever needs a one-off fix outside the normal deploy.
+# Schema is applied by server/migrate.ts on container startup, not here.
+# schema.ts + drizzle.config.ts are kept in the image only as a manual
+# escape hatch (`docker compose exec dashboard npx drizzle-kit push`) for
+# one-off local diagnostics against a copy of prod — CI no longer runs
+# drizzle-kit push automatically (it broke the deploy pipeline by hitting
+# an interactive prompt with no TTY; see server/migrate.ts for the fix).
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 EXPOSE 3000
