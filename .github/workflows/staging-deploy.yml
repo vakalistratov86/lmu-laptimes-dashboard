@@ -1,0 +1,94 @@
+name: Staging — Build & Deploy
+
+# Тестовый стенд — не продакшн: без semantic-release (нет версии/тега/чейнджлога),
+# образ собирается прямо из HEAD ветки staging и деплоится на тот же сервер,
+# что и продакшн, но в отдельную директорию/контейнеры (см. docker-compose.staging.yml).
+on:
+  push:
+    branches: [staging]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: vakalistratov86/lmu-laptimes-dashboard
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:staging
+            ghcr.io/${{ env.IMAGE_NAME }}:staging-${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Copy docker-compose.staging.yml to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.staging.yml"
+          target: "/opt/lmu-dashboard-staging"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            cd /opt/lmu-dashboard-staging
+            mv -f docker-compose.staging.yml docker-compose.yml
+
+            printf 'POSTGRES_PASSWORD=%s\nADMIN_TOKEN=%s\n' '${{ secrets.STAGING_POSTGRES_PASSWORD }}' '${{ secrets.STAGING_ADMIN_TOKEN }}' > .env
+            chmod 600 .env
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            docker compose config
+
+            docker pull ghcr.io/vakalistratov86/lmu-laptimes-dashboard:staging
+
+            # Тот же guard, что и в deploy.yml (продакшн) — drizzle-kit push
+            # на неинтерактивном TTY может завершиться кодом 0, даже если
+            # печатает "Error: Interactive prompts require a TTY..." и ничего
+            # не применяет, поэтому одного `set -e` недостаточно (см. #173,
+            # тот же класс инцидента, что и в проде).
+            set +e
+            PUSH_OUTPUT=$(docker compose run --rm dashboard npx drizzle-kit push --force 2>&1)
+            PUSH_EXIT=$?
+            set -e
+            echo "$PUSH_OUTPUT"
+            if [ "$PUSH_EXIT" -ne 0 ] || echo "$PUSH_OUTPUT" | grep -q '^Error:'; then
+              echo "::error::drizzle-kit push завершился с ошибкой — деплой стенда остановлен, старый контейнер продолжает работать без изменений"
+              exit 1
+            fi
+
+            docker rm -f lmu-dashboard-staging || true
+
+            docker compose up -d --force-recreate
+
+            docker image prune -f

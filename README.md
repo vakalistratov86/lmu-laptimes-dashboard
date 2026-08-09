@@ -206,6 +206,36 @@ docker compose up --build
 
 ---
 
+## CI/CD
+
+| Workflow | Триггер | Что делает |
+| --- | --- | --- |
+| `lint.yml` | push в `main`, PR | ESLint + Prettier |
+| `test.yml` | push в `main`, PR | `npm test` (Vitest, вся БД/сеть мокается — реальный Postgres в CI не нужен) |
+| `docs-lint.yml` | push в `main`, PR | markdownlint по `.md`-файлам |
+| `deploy.yml` | push в `main` | semantic-release → сборка образа → деплой на продакшн (`http://82.202.138.32`) |
+| `staging-deploy.yml` | push в `staging` | сборка образа с тегом `:staging` (без релиза/версии) → деплой тестового стенда на тот же сервер, порт `3001` |
+
+Тестовый стенд (`staging-deploy.yml`) разворачивается на том же сервере, что
+и продакшн, но полностью изолированной парой контейнеров
+(`docker-compose.staging.yml`: свой Postgres, свой volume, своя директория
+`/opt/lmu-dashboard-staging`) — задеть продакшн-данные он не может. Чтобы
+включить автодеплой стенда, в настройках репозитория (Settings → Secrets and
+variables → Actions) нужно добавить два новых секрета (в дополнение к уже
+существующим `SERVER_HOST`/`SERVER_USER`/`SSH_PRIVATE_KEY`, которые
+переиспользуются — сервер тот же):
+
+| Секрет | Назначение |
+| --- | --- |
+| `STAGING_POSTGRES_PASSWORD` | пароль Postgres тестового стенда — отдельный от продакшн-пароля |
+| `STAGING_ADMIN_TOKEN` | `ADMIN_TOKEN` тестового стенда — отдельный от продакшн-токена |
+
+После этого любой push в ветку `staging` (например, `git push origin
+main:staging` для деплоя текущего `main`, или отдельная ветка для проверки
+конкретных изменений до мержа) выкатит стенд на `http://<SERVER_HOST>:3001`.
+
+---
+
 ## Доступные скрипты
 
 | Скрипт | Описание |
