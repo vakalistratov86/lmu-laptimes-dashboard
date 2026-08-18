@@ -183,13 +183,13 @@ export default function Overview() {
     return bestId;
   }, [sessions]);
 
-  // Лучший круг популярного трека — только среди реальных игроков (isPlayer === 1),
+  // Лучший круг популярного трека — среди всех пилотов (реальных и ИИ),
   // плюс сессия, в которой он был установлен (тип сессии, дата/время).
   const popularTrackRecord = useMemo(() => {
     if (popularTrackId == null || !laps) return null;
     let best: LapTimeEnriched | null = null;
     for (const l of laps) {
-      if (l.trackId !== popularTrackId || l.isPlayer !== 1) continue;
+      if (l.trackId !== popularTrackId) continue;
       if (!best || l.lapMs < best.lapMs) best = l;
     }
     if (!best) return null;
