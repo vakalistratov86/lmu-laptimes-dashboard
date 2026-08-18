@@ -22,9 +22,11 @@ import {
   ChevronRight,
   Upload,
   MapPin,
+  Calendar,
+  Clock,
 } from "lucide-react";
 import { useMemo } from "react";
-import type { SessionEnriched } from "@/lib/api";
+import type { SessionEnriched, LapTimeEnriched } from "@/lib/api";
 
 function HeroStat({
   icon: Icon,
@@ -78,6 +80,12 @@ function getSessionBestLapMs(session: SessionEnriched): number | null {
     if (r.bestLapMs == null) return min;
     return min == null || r.bestLapMs < min ? r.bestLapMs : min;
   }, null);
+}
+
+function formatSessionTime(iso: string, intlLocale: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(intlLocale, { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function Overview() {
@@ -155,6 +163,40 @@ export default function Overview() {
     return [...sessions].sort((a, b) => b.dateTime.localeCompare(a.dateTime)).slice(0, 5);
   }, [sessions]);
 
+  // Популярный трек: больше всего проведённых на нём сессий (тренировки +
+  // квалификации + гонки суммарно), группировка по trackId — не по имени
+  // трассы, т.к. разные конфигурации могут называться одинаково.
+  const popularTrackId = useMemo(() => {
+    if (!sessions || sessions.length === 0) return null;
+    const counts = new Map<number, number>();
+    for (const s of sessions) {
+      counts.set(s.trackId, (counts.get(s.trackId) ?? 0) + 1);
+    }
+    let bestId: number | null = null;
+    let bestCount = -1;
+    for (const [id, count] of counts) {
+      if (count > bestCount) {
+        bestCount = count;
+        bestId = id;
+      }
+    }
+    return bestId;
+  }, [sessions]);
+
+  // Лучший круг популярного трека — среди всех пилотов (реальных и ИИ),
+  // плюс сессия, в которой он был установлен (тип сессии, дата/время).
+  const popularTrackRecord = useMemo(() => {
+    if (popularTrackId == null || !laps) return null;
+    let best: LapTimeEnriched | null = null;
+    for (const l of laps) {
+      if (l.trackId !== popularTrackId) continue;
+      if (!best || l.lapMs < best.lapMs) best = l;
+    }
+    if (!best) return null;
+    const session = best.sessionId != null ? sessions?.find((s) => s.id === best!.sessionId) : undefined;
+    return { lap: best, session };
+  }, [popularTrackId, laps, sessions]);
+
   if (isLoading || !laps) {
     return (
       <div className="space-y-6">
@@ -193,8 +235,6 @@ export default function Overview() {
     );
   }
 
-  const bestLap = laps.reduce((a, b) => (b.lapMs < a.lapMs ? b : a), laps[0]);
-
   const bestByTrack = new Map<
     string,
     {
@@ -229,9 +269,11 @@ export default function Overview() {
     <div className="space-y-6">
       <PageTitle />
 
-      {/* Hero: лучший круг сезона + ключевые показатели */}
-      <Card className="grid overflow-hidden lg:grid-cols-[1.3fr_1fr]">
-        <div className="relative border-b border-border p-6 lg:border-b-0 lg:border-r">
+      {/* Hero: лучший круг популярного трека + ключевые показатели — две
+          независимые карточки (не общий grid внутри одной Card), чтобы
+          визуально не сливались друг с другом */}
+      <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+        <Card className="relative overflow-hidden p-6">
           <div
             className="pointer-events-none absolute inset-0"
             style={{ background: "radial-gradient(120% 140% at 0% 0%, hsl(var(--primary) / 0.12), transparent 60%)" }}
@@ -241,30 +283,49 @@ export default function Overview() {
               <Gauge size={13} />
               {t("overview.heroEyebrow")}
             </div>
-            <div className="font-data mt-2 text-4xl font-bold tabular-nums sm:text-5xl" data-testid="kpi-best-lap">
-              {formatLap(bestLap.lapMs)}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-              <Link href={`/drivers/${bestLap.driverId}`} className="hover:underline">
-                <DriverName
-                  name={bestLap.driverName}
-                  isPlayer={bestLap.isPlayer}
-                  className="font-medium text-foreground"
-                />
-              </Link>
-              <span className="inline-flex items-center gap-1.5">
-                <Car size={14} />
-                {bestLap.car}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Flag size={14} />
-                {bestLap.trackName}
-              </span>
-              <CarClassBadge carClass={bestLap.carClass} className="text-[11px]" />
-            </div>
+            {popularTrackRecord ? (
+              <>
+                <div className="font-data mt-2 text-4xl font-bold tabular-nums sm:text-5xl" data-testid="kpi-best-lap">
+                  {formatLap(popularTrackRecord.lap.lapMs)}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                  <Link href={`/drivers/${popularTrackRecord.lap.driverId}`} className="hover:underline">
+                    <DriverName
+                      name={popularTrackRecord.lap.driverName}
+                      isPlayer={popularTrackRecord.lap.isPlayer}
+                      className="font-medium text-foreground"
+                    />
+                  </Link>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Car size={14} />
+                    {popularTrackRecord.lap.car}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Flag size={14} />
+                    {popularTrackRecord.lap.trackName}
+                  </span>
+                  <CarClassBadge carClass={popularTrackRecord.lap.carClass} className="text-[11px]" />
+                </div>
+                {popularTrackRecord.session && (
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                    <SessionTypeBadge sessionType={popularTrackRecord.session.sessionType} />
+                    <span className="inline-flex items-center gap-1.5">
+                      <Calendar size={14} />
+                      {formatSessionDate(popularTrackRecord.session.dateTime, intlLocale)}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Clock size={14} />
+                      {formatSessionTime(popularTrackRecord.session.dateTime, intlLocale)}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">{t("overview.heroEmpty")}</p>
+            )}
           </div>
-        </div>
-        <div className="grid grid-cols-2">
+        </Card>
+        <Card className="grid grid-cols-2">
           <HeroStat
             testId="distance"
             icon={Route}
@@ -293,8 +354,8 @@ export default function Overview() {
             value={String(totalLapsCompleted)}
             sub={t("overview.kpiLapsCompletedSub")}
           />
-        </div>
-      </Card>
+        </Card>
+      </div>
 
       {/* Активность по типам сессий + реальные/ИИ пилоты */}
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
