@@ -2,7 +2,14 @@
  * validators.test.ts — unit-тесты для shared/validators.ts (#9)
  */
 import { describe, it, expect } from "vitest";
-import { LapTimeSchema, SessionEventSchema, validateLapTimeSemantic, validateLapTime } from "../shared/validators";
+import {
+  LapTimeSchema,
+  SessionEventSchema,
+  validateLapTimeSemantic,
+  validateLapTime,
+  RegisterSchema,
+  LoginSchema,
+} from "../shared/validators";
 
 describe("LapTimeSchema — структурная валидация", () => {
   const validLap = {
@@ -148,6 +155,53 @@ describe("SessionEventSchema", () => {
       sessionType: "Race",
       dateTimeIso: "2025-06-15T13:00:00Z",
     });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("RegisterSchema", () => {
+  const valid = { email: "Driver@Example.com", password: "correct-horse", displayName: "Max" };
+
+  it("принимает валидные данные регистрации", () => {
+    const result = RegisterSchema.safeParse(valid);
+    expect(result.success).toBe(true);
+  });
+
+  it("приводит email к нижнему регистру и обрезает пробелы", () => {
+    const result = RegisterSchema.safeParse({ ...valid, email: "  Driver@Example.com  " });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.email).toBe("driver@example.com");
+  });
+
+  it("отклоняет некорректный email", () => {
+    const result = RegisterSchema.safeParse({ ...valid, email: "not-an-email" });
+    expect(result.success).toBe(false);
+  });
+
+  it("отклоняет пароль короче 8 символов", () => {
+    const result = RegisterSchema.safeParse({ ...valid, password: "short1" });
+    expect(result.success).toBe(false);
+  });
+
+  it("отклоняет пустое displayName", () => {
+    const result = RegisterSchema.safeParse({ ...valid, displayName: "  " });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("LoginSchema", () => {
+  it("принимает валидные данные входа", () => {
+    const result = LoginSchema.safeParse({ email: "driver@example.com", password: "anything" });
+    expect(result.success).toBe(true);
+  });
+
+  it("отклоняет пустой пароль", () => {
+    const result = LoginSchema.safeParse({ email: "driver@example.com", password: "" });
+    expect(result.success).toBe(false);
+  });
+
+  it("отклоняет некорректный email", () => {
+    const result = LoginSchema.safeParse({ email: "nope", password: "anything" });
     expect(result.success).toBe(false);
   });
 });

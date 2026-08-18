@@ -69,6 +69,14 @@ const pkg = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "packag
 };
 const latestChangelog = parseLatestChangelogEntry(path.resolve(import.meta.dirname, "CHANGELOG.md"));
 
+// staging-deploy.yml passes the short commit SHA as APP_VERSION_SUFFIX (via
+// Dockerfile ARG/ENV) — staging never runs semantic-release, so pkg.version
+// alone would show a stale released-looking number (e.g. "1.10.3") on every
+// staging build regardless of what commit is actually running.
+const appVersion = process.env.APP_VERSION_SUFFIX
+  ? `${pkg.version}-staging.${process.env.APP_VERSION_SUFFIX}`
+  : pkg.version;
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -81,7 +89,7 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname, "client"),
   base: "./",
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(appVersion),
     __LATEST_CHANGELOG__: JSON.stringify(latestChangelog),
   },
   build: {

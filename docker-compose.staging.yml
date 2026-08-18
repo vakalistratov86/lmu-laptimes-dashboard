@@ -1,0 +1,50 @@
+# Тестовый стенд — та же схема, что и docker-compose.yml (продакшн), но
+# полностью изолированная пара контейнеров/том/порт/тег образа, чтобы жить
+# на том же сервере рядом с продакшеном без конфликтов имён и без риска
+# задеть продовые данные. Разворачивается отдельным workflow
+# (.github/workflows/staging-deploy.yml) в свою директорию на сервере
+# (/opt/lmu-dashboard-staging) — см. docs/REQUIREMENTS.md, §9.
+#
+# mem_limit/cpus на обоих сервисах — сервер общий с продакшном (1 vCPU,
+# 1.9 ГБ RAM, без swap): без явного потолка стенд при пиковой нагрузке
+# (например, тестовый импорт большого файла) может забрать память/CPU у
+# прод-контейнеров, а без swap это может дойти до OOM-kill. Продовые
+# контейнеры своей нагрузкой в этот лимит не упираются (см. `docker stats`),
+# запас заложен с кратным резервом на рост тестовых данных.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: lmu-postgres-staging
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.3
+    environment:
+      POSTGRES_DB: lmu_dashboard
+      POSTGRES_USER: lmu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data_staging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lmu -d lmu_dashboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dashboard:
+    image: ghcr.io/vakalistratov86/lmu-laptimes-dashboard:staging
+    container_name: lmu-dashboard-staging
+    restart: unless-stopped
+    mem_limit: 384m
+    cpus: 0.4
+    ports:
+      - "3001:5000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://lmu:${POSTGRES_PASSWORD}@db:5432/lmu_dashboard
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pg_data_staging:

@@ -274,6 +274,38 @@ export const telemetrySamples = pgTable(
   }),
 );
 
+// Зарегистрированные пользователи дашборда (вход по email + паролю).
+// Не путать с drivers — учётная запись пользователя UI, а не игровой пилот
+// в логах заезда; связь между ними — предмет отдельной будущей доработки.
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  // scrypt-хэш пароля в формате "salt:hash" (server/auth.ts) — plain-текст пароля никогда не хранится.
+  passwordHash: text("password_hash").notNull(),
+  displayName: text("display_name").notNull(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(), // Unix ms
+});
+
+// Сессии входа — случайный токен в httpOnly-cookie, не JWT: строка удаляется
+// при logout, что мгновенно отзывает сессию (JWT нельзя отозвать без чёрного списка).
+export const userSessions = pgTable("user_sessions", {
+  id: text("id").primaryKey(), // случайный токен (crypto.randomBytes), не PK-инкремент
+  userId: integer("user_id").notNull(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  expiresAt: bigint("expires_at", { mode: "number" }).notNull(),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({ id: true });
+export const insertUserSessionSchema = createInsertSchema(userSessions);
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
+export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
+export type UserSession = typeof userSessions.$inferSelect;
+
+/** Публичная форма пользователя — без passwordHash, безопасна для отправки клиенту. */
+export type PublicUser = Omit<User, "passwordHash">;
+
 export const insertTrackSchema = createInsertSchema(tracks).omit({ id: true });
 export const insertDriverSchema = createInsertSchema(drivers).omit({ id: true });
 export const insertLapTimeSchema = createInsertSchema(lapTimes).omit({ id: true });
