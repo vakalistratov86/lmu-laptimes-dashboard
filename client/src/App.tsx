@@ -6,7 +6,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { LanguageProvider } from "@/lib/i18n";
-import { AuthProvider } from "@/lib/auth";
 import { ImportActivityProvider } from "@/lib/importActivity";
 import { LogImportEngineProvider } from "@/lib/logImportEngine";
 import { TelemetryImportEngineProvider } from "@/lib/telemetryImportEngine";
@@ -24,8 +23,6 @@ import PilotProfile from "@/pages/PilotProfile";
 import Import from "@/pages/Import";
 import Events from "@/pages/Events";
 import SteamCatalog from "@/pages/SteamCatalog";
-import Login from "@/pages/Login";
-import Register from "@/pages/Register";
 
 function AppRouter() {
   return (
@@ -43,8 +40,6 @@ function AppRouter() {
       <Route path="/events" component={Events} />
       <Route path="/steam" component={SteamCatalog} />
       <Route path="/import" component={Import} />
-      <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -54,22 +49,20 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>
-        <AuthProvider>
-          <LogImportEngineProvider>
-            <TelemetryImportEngineProvider>
-              <ImportActivityProvider>
-                <TooltipProvider>
-                  <Toaster />
-                  <Router hook={useHashLocation}>
-                    <AppLayout>
-                      <AppRouter />
-                    </AppLayout>
-                  </Router>
-                </TooltipProvider>
-              </ImportActivityProvider>
-            </TelemetryImportEngineProvider>
-          </LogImportEngineProvider>
-        </AuthProvider>
+        <LogImportEngineProvider>
+          <TelemetryImportEngineProvider>
+            <ImportActivityProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Router hook={useHashLocation}>
+                  <AppLayout>
+                    <AppRouter />
+                  </AppLayout>
+                </Router>
+              </TooltipProvider>
+            </ImportActivityProvider>
+          </TelemetryImportEngineProvider>
+        </LogImportEngineProvider>
       </LanguageProvider>
     </QueryClientProvider>
   );
