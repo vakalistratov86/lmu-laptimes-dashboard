@@ -167,7 +167,7 @@ export default function TelemetryDetail() {
       )}
 
       {hasLaps && laps && hasGpsData && (
-        <div className="relative h-[600px] overflow-hidden rounded-lg border border-border bg-background md:h-[820px]">
+        <div className="relative h-[calc(100dvh-116px)] min-h-[420px] overflow-hidden rounded-lg border border-border bg-background">
           {/* ---------- header overlay ---------- */}
           <div className="absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 bg-gradient-to-b from-background/95 via-background/80 to-transparent p-3">
             <div className="flex min-w-0 items-start gap-3">
@@ -295,16 +295,6 @@ export default function TelemetryDetail() {
             </div>
           )}
 
-          {/* ---------- reference picker ---------- */}
-          {showMap && (
-            <ReferencePicker
-              laps={laps}
-              referenceLap={referenceLap}
-              onSelectReference={setReferenceLap}
-              className="absolute bottom-3 left-3 z-20"
-            />
-          )}
-
           {/* ---------- bottom dock ---------- */}
           {showDock && (
             <div
@@ -316,7 +306,7 @@ export default function TelemetryDetail() {
               )}
             >
               {/* строка живого отсчёта */}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-start gap-1.5">
                 <ReadoutTile label={t("telemetryPage.readoutLap")} value={formatLap(readoutLapMs)} />
                 <ReadoutTile
                   label={t("telemetryPage.readoutSpeed")}
@@ -338,11 +328,7 @@ export default function TelemetryDetail() {
                     }
                   />
                 )}
-                <ReadoutTile
-                  label={t("telemetryPage.sectorsLabel")}
-                  className="flex-1"
-                  title={t("telemetryPage.sectorsNoDataNote")}
-                >
+                <ReadoutTile label={t("telemetryPage.sectorsLabel")} title={t("telemetryPage.sectorsNoDataNote")}>
                   <div className="flex gap-3">
                     {["S1", "S2", "S3"].map((s) => (
                       <div key={s} className="text-center">
@@ -352,6 +338,12 @@ export default function TelemetryDetail() {
                     ))}
                   </div>
                 </ReadoutTile>
+                <ReferencePicker
+                  laps={laps}
+                  referenceLap={referenceLap}
+                  onSelectReference={setReferenceLap}
+                  className="ml-auto self-center"
+                />
               </div>
 
               {/* панель канала: реальный график или объясняющая заглушка */}
@@ -362,6 +354,7 @@ export default function TelemetryDetail() {
                     onHoverIndexChange={handleHoverIndexChange}
                     activeLapNumber={activeLap != null ? activeLap + 1 : null}
                     referencePoints={referencePoints}
+                    compact={viewMode === "combined"}
                   />
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center gap-1 p-8 text-center">
@@ -473,7 +466,7 @@ function ReadoutTile({
   return (
     <div
       title={title}
-      className={cn("rounded-lg border border-border bg-card/95 px-3 py-1.5 backdrop-blur", className)}
+      className={cn("rounded-lg border border-border bg-card/95 px-2.5 py-1 backdrop-blur", className)}
     >
       <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</div>
       {value != null ? (
