@@ -65,6 +65,45 @@ export function interpolateAtDistance(points: TelemetryLapPoint[], distM: number
   return toInterpolated(last);
 }
 
+/**
+ * Значение круга `points` через `elapsedSec` секунд после его старта (первой
+ * точки), линейной интерполяцией между двумя ближайшими по `t` сэмплами. За
+ * пределами диапазона круга — крайнее известное значение, без экстраполяции
+ * (тот же принцип, что у `interpolateAtDistance`). В отличие от
+ * `interpolateAtDistance`, ось — прошедшее время круга, не дистанция: нужно
+ * для курсора-«призрака» на карте (см. `TelemetryTrackMap`) — сопоставление
+ * по дистанции ставит оба курсора в одну и ту же физическую точку трассы
+ * независимо от разницы в темпе, визуально пряча реальное отставание/выигрыш
+ * во времени.
+ */
+export function interpolateAtTime(points: TelemetryLapPoint[], elapsedSec: number): InterpolatedPoint | null {
+  if (points.length === 0) return null;
+  const t0 = points[0].t;
+  const targetT = t0 + elapsedSec;
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (targetT <= first.t) return toInterpolated(first);
+  if (targetT >= last.t) return toInterpolated(last);
+
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (targetT >= a.t && targetT <= b.t) {
+      const span = b.t - a.t || 1;
+      const frac = (targetT - a.t) / span;
+      return {
+        t: lerp(a.t, b.t, frac),
+        lat: lerpNullable(a.lat, b.lat, frac),
+        lon: lerpNullable(a.lon, b.lon, frac),
+        speedKph: lerpNullable(a.speedKph, b.speedKph, frac),
+        throttle: lerpNullable(a.throttle, b.throttle, frac),
+        brake: lerpNullable(a.brake, b.brake, frac),
+      };
+    }
+  }
+  return toInterpolated(last);
+}
+
 export interface DeltaSample {
   distM: number;
   deltaMs: number;

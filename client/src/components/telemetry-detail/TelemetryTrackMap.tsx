@@ -10,7 +10,7 @@ import {
   type SvgPoint,
 } from "@/lib/telemetryGeo";
 import { buildColoredSegments, detectCornerSpeedMarkers, type SpeedSample } from "@/lib/telemetrySpeed";
-import { interpolateAtDistance } from "@/lib/telemetryReference";
+import { interpolateAtTime } from "@/lib/telemetryReference";
 import { hasSatelliteMap, getSatelliteMapCalibration } from "@/lib/trackMapCalibration";
 import { SatelliteTrackMap } from "@/components/telemetry-detail/SatelliteTrackMap";
 import { useMapZoomPan } from "@/hooks/use-map-zoom-pan";
@@ -22,8 +22,9 @@ interface TelemetryTrackMapProps {
   hoverIndex: number | null;
   trackName: string | null;
   /** Круг, выбранный эталоном для сравнения (см. `TelemetryLapPicker`) — если задан
-   * (и в нём есть GPS), поверх карты рисуется второй, штриховой маркер-«призрак» на
-   * той же дистанции круга, что и текущий курсор. */
+   * (и в нём есть GPS), поверх карты рисуется второй, штриховой маркер-«призрак»,
+   * синхронизированный с текущим курсором по прошедшему времени круга (не по
+   * дистанции) — так виден фактический зазор между кругами. */
   referencePoints?: TelemetryLapPoint[];
   /** Принудительно показать схематичную SVG-карту, даже если для трассы есть
    * спутниковая калибровка (см. переключатель подложки в `TelemetryDetail`). */
@@ -103,22 +104,25 @@ export const TelemetryTrackMap = forwardRef<TrackMapHandle, TelemetryTrackMapPro
     [svgPoints, hoverIndex],
   );
 
-  // Позиция "призрака" эталонного круга — интерполяция эталона на той же
-  // дистанции круга, на которой сейчас курсор текущего круга.
+  // Позиция "призрака" эталонного круга — интерполяция эталона на тот же
+  // момент прошедшего времени круга, в котором сейчас курсор текущего круга
+  // (не на ту же дистанцию — иначе призрак всегда стоит рядом с курсором на
+  // одной физической точке трассы, скрывая реальный зазор во времени).
   const ghost = useMemo(() => {
     if (!bounds || !referencePoints || referencePoints.length === 0 || hoverIndex == null) return null;
-    const currentDist = points[hoverIndex]?.lapDist;
-    if (currentDist == null) return null;
-    const interp = interpolateAtDistance(referencePoints, currentDist);
+    const currentPoint = points[hoverIndex];
+    const t0Current = points[0]?.t;
+    if (!currentPoint || t0Current == null) return null;
+    const elapsedSec = currentPoint.t - t0Current;
+    const interp = interpolateAtTime(referencePoints, elapsedSec);
     if (!interp || interp.lat == null || interp.lon == null) return null;
     const [projected] = projectWithBounds([{ lat: interp.lat, lon: interp.lon }], bounds);
 
+    const targetT = referencePoints[0].t + elapsedSec;
     let nearestIdx = 0;
     let nearestDiff = Infinity;
     for (let i = 0; i < referencePoints.length; i++) {
-      const d = referencePoints[i].lapDist;
-      if (d == null) continue;
-      const diff = Math.abs(d - currentDist);
+      const diff = Math.abs(referencePoints[i].t - targetT);
       if (diff < nearestDiff) {
         nearestDiff = diff;
         nearestIdx = i;
