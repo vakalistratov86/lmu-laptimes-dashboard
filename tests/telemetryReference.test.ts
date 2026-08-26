@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { interpolateAtDistance, buildDeltaSeries, formatSignedDeltaMs } from "../client/src/lib/telemetryReference";
+import {
+  interpolateAtDistance,
+  interpolateAtTime,
+  buildDeltaSeries,
+  formatSignedDeltaMs,
+} from "../client/src/lib/telemetryReference";
 import type { TelemetryLapPoint } from "../client/src/lib/api";
 
 function point(overrides: Partial<TelemetryLapPoint>): TelemetryLapPoint {
@@ -52,6 +57,49 @@ describe("interpolateAtDistance", () => {
       point({ seq: 2, t: 1, lapDist: 100, speedKph: 200 }),
     ];
     expect(interpolateAtDistance(withGap, 50)!.speedKph).toBe(150);
+  });
+});
+
+describe("interpolateAtTime", () => {
+  const points = [
+    point({ seq: 0, t: 10, lapDist: 0, speedKph: 100, lat: 50, lon: 5 }),
+    point({ seq: 1, t: 11, lapDist: 100, speedKph: 200, lat: 51, lon: 6 }),
+    point({ seq: 2, t: 12, lapDist: 200, speedKph: 150, lat: 52, lon: 7 }),
+  ];
+
+  it("линейно интерполирует между двумя ближайшими сэмплами по прошедшему времени круга (t - t0)", () => {
+    const result = interpolateAtTime(points, 0.5); // t0 = 10, значит targetT = 10.5
+    expect(result).not.toBeNull();
+    expect(result!.speedKph).toBe(150); // ровно посередине между 100 и 200
+    expect(result!.lat).toBe(50.5);
+  });
+
+  it("не экстраполирует за пределы круга — берёт крайнее значение", () => {
+    expect(interpolateAtTime(points, -5)!.speedKph).toBe(100);
+    expect(interpolateAtTime(points, 50)!.speedKph).toBe(150);
+  });
+
+  it("попадание точно в существующий сэмпл возвращает его как есть", () => {
+    expect(interpolateAtTime(points, 1)!.speedKph).toBe(200); // t0 + 1 = 11
+  });
+
+  it("пустой круг -> null", () => {
+    expect(interpolateAtTime([], 1)).toBeNull();
+  });
+
+  it("не совпадает с interpolateAtDistance, когда круги проходят дистанцию в разном темпе", () => {
+    // Эталон проезжает первые 100м за 2с (t: 10 -> 12), текущий курсор смотрит
+    // на elapsedSec=0.5 (четверть пути по времени) — по дистанции на этот
+    // момент эталон был бы на 50м, по времени эталон должен быть ближе к старту.
+    const slowerPace = [
+      point({ seq: 0, t: 10, lapDist: 0, speedKph: 100 }),
+      point({ seq: 1, t: 12, lapDist: 100, speedKph: 200 }),
+    ];
+    const byTime = interpolateAtTime(slowerPace, 0.5);
+    const byDistance = interpolateAtDistance(slowerPace, 50);
+    expect(byTime!.speedKph).not.toBe(byDistance!.speedKph);
+    expect(byTime!.speedKph).toBeCloseTo(125); // 0.5/2 = 25% пути
+    expect(byDistance!.speedKph).toBeCloseTo(150); // 50/100 = 50% пути
   });
 });
 

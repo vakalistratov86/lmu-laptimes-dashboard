@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { geoToImagePixel, getSatelliteMapCalibration, type ImagePoint } from "@/lib/trackMapCalibration";
 import { headingAt, arrowPolygonPoints, perpendicularSegment, offsetPerpendicular } from "@/lib/telemetryGeo";
 import { buildColoredSegments, detectCornerSpeedMarkers, type SpeedSample } from "@/lib/telemetrySpeed";
-import { interpolateAtDistance } from "@/lib/telemetryReference";
+import { interpolateAtTime } from "@/lib/telemetryReference";
 import type { MapZoomPanControls } from "@/hooks/use-map-zoom-pan";
 import type { TelemetryLapPoint } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
@@ -11,7 +11,8 @@ interface SatelliteTrackMapProps {
   points: TelemetryLapPoint[];
   hoverIndex: number | null;
   trackName: string;
-  /** См. `TelemetryTrackMapProps.referencePoints` — эталонный круг для призрака. */
+  /** См. `TelemetryTrackMapProps.referencePoints` — эталонный круг для призрака,
+   * синхронизированный по прошедшему времени круга, не по дистанции. */
   referencePoints?: TelemetryLapPoint[];
   /** Зум/пан — управляется снаружи (см. `TelemetryTrackMap`), одним хуком на оба
    * режима карты (схема/спутник), чтобы левый тулбар в `TelemetryDetail` был
@@ -56,35 +57,41 @@ export function SatelliteTrackMap({ points, hoverIndex, trackName, referencePoin
   // Проекция эталонного круга — та же калибровка "трасса -> пиксель снимка",
   // абсолютная для трассы (не авто-фит по bounding box одного круга), поэтому,
   // в отличие от схематичной SVG-проекции, два круга здесь совпадают без
-  // дополнительных общих bounds. Сэмплы с известными distM и пикселем идут
-  // рядом в одном массиве — иначе индекс "ближайшего по дистанции" разъехался
-  // бы с индексом в отфильтрованном (без null) массиве пикселей.
+  // дополнительных общих bounds. Сэмплы с известным `t` и пикселем идут рядом
+  // в одном массиве — иначе индекс "ближайшего по времени" разъехался бы с
+  // индексом в отфильтрованном (без null) массиве пикселей.
   const referenceSamples = useMemo(() => {
     if (!referencePoints || referencePoints.length === 0) return [];
-    const samples: { distM: number; point: ImagePoint }[] = [];
+    const samples: { t: number; point: ImagePoint }[] = [];
     for (const p of referencePoints) {
-      if (p.lapDist == null || p.lat == null || p.lon == null) continue;
+      if (p.lat == null || p.lon == null) continue;
       const point = geoToImagePixel(trackName, { lat: p.lat, lon: p.lon });
-      if (point) samples.push({ distM: p.lapDist, point });
+      if (point) samples.push({ t: p.t, point });
     }
     return samples;
   }, [referencePoints, trackName]);
 
+  // Позиция "призрака" — интерполяция эталона на тот же момент прошедшего
+  // времени круга, в котором сейчас курсор текущего круга (не на ту же
+  // дистанцию — см. комментарий в `TelemetryTrackMap`).
   const ghost = useMemo(() => {
     if (!referencePoints || referencePoints.length === 0 || hoverIndex == null || referenceSamples.length === 0) {
       return null;
     }
-    const currentDist = points[hoverIndex]?.lapDist;
-    if (currentDist == null) return null;
-    const interp = interpolateAtDistance(referencePoints, currentDist);
+    const currentPoint = points[hoverIndex];
+    const t0Current = points[0]?.t;
+    if (!currentPoint || t0Current == null) return null;
+    const elapsedSec = currentPoint.t - t0Current;
+    const interp = interpolateAtTime(referencePoints, elapsedSec);
     if (!interp || interp.lat == null || interp.lon == null) return null;
     const projected = geoToImagePixel(trackName, { lat: interp.lat, lon: interp.lon });
     if (!projected) return null;
 
+    const targetT = referencePoints[0].t + elapsedSec;
     let nearestIdx = 0;
     let nearestDiff = Infinity;
     for (let i = 0; i < referenceSamples.length; i++) {
-      const diff = Math.abs(referenceSamples[i].distM - currentDist);
+      const diff = Math.abs(referenceSamples[i].t - targetT);
       if (diff < nearestDiff) {
         nearestDiff = diff;
         nearestIdx = i;
